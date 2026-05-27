@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>PantryPal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Avoid the brief flash of un-styled Tailwind while the CDN script bootstraps. */
+    body { visibility: hidden; }
+  </style>
+  <script>
+    window.addEventListener('load', () => { document.body.style.visibility = 'visible'; });
+  </script>
+</head>
+<body class="min-h-screen bg-stone-50 text-stone-900 antialiased">
+  <main class="mx-auto max-w-md px-5 py-10 sm:py-16">
+    <header class="mb-8">
+      <div class="flex items-center gap-3">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-600 text-2xl text-white shadow-sm">
+          <span aria-hidden="true">P</span>
+        </div>
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">PantryPal</h1>
+          <p class="text-sm text-stone-500">A household pantry, together.</p>
+        </div>
+      </div>
+    </header>
+
+    <section class="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+      <div class="flex items-start gap-3">
+        <span class="mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-green-600 text-xs font-bold text-white">0</span>
+        <div>
+          <h2 class="text-base font-semibold text-green-900">Phase 0 is up and running</h2>
+          <p class="mt-1 text-sm text-green-800">
+            Flask is serving this page from <code class="rounded bg-green-100 px-1 py-0.5 text-xs">app.py</code>.
+            Next stop: Phase 1 — pantry &amp; shopping list with login.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-8">
+      <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-stone-500">Build roadmap</h2>
+      <ol class="space-y-2">
+        <li class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3">
+          <span class="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-600 text-xs font-bold text-white">0</span>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-stone-900">Project setup &amp; hello-world</p>
+            <p class="text-xs text-stone-500">Done.</p>
+          </div>
+          <span class="text-xs font-medium text-green-700">Live</span>
+        </li>
+        <li class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 opacity-70">
+          <span class="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-bold text-stone-600">1</span>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-stone-900">Solo pantry + shopping list</p>
+            <p class="text-xs text-stone-500">Login, SQLite, mobile-first UI.</p>
+          </div>
+        </li>
+        <li class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 opacity-70">
+          <span class="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-bold text-stone-600">2</span>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-stone-900">Households + multi-user</p>
+            <p class="text-xs text-stone-500">Invite codes, shared lists, deploy.</p>
+          </div>
+        </li>
+        <li class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 opacity-70">
+          <span class="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-bold text-stone-600">3</span>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-stone-900">AI meal planning</p>
+            <p class="text-xs text-stone-500">"What about pasta carbonara tonight?"</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <footer class="text-center text-xs text-stone-400">
+      <p>Running locally on port 5001 · <a href="/healthz" class="underline decoration-stone-300 hover:text-stone-600">healthz</a></p>
+    </footer>
+  </main>
+</body>
+</html>
