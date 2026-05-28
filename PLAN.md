@@ -2,7 +2,7 @@
 
 A household-shared pantry + shopping list, mobile-first, with an AI meal planner that knows what you already have at home.
 
-**Status:** Planning. No code yet. Phase 0 starts when Riah says "let's start Phase 0."
+**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B starts when Riah says "let's start Phase 1B."
 
 ---
 
@@ -28,24 +28,44 @@ One pantry per household. Multiple people contribute from their own phones with 
 
 ## Phased build — each phase ends at a useful state
 
-### Phase 0 — Setup (≈1 sitting)
+### Phase 0 — Setup (≈1 sitting) — DONE 2026-05-27
 
 - Create folder, `git init`, push to GitHub as `project-pantry-pal`
 - `.gitignore`, `.env.example`, `requirements.txt`
 - Hello-world Flask app with one page
-- Confirm it runs on `localhost:5000`
+- Confirms it runs on `localhost:5001` (5000 is taken by Pawsitive Coach)
 
 **End state:** project exists, runs, is on GitHub.
 
-### Phase 1 — Solo pantry + shopping list (2–3 sittings)
+### Phase 1A — Auth foundation (1 sitting) — DONE 2026-05-28
 
-- Email/password signup + login (Flask-Login + bcrypt)
-- Pantry: add / edit / delete / search items (name, quantity, unit, added date, notes)
-- Shopping list: add / check off / clear checked
-- Mobile-first single-column UI with big tap targets (44pt+ minimum)
-- Run locally, open on your phone via your laptop's LAN IP
+- Email/password signup + login + logout via Flask-Login (session auth)
+- `User` model + SQLAlchemy ORM on SQLite (db file lives at `instance/pantrypal.sqlite3`)
+- Flask-WTF forms with global CSRF protection
+- Password hashing: pbkdf2:sha256 via Werkzeug (NOT scrypt — see "Gotchas" below)
+- App-factory pattern (`create_app()`) so models can import `db` without circular imports
+- `base.html` shared layout (mobile-first, Tailwind CDN, 16px+ inputs to suppress iOS focus-zoom)
+- 13-check end-to-end smoke test (signup, login, logout, wrong-password, duplicate-email)
 
-**End state:** a working personal pantry tracker, no AI yet, no households yet.
+**End state:** can sign up, sign in, sign out, see your name on `/home`.
+
+### Phase 1B — Pantry CRUD (next sitting, ~60-90 min)
+
+- `PantryItem` model (id, user_id, name, quantity, unit, notes, added_at)
+- `/pantry` list view with search, empty state, sticky "add" button
+- Add / edit / delete actions (htmx — no full page reloads)
+- Mobile-first single-column UI with 44pt+ tap targets
+
+**End state:** working personal pantry tracker.
+
+### Phase 1C — Shopping list CRUD (next sitting, ~60-90 min)
+
+- `ShoppingItem` model (id, user_id, name, quantity, unit, checked, added_at)
+- `/shopping` route with check-off behavior and "clear checked" action
+- Bottom tab bar nav between `/pantry` and `/shopping`
+- One-tap "add to shopping" from any pantry row
+
+**End state:** Phase 1 complete — solo pantry + shopping list on your phone.
 
 ### Phase 2 — Households (the real multi-user piece) (2–3 sittings)
 
@@ -157,3 +177,12 @@ The Pawsitive Coach sibling project is at `../project-pawsitive-coach`. Pattern 
 - **OpenAI JSON-mode call + error handling** — `app.py` lines 142–179
 - **Session-based state** (we'll replace this with Flask-Login + a real DB, but the request handling shape carries over)
 - **Mobile-friendly chat UI** — `templates/index.html` (worth scanning for layout patterns)
+
+---
+
+## Gotchas (learned the hard way, don't relearn)
+
+- **`hashlib.scrypt` missing on macOS system Python.** Python 3.9 shipped with macOS links against LibreSSL, which doesn't include `hashlib.scrypt`. Werkzeug 3.x defaults to scrypt for password hashing, which crashes with `AttributeError`. Fix: pass `method="pbkdf2:sha256"` to `generate_password_hash`. See `models.py::set_password`.
+- **`csrf_token()` in templates needs `CSRFProtect`.** Flask-WTF's `form.hidden_tag()` only embeds a token in *its own* form. For ad-hoc forms (like the logout button in `base.html`), you need to call `csrf_token()` directly, which only exists if `CSRFProtect` is initialized on the app. We do this in `extensions.py` and `create_app()`.
+- **SQLite db lives at `instance/pantrypal.sqlite3`, not the project root.** Flask-SQLAlchemy resolves relative `sqlite:///` URIs against `<app>/instance/`. Already gitignored. To reset the db: `rm instance/pantrypal.sqlite3` AND restart the server (connection pool keeps the deleted file's inode alive otherwise).
+- **Port 5001, not 5000.** Pawsitive Coach owns 5000 so you can run both side by side.

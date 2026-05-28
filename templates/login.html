@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in to PantryPal{% endblock %}
+
+{% block content %}
+<section>
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold tracking-tight">Welcome back</h1>
+    <p class="mt-1 text-sm text-stone-500">Sign in to see your pantry and shopping list.</p>
+  </div>
+
+  <form method="post" novalidate class="space-y-4">
+    {{ form.hidden_tag() }}
+
+    {% set field_class = "block w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" %}
+    {% set field_error_class = "block w-full rounded-xl border border-red-400 bg-white px-4 py-3 text-stone-900 placeholder:text-stone-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" %}
+    {% set label_class = "mb-1.5 block text-sm font-medium text-stone-800" %}
+
+    <div>
+      <label for="{{ form.email.id }}" class="{{ label_class }}">{{ form.email.label.text }}</label>
+      {{ form.email(class=field_error_class if form.email.errors else field_class) }}
+      {% for err in form.email.errors %}<p class="mt-1.5 text-sm text-red-700">{{ err }}</p>{% endfor %}
+    </div>
+
+    <div>
+      <label for="{{ form.password.id }}" class="{{ label_class }}">{{ form.password.label.text }}</label>
+      {{ form.password(class=field_error_class if form.password.errors else field_class) }}
+      {% for err in form.password.errors %}<p class="mt-1.5 text-sm text-red-700">{{ err }}</p>{% endfor %}
+    </div>
+
+    <button type="submit"
+            class="mt-2 inline-flex h-12 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-base font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
+      {{ form.submit.label.text }}
+    </button>
+  </form>
+
+  <p class="mt-6 text-center text-sm text-stone-600">
+    New here?
+    <a href="{{ url_for('signup') }}" class="font-medium text-green-700 underline-offset-2 hover:underline">Create an account</a>
+  </p>
+</section>
+{% endblock %}

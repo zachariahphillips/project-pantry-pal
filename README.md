@@ -30,8 +30,10 @@ To run it on your phone while developing, find your laptop's LAN IP (`ipconfig g
 
 ## Phases
 
-- **Phase 0:** Project setup, hello-world Flask
-- **Phase 1:** Solo pantry + shopping list (no AI, no households)
+- **Phase 0:** Project setup, hello-world Flask — done
+- **Phase 1A:** Email/password auth foundation — done
+- **Phase 1B:** Pantry CRUD — up next
+- **Phase 1C:** Shopping list CRUD
 - **Phase 2:** Households + multi-user invites + deploy
 - **Phase 3:** AI meal planning
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
