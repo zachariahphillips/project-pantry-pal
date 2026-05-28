@@ -19,6 +19,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # then fill in FLASK_SECRET_KEY (OpenAI key not needed until Phase 3)
+python -c "import secrets; print(secrets.token_hex(32))"  # paste output into FLASK_SECRET_KEY
 python app.py
 ```
 
@@ -27,6 +28,16 @@ Open <http://localhost:5001>. Health check at <http://localhost:5001/healthz>.
 Port 5001 is intentional — Pawsitive Coach uses 5000, so both can run side by side.
 
 To run it on your phone while developing, find your laptop's LAN IP (`ipconfig getifaddr en0` on macOS) and open `http://<that-ip>:5001` on the phone (same Wi-Fi).
+
+### On a fresh clone: pin git pushes to the personal GitHub account
+
+Without this, `git push` will use whichever gh account is active, which fails when the active account is the work one.
+
+```bash
+git config --local --replace-all credential.https://github.com.helper ""
+git config --local --add credential.https://github.com.helper \
+  '!f() { test "$1" = "get" && printf "username=zachariahphillips\npassword=%s\n" "$(gh auth token --user zachariahphillips -h github.com)"; }; f'
+```
 
 ## Phases
 
