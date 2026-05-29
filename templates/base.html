@@ -5,14 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#16a34a" />
   <title>{% block title %}PantryPal{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+          crossorigin="anonymous"></script>
   <style>
     body { visibility: hidden; }
     /* Inputs at 16px+ prevent iOS Safari from auto-zooming on focus. */
     input, button, select, textarea { font-size: 16px; }
+    /* Fade newly inserted htmx content in to make swaps feel less abrupt. */
+    .htmx-added { opacity: 0; }
+    .htmx-settling .htmx-added { opacity: 1; transition: opacity 200ms; }
   </style>
   <script>
     window.addEventListener('load', () => { document.body.style.visibility = 'visible'; });
+    // Forward the per-session CSRF token on every htmx request so Flask-WTF
+    // accepts non-form-encoded verbs (DELETE, PUT) and JSON bodies.
+    // Listening on `document` (not body) avoids ordering issues when this
+    // script runs inside <head> before <body> exists.
+    document.addEventListener('htmx:configRequest', (event) => {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta) event.detail.headers['X-CSRFToken'] = meta.content;
+    });
   </script>
 </head>
 <body class="min-h-screen bg-stone-50 text-stone-900 antialiased">

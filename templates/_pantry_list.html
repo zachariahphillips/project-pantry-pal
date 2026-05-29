@@ -1,0 +1,15 @@
+<div id="pantry-list" class="space-y-2">
+  {% if items %}
+    {% for item in items %}{% include "_pantry_item.html" %}{% endfor %}
+  {% else %}
+    <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
+      {% if query %}
+        <p class="text-sm font-medium text-stone-700">No matches for "{{ query }}".</p>
+        <p class="mt-1 text-xs text-stone-500">Try a shorter search or clear the box.</p>
+      {% else %}
+        <p class="text-sm font-medium text-stone-700">Your pantry is empty.</p>
+        <p class="mt-1 text-xs text-stone-500">Add your first item using the form above.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

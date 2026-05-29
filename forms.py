@@ -4,8 +4,8 @@ FLASK_SECRET_KEY is set in the environment.
 """
 
 from flask_wtf import FlaskForm
-from wtforms import PasswordField, StringField, SubmitField
-from wtforms.validators import DataRequired, Email, Length
+from wtforms import FloatField, PasswordField, StringField, SubmitField
+from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
 
 
 class SignupForm(FlaskForm):
@@ -49,3 +49,39 @@ class LoginForm(FlaskForm):
         render_kw={"autocomplete": "current-password", "placeholder": "Your password"},
     )
     submit = SubmitField("Sign in")
+
+
+class PantryItemForm(FlaskForm):
+    name = StringField(
+        "Item",
+        validators=[
+            DataRequired(message="What did you add?"),
+            Length(min=1, max=120),
+        ],
+        render_kw={"autocomplete": "off", "placeholder": "e.g. black beans"},
+    )
+    quantity = FloatField(
+        "Qty",
+        validators=[Optional(), NumberRange(min=0, message="Use a number \u2265 0.")],
+        render_kw={
+            "autocomplete": "off",
+            "inputmode": "decimal",
+            "step": "any",
+            "placeholder": "2",
+        },
+    )
+    unit = StringField(
+        "Unit",
+        validators=[Optional(), Length(max=40)],
+        render_kw={
+            "autocomplete": "off",
+            "list": "unit-suggestions",
+            "placeholder": "cans",
+        },
+    )
+    notes = StringField(
+        "Notes",
+        validators=[Optional(), Length(max=280)],
+        render_kw={"autocomplete": "off", "placeholder": "Optional notes"},
+    )
+    submit = SubmitField("Add")

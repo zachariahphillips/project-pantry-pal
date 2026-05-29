@@ -43,8 +43,8 @@ git config --local --add credential.https://github.com.helper \
 
 - **Phase 0:** Project setup, hello-world Flask — done
 - **Phase 1A:** Email/password auth foundation — done
-- **Phase 1B:** Pantry CRUD — up next
-- **Phase 1C:** Shopping list CRUD
+- **Phase 1B:** Pantry CRUD (add, edit, delete, search via htmx) — done
+- **Phase 1C:** Shopping list CRUD — up next
 - **Phase 2:** Households + multi-user invites + deploy
 - **Phase 3:** AI meal planning
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)

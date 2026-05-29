@@ -2,7 +2,7 @@
 
 A household-shared pantry + shopping list, mobile-first, with an AI meal planner that knows what you already have at home.
 
-**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B starts when Riah says "let's start Phase 1B."
+**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B done (2026-05-29). Phase 1C starts when Riah says "let's start Phase 1C."
 
 ---
 
@@ -49,20 +49,29 @@ One pantry per household. Multiple people contribute from their own phones with 
 
 **End state:** can sign up, sign in, sign out, see your name on `/home`.
 
-### Phase 1B — Pantry CRUD (next sitting, ~60-90 min)
+### Phase 1B — Pantry CRUD (1 sitting) — DONE 2026-05-29
 
-- `PantryItem` model (id, user_id, name, quantity, unit, notes, added_at)
-- `/pantry` list view with search, empty state, sticky "add" button
-- Add / edit / delete actions (htmx — no full page reloads)
-- Mobile-first single-column UI with 44pt+ tap targets
+- `PantryItem` model (id, user_id, name, quantity, unit, notes, added_at) with cascade-delete on user
+- `/pantry` list view: search, empty state (with separate "no matches" copy when filtering)
+- Add via htmx (returns list partial; empty state vanishes correctly)
+- Edit toggles a single row in/out of edit mode (htmx targets `closest li`-style — actually `#pantry-item-N` divs)
+- Delete via real HTTP DELETE verb with `hx-confirm` and returns the refreshed list
+- htmx loaded via CDN with subresource integrity; CSRF token forwarded on every request via `htmx:configRequest` listener in `base.html`
+- Validation errors on add come back as a 422 fragment with `HX-Retarget`/`HX-Reswap` headers so in-progress input survives
+- Quantity field is `FloatField` with `Optional()` — empty stays empty, no implicit zero
+- Unit field has a `<datalist>` of common units (ea, g, kg, oz, lb, ml, l, cup, tbsp, tsp, cans, boxes, bags, bunches)
+- 20-check end-to-end smoke test including user isolation (alice's items 404 for bob)
+- `home.html` retired — auth flows now redirect to `/pantry`
 
-**End state:** working personal pantry tracker.
+**End state:** working personal pantry tracker, htmx-driven, accessed via phone over LAN.
+
+### Phase 1C — Shopping list CRUD (next sitting, ~60-90 min)
 
 ### Phase 1C — Shopping list CRUD (next sitting, ~60-90 min)
 
 - `ShoppingItem` model (id, user_id, name, quantity, unit, checked, added_at)
 - `/shopping` route with check-off behavior and "clear checked" action
-- Bottom tab bar nav between `/pantry` and `/shopping`
+- Bottom tab bar nav between `/pantry` and `/shopping` (replaces today's logo-only header for logged-in users)
 - One-tap "add to shopping" from any pantry row
 
 **End state:** Phase 1 complete — solo pantry + shopping list on your phone.
@@ -187,3 +196,5 @@ The Pawsitive Coach sibling project is at `../project-pawsitive-coach`. Pattern 
 - **SQLite db lives at `instance/pantrypal.sqlite3`, not the project root.** Flask-SQLAlchemy resolves relative `sqlite:///` URIs against `<app>/instance/`. Already gitignored. To reset the db: `rm instance/pantrypal.sqlite3` AND restart the server (connection pool keeps the deleted file's inode alive otherwise).
 - **Port 5001, not 5000.** Pawsitive Coach owns 5000 so you can run both side by side.
 - **gh active account flips between work and personal.** `gh auth git-credential` always returns the *active* account's token, so a `git push` to a personal repo fails with "denied to zphil1_nike" whenever the active account is the work one. Fix: this repo's local git config pins the credential helper to `gh auth token --user zachariahphillips`, which always returns the personal token regardless of which account is active. See README "Quick start" for the one-liner to apply on a fresh clone.
+- **Flask-WTF CSRF needs the X-CSRFToken header for body-less verbs (DELETE).** htmx fires `htmx:configRequest` on every request and the listener in `base.html` adds the header automatically — but any smoke test or external client also needs to send it, otherwise DELETE returns `400 The CSRF token is missing.` Our test script (re-)pulls the per-session token from the `<meta name="csrf-token">` tag.
+- **Never `rm instance/pantrypal.sqlite3` while the dev server is running.** SQLAlchemy's pool keeps the deleted-inode file open and subsequent writes fail with `attempt to write a readonly database` (the directory inode for the recreated file ends up unwritable). Always stop the server *first*, then wipe.

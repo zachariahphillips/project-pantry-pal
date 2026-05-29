@@ -1,0 +1,31 @@
+<div id="pantry-item-{{ item.id }}"
+     class="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+  <div class="min-w-0 flex-1">
+    <p class="truncate text-sm font-medium text-stone-900">{{ item.name }}</p>
+    {% set qty = item.display_quantity() %}
+    {% if qty or item.notes %}
+      <p class="mt-0.5 text-xs text-stone-500">
+        {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
+        {% if qty and item.notes %} · {% endif %}
+        {% if item.notes %}{{ item.notes }}{% endif %}
+      </p>
+    {% endif %}
+  </div>
+  <div class="flex flex-shrink-0 items-center gap-1">
+    <button type="button"
+            hx-get="{{ url_for('pantry_item_edit', item_id=item.id) }}"
+            hx-target="#pantry-item-{{ item.id }}"
+            hx-swap="outerHTML"
+            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
+      Edit
+    </button>
+    <button type="button"
+            hx-delete="{{ url_for('pantry_item_delete', item_id=item.id) }}"
+            hx-target="#pantry-list"
+            hx-swap="outerHTML"
+            hx-confirm="Delete &quot;{{ item.name }}&quot; from your pantry?"
+            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
+      Delete
+    </button>
+  </div>
+</div>
