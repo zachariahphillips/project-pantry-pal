@@ -17,6 +17,8 @@
     /* Fade newly inserted htmx content in to make swaps feel less abrupt. */
     .htmx-added { opacity: 0; }
     .htmx-settling .htmx-added { opacity: 1; transition: opacity 200ms; }
+    /* Tab bar respects the iPhone home-indicator safe area. */
+    .tab-bar { padding-bottom: env(safe-area-inset-bottom); }
   </style>
   <script>
     window.addEventListener('load', () => { document.body.style.visibility = 'visible'; });
@@ -28,8 +30,19 @@
       const meta = document.querySelector('meta[name="csrf-token"]');
       if (meta) event.detail.headers['X-CSRFToken'] = meta.content;
     });
+    // Brief bottom toast triggered by HX-Trigger response headers from
+    // cross-action routes (e.g. "+ Shop" on a pantry row).
+    document.addEventListener('shopping:added', () => {
+      const toast = document.getElementById('toast');
+      if (!toast) return;
+      toast.textContent = 'Added to shopping list';
+      toast.classList.remove('opacity-0');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => toast.classList.add('opacity-0'), 1800);
+    });
   </script>
 </head>
+{% set page = request.endpoint or '' %}
 <body class="min-h-screen bg-stone-50 text-stone-900 antialiased">
   <header class="border-b border-stone-200 bg-white">
     <div class="mx-auto flex max-w-md items-center justify-between px-5 py-4">
@@ -53,7 +66,7 @@
     </div>
   </header>
 
-  <main class="mx-auto max-w-md px-5 py-6 sm:py-10">
+  <main class="mx-auto max-w-md px-5 py-6 sm:py-10 {% if current_user.is_authenticated %}pb-28{% endif %}">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="mb-5 space-y-2">
@@ -74,5 +87,42 @@
 
     {% block content %}{% endblock %}
   </main>
+
+  {% if current_user.is_authenticated %}
+    {# Bottom tab bar nav. Fixed to the viewport bottom, max-w-md centered on larger screens. #}
+    {% set tab_base = "flex flex-1 flex-col items-center justify-center gap-0.5 px-3 py-2 text-xs font-medium transition" %}
+    {% set tab_active = "text-green-700" %}
+    {% set tab_inactive = "text-stone-500 hover:text-stone-700" %}
+    <nav aria-label="Main navigation"
+         class="tab-bar fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      <div class="mx-auto flex max-w-md items-stretch">
+        <a href="{{ url_for('pantry_list') }}"
+           aria-current="{{ 'page' if page.startswith('pantry') else 'false' }}"
+           class="{{ tab_base }} {{ tab_active if page.startswith('pantry') else tab_inactive }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6">
+            <path d="M3 7h18v3H3zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4" />
+          </svg>
+          <span>Pantry</span>
+        </a>
+        <a href="{{ url_for('shopping_list') }}"
+           aria-current="{{ 'page' if page.startswith('shopping') else 'false' }}"
+           class="{{ tab_base }} {{ tab_active if page.startswith('shopping') else tab_inactive }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6">
+            <path d="M3 7h18l-2 12H5L3 7z" />
+            <path d="M8 7V5a4 4 0 0 1 8 0v2" />
+          </svg>
+          <span>Shopping</span>
+        </a>
+      </div>
+    </nav>
+
+    {# Toast slot. Sits above the tab bar; fired by HX-Trigger events. #}
+    <div id="toast"
+         role="status"
+         aria-live="polite"
+         class="pointer-events-none fixed inset-x-0 bottom-24 z-40 mx-auto w-fit max-w-[80%] rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white opacity-0 transition-opacity duration-300"></div>
+  {% endif %}
 </body>
 </html>

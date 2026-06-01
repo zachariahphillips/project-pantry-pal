@@ -13,6 +13,21 @@
   </div>
   <div class="flex flex-shrink-0 items-center gap-1">
     <button type="button"
+            aria-label="Add {{ item.name }} to shopping list"
+            hx-post="{{ url_for('pantry_item_to_shopping', item_id=item.id) }}"
+            hx-swap="none"
+            hx-on::after-request="
+              if (event.detail.successful) {
+                const lbl = this.querySelector('.shop-label');
+                lbl.textContent = 'Added';
+                this.disabled = true;
+                clearTimeout(this.__t);
+                this.__t = setTimeout(() => { lbl.textContent = '+ Shop'; this.disabled = false; }, 1500);
+              }"
+            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:opacity-60">
+      <span class="shop-label">+ Shop</span>
+    </button>
+    <button type="button"
             hx-get="{{ url_for('pantry_item_edit', item_id=item.id) }}"
             hx-target="#pantry-item-{{ item.id }}"
             hx-swap="outerHTML"

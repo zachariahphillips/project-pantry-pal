@@ -1,0 +1,7 @@
+<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+  {% for field_name, errors in form.errors.items() %}
+    {% for err in errors %}
+      <p>{{ err }}</p>
+    {% endfor %}
+  {% endfor %}
+</div>

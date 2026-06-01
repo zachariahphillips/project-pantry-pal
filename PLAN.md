@@ -2,7 +2,7 @@
 
 A household-shared pantry + shopping list, mobile-first, with an AI meal planner that knows what you already have at home.
 
-**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B done (2026-05-29). Phase 1C starts when Riah says "let's start Phase 1C."
+**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B done (2026-05-29). **Phase 1C done (2026-06-01) — Phase 1 is complete.** Phase 2 (households + deploy) starts when Riah says "let's start Phase 2."
 
 ---
 
@@ -65,16 +65,19 @@ One pantry per household. Multiple people contribute from their own phones with 
 
 **End state:** working personal pantry tracker, htmx-driven, accessed via phone over LAN.
 
-### Phase 1C — Shopping list CRUD (next sitting, ~60-90 min)
+### Phase 1C — Shopping list CRUD (1 sitting) — DONE 2026-06-01
 
-### Phase 1C — Shopping list CRUD (next sitting, ~60-90 min)
+- `ShoppingItem` model (id, user_id, name, quantity, unit, notes, checked, added_at) with cascade-delete on user; sorted unchecked-first then newest-first
+- `ShoppingItemForm(PantryItemForm)` — same fields today, separate class so pantry-only (expiry, location) or shopping-only (priority, store) fields can land in Phase 4 without coupling
+- `/shopping` — list, add, edit, delete (mirrors the Phase 1B pantry routes; same htmx + 422-with-retarget pattern for validation errors)
+- `POST /shopping/<id>/toggle` — single checkbox tap flips `checked`; response re-renders the whole list so checked items slide to the bottom
+- `POST /shopping/clear-checked` — bulk-delete all checked items behind an `hx-confirm` (guards against an accidental swipe wiping the list)
+- `POST /pantry/<id>/add-to-shopping` — copies a pantry row (name/qty/unit, but **not** notes — notes are pantry-context) into the shopping list and returns `200`/empty with `HX-Trigger: shopping:added`; pantry row is left alone
+- Bottom tab bar (Pantry / Shopping) in `base.html`, only rendered when authenticated; honors `env(safe-area-inset-bottom)` for iPhone notches; active tab uses green text + `aria-current="page"`; main content gets `pb-28` to clear the bar
+- Global toast slot (`#toast`) listens for the `shopping:added` event and shows "Added to shopping list" for ~1.8s. Belt-and-suspenders: the `+ Shop` button itself also flips its label to "Added" for 1.5s via `hx-on::after-request` so feedback works even if the toast listener has a hiccup.
+- 38-check end-to-end smoke test covering: shopping CRUD, check-off + auto-reorder + strikethrough, toggle-back-off, clear-checked, the `+ Shop` cross-link (including the deliberate "two taps = two rows" no-dedupe behavior), pantry-row notes NOT carrying over, tab bar active states, tab bar hidden when logged out, full user isolation across BOTH lists, and search-with-no-matches empty state
 
-- `ShoppingItem` model (id, user_id, name, quantity, unit, checked, added_at)
-- `/shopping` route with check-off behavior and "clear checked" action
-- Bottom tab bar nav between `/pantry` and `/shopping` (replaces today's logo-only header for logged-in users)
-- One-tap "add to shopping" from any pantry row
-
-**End state:** Phase 1 complete — solo pantry + shopping list on your phone.
+**End state:** Phase 1 complete — solo pantry + shopping list + one-tap cross-link on your phone, with a clean two-tab bottom nav.
 
 ### Phase 2 — Households (the real multi-user piece) (2–3 sittings)
 
@@ -198,3 +201,8 @@ The Pawsitive Coach sibling project is at `../project-pawsitive-coach`. Pattern 
 - **gh active account flips between work and personal.** `gh auth git-credential` always returns the *active* account's token, so a `git push` to a personal repo fails with "denied to zphil1_nike" whenever the active account is the work one. Fix: this repo's local git config pins the credential helper to `gh auth token --user zachariahphillips`, which always returns the personal token regardless of which account is active. See README "Quick start" for the one-liner to apply on a fresh clone.
 - **Flask-WTF CSRF needs the X-CSRFToken header for body-less verbs (DELETE).** htmx fires `htmx:configRequest` on every request and the listener in `base.html` adds the header automatically — but any smoke test or external client also needs to send it, otherwise DELETE returns `400 The CSRF token is missing.` Our test script (re-)pulls the per-session token from the `<meta name="csrf-token">` tag.
 - **Never `rm instance/pantrypal.sqlite3` while the dev server is running.** SQLAlchemy's pool keeps the deleted-inode file open and subsequent writes fail with `attempt to write a readonly database` (the directory inode for the recreated file ends up unwritable). Always stop the server *first*, then wipe.
+- **Smoke-test assertions: prefer presence of the action button over substring matches on shared phrases.** First Phase 1C run failed on `"checked off" not in body` because the row's `aria-label="Toggle 'X' checked off"` matched as a false positive. The clean assertion is `"Clear checked" not in body` (looking for the button that only renders when there's something to clear) rather than the count-summary text.
+- **Counting rows in rendered HTML: don't rely on `>{{ item.name }}<`.** Jinja preserves whitespace inside `<p>` tags, so the rendered text is `<p>\n  Olive oil\n</p>` — there's no literal `>Olive oil<` to match. Count `id="shopping-item-N"` (or the analogous prefix) instead.
+- **`+ Shop` is intentionally NOT idempotent.** Two taps create two shopping rows. The smoke test asserts this so a future refactor that adds dedupe doesn't sneak through. If a real user complains, the right fix is a confirmation/merge UX, not silent dedupe.
+- **Cascade ordering on `User.shopping_items`** uses `ShoppingItem.checked.asc(), ShoppingItem.added_at.desc()`. SQL `FALSE` sorts before `TRUE`, so unchecked items appear first; within each group, newest-first. SQLAlchemy passes this string directly to the SQL ORDER BY, so don't try to reach for Python booleans here.
+- **Toast event listener is on `document`, fires on `shopping:added`.** Anywhere you want to flash a toast from an htmx response, return an `HX-Trigger: <event-name>` header. The existing listener can be reused for other events (Phase 2: `household:joined`, Phase 3: `meal:planned`) by adding sibling handlers in `base.html`.

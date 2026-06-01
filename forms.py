@@ -85,3 +85,10 @@ class PantryItemForm(FlaskForm):
         render_kw={"autocomplete": "off", "placeholder": "Optional notes"},
     )
     submit = SubmitField("Add")
+
+
+class ShoppingItemForm(PantryItemForm):
+    """Same fields as PantryItemForm today. Kept as a separate class so
+    pantry-only fields (expiry, location) or shopping-only fields (priority,
+    store) can be added in Phase 4 without coupling."""
+    pass

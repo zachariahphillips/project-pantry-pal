@@ -1,0 +1,31 @@
+<div id="shopping-list" class="space-y-2">
+  {% if checked_count and checked_count > 0 %}
+    <div class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-2">
+      <p class="text-xs text-stone-600">
+        {{ checked_count }} checked off
+      </p>
+      <button type="button"
+              hx-post="{{ url_for('shopping_clear_checked') }}"
+              hx-target="#shopping-list"
+              hx-swap="outerHTML"
+              hx-confirm="Clear all checked items from your shopping list?"
+              class="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50">
+        Clear checked
+      </button>
+    </div>
+  {% endif %}
+
+  {% if items %}
+    {% for item in items %}{% include "_shopping_item.html" %}{% endfor %}
+  {% else %}
+    <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
+      {% if query %}
+        <p class="text-sm font-medium text-stone-700">No matches for "{{ query }}".</p>
+        <p class="mt-1 text-xs text-stone-500">Try a shorter search or clear the box.</p>
+      {% else %}
+        <p class="text-sm font-medium text-stone-700">Nothing on your shopping list.</p>
+        <p class="mt-1 text-xs text-stone-500">Add items above, or tap "+ Shop" on any pantry item.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
