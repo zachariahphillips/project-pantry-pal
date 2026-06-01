@@ -75,9 +75,10 @@ One pantry per household. Multiple people contribute from their own phones with 
 - `POST /pantry/<id>/add-to-shopping` — copies a pantry row (name/qty/unit, but **not** notes — notes are pantry-context) into the shopping list and returns `200`/empty with `HX-Trigger: shopping:added`; pantry row is left alone
 - Bottom tab bar (Pantry / Shopping) in `base.html`, only rendered when authenticated; honors `env(safe-area-inset-bottom)` for iPhone notches; active tab uses green text + `aria-current="page"`; main content gets `pb-28` to clear the bar
 - Global toast slot (`#toast`) listens for the `shopping:added` event and shows "Added to shopping list" for ~1.8s. Belt-and-suspenders: the `+ Shop` button itself also flips its label to "Added" for 1.5s via `hx-on::after-request` so feedback works even if the toast listener has a hiccup.
-- 38-check end-to-end smoke test covering: shopping CRUD, check-off + auto-reorder + strikethrough, toggle-back-off, clear-checked, the `+ Shop` cross-link (including the deliberate "two taps = two rows" no-dedupe behavior), pantry-row notes NOT carrying over, tab bar active states, tab bar hidden when logged out, full user isolation across BOTH lists, and search-with-no-matches empty state
+- 38-check end-to-end smoke test (one-off, live server) covering: shopping CRUD, check-off + auto-reorder + strikethrough, toggle-back-off, clear-checked, the `+ Shop` cross-link (including the deliberate "two taps = two rows" no-dedupe behavior), pantry-row notes NOT carrying over, tab bar active states, tab bar hidden when logged out, full user isolation across BOTH lists, and search-with-no-matches empty state
+- **Regression suite committed:** `tests/test_phase_1c.py` — 30 pytest cases (~12s wall time) built on Flask's test client, no live server needed. Per-test SQLite file via `tmp_path`, real CSRF tokens scraped from the rendered `<meta name="csrf-token">`. Grouped into 6 test classes so a failure points at the exact behavior that regressed. Run: `.venv/bin/pytest tests/ -v`. Phase 1A/1B retroactive coverage can land in Phase 2 prep.
 
-**End state:** Phase 1 complete — solo pantry + shopping list + one-tap cross-link on your phone, with a clean two-tab bottom nav.
+**End state:** Phase 1 complete — solo pantry + shopping list + one-tap cross-link on your phone, with a clean two-tab bottom nav AND a pytest regression suite guarding the behavior.
 
 ### Phase 2 — Households (the real multi-user piece) (2–3 sittings)
 
