@@ -4,7 +4,7 @@ FLASK_SECRET_KEY is set in the environment.
 """
 
 from flask_wtf import FlaskForm
-from wtforms import FloatField, PasswordField, StringField, SubmitField
+from wtforms import BooleanField, FloatField, PasswordField, StringField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
 
 
@@ -48,6 +48,10 @@ class LoginForm(FlaskForm):
         validators=[DataRequired(message="Password is required.")],
         render_kw={"autocomplete": "current-password", "placeholder": "Your password"},
     )
+    # Defaults to True so a fresh install is "phone-friendly" by default.
+    # Flask-Login's remember-me cookie lives 365 days (REMEMBER_COOKIE_DURATION
+    # default); the user can uncheck on shared/public devices.
+    remember = BooleanField("Keep me signed in", default=True)
     submit = SubmitField("Sign in")
 
 

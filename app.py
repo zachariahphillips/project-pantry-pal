@@ -99,7 +99,10 @@ def _register_routes(app: Flask) -> None:
                 flash("Invalid email or password.", "error")
                 return render_template("login.html", form=form)
 
-            login_user(user)
+            # `remember=True` issues Flask-Login's persistent remember-me
+            # cookie (REMEMBER_COOKIE_DURATION default = 365 days). On a
+            # phone this means PantryPal stays signed in across reboots.
+            login_user(user, remember=form.remember.data)
             # Honor Flask-Login's `?next=` redirect, but only if it's a safe
             # relative path (avoid open-redirect attacks).
             next_url = request.args.get("next")

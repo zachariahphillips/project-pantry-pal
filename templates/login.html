@@ -28,6 +28,11 @@
       {% for err in form.password.errors %}<p class="mt-1.5 text-sm text-red-700">{{ err }}</p>{% endfor %}
     </div>
 
+    <label for="{{ form.remember.id }}" class="flex cursor-pointer items-center gap-2.5 select-none">
+      {{ form.remember(class="h-5 w-5 cursor-pointer rounded border-stone-400 text-green-600 focus:ring-2 focus:ring-green-300") }}
+      <span class="text-sm text-stone-700">{{ form.remember.label.text }}</span>
+    </label>
+
     <button type="submit"
             class="mt-2 inline-flex h-12 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-base font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
       {{ form.submit.label.text }}
