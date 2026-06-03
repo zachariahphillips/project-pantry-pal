@@ -20,7 +20,7 @@ import sys
 
 from app import create_app
 from extensions import db
-from models import PantryItem, ShoppingItem, User
+from models import Household, PantryItem, ShoppingItem, User
 
 # Domain is `example.com` (reserved for documentation/testing per RFC 2606)
 # rather than `*.local`, because the `email_validator` package rejects `.local`
@@ -68,30 +68,50 @@ def seed():
             user = db.session.query(User).filter_by(email=spec["email"]).first()
 
             if user is not None:
-                # Existing test user: wipe their items, rebuild from spec.
-                # The dynamic relationships have ORDER BY baked in, which
-                # SQLAlchemy disallows on Query.delete(); strip it first.
-                user.pantry_items.order_by(None).delete(synchronize_session=False)
-                user.shopping_items.order_by(None).delete(synchronize_session=False)
+                # Existing test user: wipe ONLY the items they personally
+                # added (not the whole household, in case Phase 2B/later
+                # has roommates in there too). The dynamic relationships
+                # have ORDER BY baked in, which SQLAlchemy disallows on
+                # Query.delete(); strip it first.
+                user.added_pantry_items.order_by(None).delete(synchronize_session=False)
+                user.added_shopping_items.order_by(None).delete(synchronize_session=False)
                 user.name = spec["name"]
                 user.set_password(spec["password"])
+                # Make sure they have a household (handles older test rows
+                # from before Phase 2A — the auto-migration will normally
+                # do this, but seed should be self-sufficient).
+                if user.household_id is None:
+                    first = user.name.split()[0]
+                    hh = Household(name=f"{first}'s home")
+                    db.session.add(hh)
+                    db.session.flush()
+                    user.household_id = hh.id
                 refreshed.append(spec["email"])
             else:
                 user = User(email=spec["email"], name=spec["name"])
                 user.set_password(spec["password"])
+                # Mint a household-of-one — same shape as signup().
+                first = user.name.split()[0]
+                hh = Household(name=f"{first}'s home")
+                db.session.add(hh)
+                db.session.flush()
+                user.household_id = hh.id
                 db.session.add(user)
-                db.session.flush()  # need user.id for the FKs below
+                db.session.flush()  # need user.id for the item FKs below
                 created.append(spec["email"])
 
             for name, qty, unit, notes in spec["pantry"]:
                 db.session.add(PantryItem(
-                    user_id=user.id, name=name, quantity=qty,
-                    unit=unit, notes=notes,
+                    added_by_user_id=user.id,
+                    household_id=user.household_id,
+                    name=name, quantity=qty, unit=unit, notes=notes,
                 ))
             for name, qty, unit, notes, checked in spec["shopping"]:
                 db.session.add(ShoppingItem(
-                    user_id=user.id, name=name, quantity=qty,
-                    unit=unit, notes=notes, checked=checked,
+                    added_by_user_id=user.id,
+                    household_id=user.household_id,
+                    name=name, quantity=qty, unit=unit, notes=notes,
+                    checked=checked,
                 ))
 
         db.session.commit()

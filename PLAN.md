@@ -2,7 +2,7 @@
 
 A household-shared pantry + shopping list, mobile-first, with an AI meal planner that knows what you already have at home.
 
-**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B done (2026-05-29). **Phase 1C done (2026-06-01) — Phase 1 is complete.** Phase 2 (households + deploy) starts when Riah says "let's start Phase 2."
+**Status:** Phase 0 done (2026-05-27). Phase 1A done (2026-05-28). Phase 1B done (2026-05-29). Phase 1C done (2026-06-01). **Phase 2A done (2026-06-03) — items are now household-owned, with "added by" provenance.** Phase 2B (invite/join flow) is next.
 
 ---
 
@@ -80,16 +80,45 @@ One pantry per household. Multiple people contribute from their own phones with 
 
 **End state:** Phase 1 complete — solo pantry + shopping list + one-tap cross-link on your phone, with a clean two-tab bottom nav AND a pytest regression suite guarding the behavior.
 
-### Phase 2 — Households (the real multi-user piece) (2–3 sittings)
+### Phase 2A — Households data model (1 sitting) — DONE 2026-06-03
 
-- New `households` table — a user belongs to one household
-- Pantry + shopping list now belong to the **household**, not the user
-- Invite flow: a household generates a short invite code; another user signs up and enters it to join
-- "Last edited by [name]" stamps on items
-- Simple sync: refresh on app focus + optional poll every 10s (good enough for v1; websockets can come later)
-- Deploy to Render or Fly.io so household members can actually use it on their own phones
+- New `Household` model (id, name, created_at) + `User.household_id` FK
+- Items are now owned by the **household** (new `pantry_items.household_id` + `shopping_items.household_id` columns)
+- The pre-Phase-2A "ownership" column `user_id` on items is semantically retired to **provenance** ("who added this") — Python attribute renamed to `added_by_user_id` via `db.Column("user_id", …)` so the DB column name stays `user_id` and the migration is purely **additive** (no destructive ALTERs, no renames)
+- New `Household.pantry_items` / `Household.shopping_items` relationships replace `User.pantry_items` / `User.shopping_items` in the routes; `User.added_pantry_items` / `User.added_shopping_items` keep the "what did I add?" view for the seed script and future "your contributions" UIs
+- `_get_pantry_item_or_404` / `_get_shopping_item_or_404` ownership check changed from `item.user_id == current_user.id` to `item.household_id == current_user.household_id` — a roommate who didn't add the item can still edit + delete it
+- **Auto-migration on startup** (`_run_phase_2a_migration` in `app.py`, called from `create_app()`): idempotent backfill that
+  1. Calls `_ensure_phase_2a_columns` which uses SQLAlchemy's `Inspector` + raw `ALTER TABLE … ADD COLUMN` to add the `household_id` FK columns on `users` / `pantry_items` / `shopping_items` when they're missing (because `db.create_all()` only creates missing **tables**, never adds columns)
+  2. Gives every user with `household_id IS NULL` a "household of one" named `"<First name>'s home"`
+  3. Sets each orphan item's `household_id` to its `added_by` user's household
+- Signup route auto-creates a household (same shape as the migration's "household of one"); Phase 2B will branch here on an optional `?invite=<token>` to join an existing household instead
+- `+ Shop` cross-link records the **tapper** as `added_by_user_id`, not the original pantry adder — so "alice put olive oil in pantry, bob tapped +Shop on his shopping run" attributes correctly
+- "added by [name]" stamp on pantry + shopping rows, **hidden when added_by == current_user** (avoids "added by you" noise in solo households)
+- `seed.py` updated: each test user gets a household-of-one explicitly (doesn't depend on migration ordering); re-running wipes only items the test user **added**, never other household members' items
+- **Regression suite expanded:** `tests/test_phase_2a.py` — 13 pytest cases (~9s) in 5 classes covering signup→household auto-create, item provenance fields, shared-household visibility/edit/delete/toggle (stitched via direct DB write since the invite UI is Phase 2B), `+ Shop` provenance correctness, "added by" stamp visibility rules, and a full Phase-1C-to-2A schema-evolution migration test (builds a 1C-shaped SQLite by hand, boots create_app, asserts ALTER + backfill + idempotence). All 30 Phase 1C tests still green — the data model swap is transparent at the route level.
+- **End-to-end smoke against the real dev DB:** killed the stale Flask servers (they had auto-reloaded against partial Phase 2A code and created a half-migrated state), restored from the pre-2A backup, booted fresh, logged in as alice from yesterday's password, all 5 pantry + 3 shopping items survived with their `checked` state, "added by" stamp correctly hidden, new item add still works.
 
-**End state:** you and your household share a real, hosted pantry app.
+**End state:** items are now properly household-owned with provenance. No invite UI yet, so every household is still a household-of-one in production. Phase 2B closes that gap.
+
+### Phase 2B — Invite / join flow (1–2 sittings)
+
+- `Invite` model (token, household_id, created_by_user_id, expires_at, max_uses, used_count) — magic-link shaped per Riah's 2026-06-02 decision
+- `POST /household/invite` mints a token; new "Invite a roommate" card on the pantry page when household has 1 member
+- `GET /join/<token>` — anonymous-friendly landing page: "Riah invited you to 'Alice's home'. Sign up or log in to join."
+- Signup with `?invite=<token>` skips the household-of-one and joins the existing household instead
+- Existing logged-in user hitting `/join/<token>` gets a confirm step: "Leave 'Your home' and join 'Alice's home'?" (their old household + its items stay — no destructive merge in v1)
+- `household:joined` event fires the existing toast slot in `base.html` (we built that hook in Phase 1C for exactly this)
+
+**End state:** real shared households over a shareable URL.
+
+### Phase 2C — Deploy to Fly.io (1 sitting)
+
+- Dockerfile + Gunicorn + Fly volumes for SQLite persistence (Fly's free tier + a small persistent volume keeps Phase 2 hosting at $0/mo)
+- `fly secrets set FLASK_SECRET_KEY=…`
+- Test against Riah's phone over the public URL
+- PWA manifest + service worker (so "Add to Home Screen" feels native) is the natural Phase 2C polish
+
+**End state:** you and your household share a real, hosted pantry app at a `*.fly.dev` URL.
 
 ### Phase 3 — AI meal planning (2–3 sittings)
 
@@ -207,3 +236,9 @@ The Pawsitive Coach sibling project is at `../project-pawsitive-coach`. Pattern 
 - **`+ Shop` is intentionally NOT idempotent.** Two taps create two shopping rows. The smoke test asserts this so a future refactor that adds dedupe doesn't sneak through. If a real user complains, the right fix is a confirmation/merge UX, not silent dedupe.
 - **Cascade ordering on `User.shopping_items`** uses `ShoppingItem.checked.asc(), ShoppingItem.added_at.desc()`. SQL `FALSE` sorts before `TRUE`, so unchecked items appear first; within each group, newest-first. SQLAlchemy passes this string directly to the SQL ORDER BY, so don't try to reach for Python booleans here.
 - **Toast event listener is on `document`, fires on `shopping:added`.** Anywhere you want to flash a toast from an htmx response, return an `HX-Trigger: <event-name>` header. The existing listener can be reused for other events (Phase 2: `household:joined`, Phase 3: `meal:planned`) by adding sibling handlers in `base.html`.
+- **`db.create_all()` is NOT a migration tool — it only creates missing TABLES, never adds COLUMNS.** Hit during Phase 2A: I added `household_id` FK columns to existing `User` / `PantryItem` / `ShoppingItem` models and assumed startup would pick them up. It didn't — the new `households` table got created, but `users.household_id` / `pantry_items.household_id` / `shopping_items.household_id` were silently absent and every query against `current_user.household_id` returned `None`. Fix: explicit `ALTER TABLE … ADD COLUMN` via `db.inspect(db.engine).get_columns(...)` to detect missing columns + `conn.exec_driver_sql(...)`. See `_ensure_phase_2a_columns` in `app.py`. When schema evolves again (Phase 2B `Invite` table, Phase 3 `meal_plans` table — those are pure new-tables and create_all DOES handle them), still no need for Alembic. But the moment we add a column to an existing table, we need an explicit ALTER again.
+- **Flask debug-mode auto-reload runs `create_app()` on every file save**, which means any migration logic in `create_app()` runs against the real dev DB the moment a model file is touched — even mid-edit. Hit during Phase 2A: a Flask dev server I'd left running yesterday auto-reloaded into a half-finished Phase 2A model (households table existed, household_id columns didn't) and persisted that state in the live DB. Fix going forward: when starting destructive-ish schema work, **stop the dev server first** (the same rule as wiping the SQLite file). Also: `lsof -t -i :5001 | xargs -r kill` finds zombie servers on the dev port.
+- **DON'T rename the `user_id` DB column when its meaning changes — just rename the Python attribute.** Phase 2A re-purposed the items' `user_id` column from "ownership" to "provenance" (who added it). SQLite supports column renames since 3.25, but `ALTER TABLE … RENAME COLUMN` is irreversible if any code still queries the old name. Cleaner: `db.Column("user_id", db.Integer, …)` lets the Python attribute (`added_by_user_id`) be one thing while the DB column stays `user_id`. Zero DB risk, the migration becomes purely additive (new `household_id` column on each table + new `households` table). Same trick applies whenever a column's meaning evolves: keep the DB name, rename the Python attribute via `db.Column("legacy_name", …)`.
+- **Re-seeding a SHARED household should never `delete()` items by household.** `seed.py` originally wiped `user.pantry_items` (the dynamic relationship) — in Phase 2A that semantic shifted to "the household's items." If alice and bob end up in the same household (Phase 2B), wiping alice's spec'd items would also wipe bob's contributions. Fix: seed wipes only `user.added_pantry_items` / `user.added_shopping_items` (items the user PERSONALLY added). Safe in solo + shared households. Same principle for any "reset my data" UI we build later.
+- **Provenance backref needs `foreign_keys=` because the model has TWO FKs to `users`.** Wait — actually it only has ONE FK to users (`added_by_user_id`) and one FK to households. SQLAlchemy CAN auto-detect this, but I declared `foreign_keys="PantryItem.added_by_user_id"` on `User.added_pantry_items` anyway as future-proofing: if Phase 2B+ adds a `last_edited_by_user_id` column, the relationship still resolves correctly without breaking.
+- **"added by [name]" stamp is hidden when added_by == current_user.** Conditional in `_pantry_item.html` and `_shopping_item.html`: `{% if item.added_by and item.added_by.id != current_user.id %}`. The `item.added_by and` short-circuit is paranoia for an orphan row (no `added_by_user_id` somehow), shouldn't ever fire in practice — but means a malformed row renders blank instead of crashing the whole list.

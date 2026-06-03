@@ -22,6 +22,10 @@
         {% if item.notes %}{{ item.notes }}{% endif %}
       </p>
     {% endif %}
+    {# Phase 2A provenance stamp — hidden when current_user added it. #}
+    {% if item.added_by and item.added_by.id != current_user.id %}
+      <p class="mt-1 text-[11px] text-stone-400">added by {{ item.added_by.name }}</p>
+    {% endif %}
   </div>
 
   <div class="flex flex-shrink-0 items-center gap-1">

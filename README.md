@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 1 complete — auth, pantry CRUD, shopping list (with check-off + clear-checked), one-tap "Add to shopping" from any pantry row, and a bottom tab bar. See [PLAN.md](./PLAN.md) for the phased build plan. Phase 2 (households + deploy) is up next.
+**Status:** Phase 2A complete — items are now owned by a **household** (with "added by [name]" provenance stamps on each row), built on top of the Phase 1 foundation (auth, pantry CRUD, shopping list with check-off, +Shop cross-link, bottom tab bar). See [PLAN.md](./PLAN.md) for the phased build plan. Phase 2B (the invite/join flow that lets two users share a household) is up next.
 
 ## The idea in one paragraph
 
@@ -39,14 +39,14 @@ For quick dev work you don't have to re-signup every time. Run:
 
 This (re-)creates two test accounts with sample pantry + shopping data. Your real accounts are untouched.
 
-| Email | Password |
-|---|---|
-| `alice@example.com` | `testpass123` |
-| `bob@example.com`   | `testpass123` |
+| Email | Password | Household (Phase 2A) |
+|---|---|---|
+| `alice@example.com` | `testpass123` | "Alice's home" (solo for now) |
+| `bob@example.com`   | `testpass123` | "Bob's home" (solo for now) |
 
 (`example.com` is the RFC 2606 reserved test domain. `*.local` doesn't work — `email_validator` rejects it as a reserved mDNS TLD.)
 
-Re-running the script wipes those two accounts' items and rebuilds them — handy when you want a clean Phase 1C state without nuking the DB. (For a full reset, stop the server then `rm instance/pantrypal.sqlite3`.)
+Re-running the script wipes only the items **each test user personally added** (NOT the rest of their household), so once Phase 2B's invite UI lands you can safely re-seed even when alice + bob are roommates. For a full reset: stop the server, `rm instance/pantrypal.sqlite3`, restart.
 
 ### iPhone autofill (Keychain) + "Stay signed in"
 
@@ -73,7 +73,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 1A:** Email/password auth foundation — done
 - **Phase 1B:** Pantry CRUD (add, edit, delete, search via htmx) — done
 - **Phase 1C:** Shopping list CRUD + bottom tab bar + pantry→shopping cross-link — done
-- **Phase 2:** Households + multi-user invites + deploy — up next
+- **Phase 2A:** Households data model + "added by" provenance + in-place SQLite migration — done
+- **Phase 2B:** Magic-link invite/join flow — up next
+- **Phase 2C:** Deploy to Fly.io (Dockerfile + persistent volume for SQLite)
 - **Phase 3:** AI meal planning
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
 

@@ -5,6 +5,8 @@ Phase 1A: email/password auth (signup, login, logout).
 Phase 1B: per-user pantry with add/edit/delete/search via htmx.
 Phase 1C: per-user shopping list (with check-off + clear-checked) and a
           one-tap "Add to shopping" cross-link from any pantry row.
+Phase 2A: households — items are owned by a household, with provenance
+          (who added each item) preserved for the "added by X" stamps.
 See PLAN.md for the full phased build plan.
 """
 
@@ -16,7 +18,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 
 from extensions import csrf, db, login_manager
 from forms import LoginForm, PantryItemForm, ShoppingItemForm, SignupForm
-from models import PantryItem, ShoppingItem, User
+from models import Household, PantryItem, ShoppingItem, User
 
 load_dotenv()
 
@@ -42,8 +44,11 @@ def create_app() -> Flask:
     with app.app_context():
         # Phase 1A: bootstrap the schema on startup. We'll switch to
         # Flask-Migrate in Phase 2 when the schema needs to evolve without
-        # dropping data.
+        # dropping data. For Phase 2A's additive change (households table,
+        # household_id columns) create_all is enough — see _run_phase_2a_migration
+        # for the row-level backfill.
         db.create_all()
+        _run_phase_2a_migration()
 
     @login_manager.user_loader
     def load_user(user_id: str):
@@ -77,6 +82,16 @@ def _register_routes(app: Flask) -> None:
 
             user = User(email=email, name=form.name.data.strip())
             user.set_password(form.password.data)
+
+            # Phase 2A: every new user gets their own household. Phase 2B
+            # will branch here on an optional `?invite=<token>` to join an
+            # existing household instead of minting a fresh one.
+            first_name = user.name.split()[0]
+            household = Household(name=f"{first_name}'s home")
+            db.session.add(household)
+            db.session.flush()  # need household.id before linking
+            user.household_id = household.id
+
             db.session.add(user)
             db.session.commit()
 
@@ -123,7 +138,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def pantry_list():
         query = (request.args.get("q") or "").strip()
-        items_q = current_user.pantry_items
+        items_q = current_user.household.pantry_items
         if query:
             items_q = items_q.filter(PantryItem.name.ilike(f"%{query}%"))
         items = items_q.all()
@@ -140,7 +155,8 @@ def _register_routes(app: Flask) -> None:
         form = PantryItemForm()
         if form.validate_on_submit():
             item = PantryItem(
-                user_id=current_user.id,
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
                 name=form.name.data.strip(),
                 quantity=form.quantity.data,
                 unit=_clean_optional(form.unit.data),
@@ -152,7 +168,7 @@ def _register_routes(app: Flask) -> None:
             if request.headers.get("HX-Request"):
                 # Re-render the whole list so the empty state disappears
                 # cleanly and ordering stays in sync with the DB.
-                items = current_user.pantry_items.all()
+                items = current_user.household.pantry_items.all()
                 return render_template("_pantry_list.html", items=items, query="")
             return redirect(url_for("pantry_list"))
 
@@ -200,7 +216,7 @@ def _register_routes(app: Flask) -> None:
         item = _get_pantry_item_or_404(item_id)
         db.session.delete(item)
         db.session.commit()
-        items = current_user.pantry_items.all()
+        items = current_user.household.pantry_items.all()
         return render_template("_pantry_list.html", items=items, query="")
 
     @app.route("/pantry/<int:item_id>/add-to-shopping", methods=["POST"])
@@ -209,7 +225,10 @@ def _register_routes(app: Flask) -> None:
         """One-tap copy from pantry -> shopping list. Doesn't mutate pantry."""
         item = _get_pantry_item_or_404(item_id)
         shop = ShoppingItem(
-            user_id=current_user.id,
+            # current_user is the one tapping +Shop, so they're the "added by"
+            # regardless of who originally added the pantry item.
+            added_by_user_id=current_user.id,
+            household_id=current_user.household_id,
             name=item.name,
             quantity=item.quantity,
             unit=item.unit,
@@ -225,7 +244,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def shopping_list():
         query = (request.args.get("q") or "").strip()
-        items_q = current_user.shopping_items
+        items_q = current_user.household.shopping_items
         if query:
             items_q = items_q.filter(ShoppingItem.name.ilike(f"%{query}%"))
         items = items_q.all()
@@ -249,7 +268,8 @@ def _register_routes(app: Flask) -> None:
         form = ShoppingItemForm()
         if form.validate_on_submit():
             item = ShoppingItem(
-                user_id=current_user.id,
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
                 name=form.name.data.strip(),
                 quantity=form.quantity.data,
                 unit=_clean_optional(form.unit.data),
@@ -259,7 +279,7 @@ def _register_routes(app: Flask) -> None:
             db.session.commit()
 
             if request.headers.get("HX-Request"):
-                items = current_user.shopping_items.all()
+                items = current_user.household.shopping_items.all()
                 checked_count = sum(1 for i in items if i.checked)
                 return render_template(
                     "_shopping_list.html", items=items, query="",
@@ -309,7 +329,7 @@ def _register_routes(app: Flask) -> None:
         item = _get_shopping_item_or_404(item_id)
         db.session.delete(item)
         db.session.commit()
-        items = current_user.shopping_items.all()
+        items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         return render_template(
             "_shopping_list.html", items=items, query="",
@@ -323,7 +343,7 @@ def _register_routes(app: Flask) -> None:
         item.checked = not item.checked
         db.session.commit()
         # Re-render the whole list so checked items re-sort to the bottom.
-        items = current_user.shopping_items.all()
+        items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         return render_template(
             "_shopping_list.html", items=items, query="",
@@ -333,11 +353,11 @@ def _register_routes(app: Flask) -> None:
     @app.route("/shopping/clear-checked", methods=["POST"])
     @login_required
     def shopping_clear_checked():
-        deleted = current_user.shopping_items.filter_by(checked=True).all()
+        deleted = current_user.household.shopping_items.filter_by(checked=True).all()
         for item in deleted:
             db.session.delete(item)
         db.session.commit()
-        items = current_user.shopping_items.all()
+        items = current_user.household.shopping_items.all()
         return render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=0,
@@ -345,7 +365,93 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "1C"}
+        return {"status": "ok", "phase": "2A"}
+
+
+def _ensure_phase_2a_columns() -> None:
+    """
+    `db.create_all()` will create the new `households` table, but it does
+    NOT add new columns to existing tables — that's a SQLAlchemy gotcha
+    (see: https://docs.sqlalchemy.org/en/20/core/metadata.html). For our
+    additive Phase 2A change (new `household_id` FK columns on users +
+    items) we issue plain `ALTER TABLE ADD COLUMN` for any column that's
+    missing. SQLite supports this since 3.2.0 (2005), so no version dance.
+    """
+    inspector = db.inspect(db.engine)
+
+    def col_names(table: str) -> set:
+        if not inspector.has_table(table):
+            return set()
+        return {c["name"] for c in inspector.get_columns(table)}
+
+    # NOTE: SQLite's ALTER TABLE ADD COLUMN can add a FOREIGN KEY constraint
+    # at the column level, but it can't be NOT NULL without a default. We
+    # leave these nullable in the DB — the application always sets them on
+    # row create, and the backfill below populates legacy rows.
+    statements = []
+    if inspector.has_table("users") and "household_id" not in col_names("users"):
+        statements.append(
+            'ALTER TABLE users ADD COLUMN household_id INTEGER '
+            'REFERENCES households(id)'
+        )
+    if (inspector.has_table("pantry_items")
+            and "household_id" not in col_names("pantry_items")):
+        statements.append(
+            'ALTER TABLE pantry_items ADD COLUMN household_id INTEGER '
+            'REFERENCES households(id)'
+        )
+    if (inspector.has_table("shopping_items")
+            and "household_id" not in col_names("shopping_items")):
+        statements.append(
+            'ALTER TABLE shopping_items ADD COLUMN household_id INTEGER '
+            'REFERENCES households(id)'
+        )
+
+    if statements:
+        with db.engine.begin() as conn:
+            for sql in statements:
+                conn.exec_driver_sql(sql)
+
+
+def _run_phase_2a_migration() -> None:
+    """
+    Backfill households for any user that doesn't have one yet, and point
+    every existing pantry / shopping item at its owner's household.
+
+    Idempotent: a startup where nothing needs migrating is a few cheap
+    SELECTs and a no-op commit. Safe to run on every boot.
+
+    Strategy: each pre-Phase-2A user becomes their own "household of one"
+    named "<First name>'s home". Phase 2B's invite flow lets multiple users
+    join the same household afterward.
+    """
+    # First, make sure the schema has the new columns. SQLAlchemy's
+    # create_all() handles new TABLES but never adds COLUMNS to existing
+    # tables — the upgrade path from Phase 1C to 2A needs this explicit ALTER.
+    _ensure_phase_2a_columns()
+
+    needs_household = User.query.filter(User.household_id.is_(None)).all()
+    if needs_household:
+        for user in needs_household:
+            first_name = (user.name or user.email).split()[0]
+            hh = Household(name=f"{first_name}'s home")
+            db.session.add(hh)
+            db.session.flush()  # need hh.id before we can point at it
+            user.household_id = hh.id
+        db.session.commit()
+
+    # Now any item that still has household_id IS NULL belongs to its
+    # added_by user's household. We do this *after* the user pass so the
+    # ownership join below always resolves.
+    orphan_pantry = PantryItem.query.filter(PantryItem.household_id.is_(None)).all()
+    orphan_shopping = ShoppingItem.query.filter(
+        ShoppingItem.household_id.is_(None)).all()
+    if orphan_pantry or orphan_shopping:
+        for item in orphan_pantry:
+            item.household_id = item.added_by.household_id
+        for item in orphan_shopping:
+            item.household_id = item.added_by.household_id
+        db.session.commit()
 
 
 def _clean_optional(value) -> "str | None":
@@ -357,10 +463,11 @@ def _clean_optional(value) -> "str | None":
 
 
 def _get_pantry_item_or_404(item_id: int) -> PantryItem:
-    """Fetch a pantry item the current user owns, or 404. Phase 2 swaps the
-    ownership check from user_id to household membership."""
+    """Fetch a pantry item the current user's HOUSEHOLD owns, or 404.
+    Phase 2A: ownership moved from `item.user_id` to `item.household_id`,
+    so a member who didn't add the item can still edit/delete it."""
     item = db.session.get(PantryItem, item_id)
-    if item is None or item.user_id != current_user.id:
+    if item is None or item.household_id != current_user.household_id:
         abort(404)
     return item
 
@@ -368,7 +475,7 @@ def _get_pantry_item_or_404(item_id: int) -> PantryItem:
 def _get_shopping_item_or_404(item_id: int) -> ShoppingItem:
     """Same as `_get_pantry_item_or_404` but for shopping items."""
     item = db.session.get(ShoppingItem, item_id)
-    if item is None or item.user_id != current_user.id:
+    if item is None or item.household_id != current_user.household_id:
         abort(404)
     return item
 
