@@ -7,18 +7,21 @@ Phase 1C: per-user shopping list (with check-off + clear-checked) and a
           one-tap "Add to shopping" cross-link from any pantry row.
 Phase 2A: households — items are owned by a household, with provenance
           (who added each item) preserved for the "added by X" stamps.
+Phase 2B: invite/join — magic-link tokens let users share a household.
 See PLAN.md for the full phased build plan.
 """
 
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, url_for
+from flask import (
+    Flask, abort, flash, redirect, render_template, request, url_for,
+)
 from flask_login import current_user, login_required, login_user, logout_user
 
 from extensions import csrf, db, login_manager
 from forms import LoginForm, PantryItemForm, ShoppingItemForm, SignupForm
-from models import Household, PantryItem, ShoppingItem, User
+from models import Household, Invite, PantryItem, ShoppingItem, User
 
 load_dotenv()
 
@@ -70,6 +73,19 @@ def _register_routes(app: Flask) -> None:
         if current_user.is_authenticated:
             return redirect(url_for("pantry_list"))
 
+        # Phase 2B: if the signup link came from /join/<token>, the URL is
+        # `?invite=<token>`. Browsers POST forms back to the current URL
+        # (including the query string) when the <form> has no action, so
+        # the token survives the round-trip without a hidden field. We
+        # still look it up explicitly here so we can validate it.
+        invite_token = (request.args.get("invite") or "").strip()
+        invite = (
+            Invite.query.filter_by(token=invite_token).first()
+            if invite_token else None
+        )
+        # Render-time context for the signup template
+        invite_household = invite.household if invite and invite.is_active() else None
+
         form = SignupForm()
         if form.validate_on_submit():
             email = form.email.data.strip().lower()
@@ -78,33 +94,73 @@ def _register_routes(app: Flask) -> None:
                     "An account with that email already exists. Try signing in.",
                     "error",
                 )
-                return render_template("signup.html", form=form)
+                return render_template(
+                    "signup.html", form=form,
+                    invite_household=invite_household, invite_token=invite_token,
+                )
 
             user = User(email=email, name=form.name.data.strip())
             user.set_password(form.password.data)
 
-            # Phase 2A: every new user gets their own household. Phase 2B
-            # will branch here on an optional `?invite=<token>` to join an
-            # existing household instead of minting a fresh one.
-            first_name = user.name.split()[0]
-            household = Household(name=f"{first_name}'s home")
-            db.session.add(household)
-            db.session.flush()  # need household.id before linking
-            user.household_id = household.id
+            if invite is not None and invite.is_active():
+                # Join the invited household instead of minting one.
+                user.household_id = invite.household_id
+                invite.consume()
+                joined_household_name = invite.household.name
+            else:
+                # If they came in with a stale token, drop the invite + warn,
+                # but don't block signup — falls back to household-of-one.
+                if invite_token and (invite is None or not invite.is_active()):
+                    flash(
+                        "That invite link is no longer valid, so we created a "
+                        "new household for you instead.",
+                        "info",
+                    )
+                first_name = user.name.split()[0]
+                household = Household(name=f"{first_name}'s home")
+                db.session.add(household)
+                db.session.flush()  # need household.id before linking
+                user.household_id = household.id
+                joined_household_name = None
 
             db.session.add(user)
             db.session.commit()
 
             login_user(user)
-            flash(f"Welcome to PantryPal, {user.name}!", "success")
+            if joined_household_name:
+                flash(
+                    f"Welcome to PantryPal, {user.name}! "
+                    f"You've joined '{joined_household_name}'.",
+                    "success",
+                )
+            else:
+                flash(f"Welcome to PantryPal, {user.name}!", "success")
             return redirect(url_for("pantry_list"))
 
-        return render_template("signup.html", form=form)
+        return render_template(
+            "signup.html", form=form,
+            invite_household=invite_household, invite_token=invite_token,
+        )
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
+        # Phase 2B: an existing user who clicked a /join/<token> link and
+        # chose "Log in" lands here as /login?invite=<token>. After a
+        # successful login we route them back to /join/<token> so they can
+        # confirm the household switch. If they're already authenticated,
+        # short-circuit straight to /join.
+        invite_token = (request.args.get("invite") or "").strip()
+
         if current_user.is_authenticated:
+            if invite_token:
+                return redirect(url_for("join_landing", token=invite_token))
             return redirect(url_for("pantry_list"))
+
+        invite = (
+            Invite.query.filter_by(token=invite_token).first()
+            if invite_token else None
+        )
+        invite_household = invite.household if invite and invite.is_active() else None
 
         form = LoginForm()
         if form.validate_on_submit():
@@ -112,12 +168,22 @@ def _register_routes(app: Flask) -> None:
             user = User.query.filter_by(email=email).first()
             if user is None or not user.check_password(form.password.data):
                 flash("Invalid email or password.", "error")
-                return render_template("login.html", form=form)
+                return render_template(
+                    "login.html", form=form,
+                    invite_household=invite_household, invite_token=invite_token,
+                )
 
             # `remember=True` issues Flask-Login's persistent remember-me
             # cookie (REMEMBER_COOKIE_DURATION default = 365 days). On a
             # phone this means PantryPal stays signed in across reboots.
             login_user(user, remember=form.remember.data)
+
+            # Phase 2B priority: invite token > ?next= > /pantry. We send
+            # them to /join/<token> rather than mutating their household
+            # silently — they get a confirm step there.
+            if invite_token:
+                return redirect(url_for("join_landing", token=invite_token))
+
             # Honor Flask-Login's `?next=` redirect, but only if it's a safe
             # relative path (avoid open-redirect attacks).
             next_url = request.args.get("next")
@@ -125,7 +191,10 @@ def _register_routes(app: Flask) -> None:
                 return redirect(next_url)
             return redirect(url_for("pantry_list"))
 
-        return render_template("login.html", form=form)
+        return render_template(
+            "login.html", form=form,
+            invite_household=invite_household, invite_token=invite_token,
+        )
 
     @app.route("/logout", methods=["POST"])
     @login_required
@@ -147,7 +216,12 @@ def _register_routes(app: Flask) -> None:
             return render_template("_pantry_list.html", items=items, query=query)
 
         form = PantryItemForm()
-        return render_template("pantry.html", items=items, form=form, query=query)
+        return render_template(
+            "pantry.html", items=items, form=form, query=query,
+            household=current_user.household,
+            invites=_active_invites_for(current_user.household),
+            members=current_user.household.members.all(),
+        )
 
     @app.route("/pantry", methods=["POST"])
     @login_required
@@ -363,9 +437,114 @@ def _register_routes(app: Flask) -> None:
             checked_count=0,
         )
 
+    # ---- Phase 2B: invite/join ---------------------------------------
+
+    @app.route("/household/invite", methods=["POST"])
+    @login_required
+    def household_invite_create():
+        """Mint a new invite for the current user's household. Returns
+        the refreshed share card via htmx (or a redirect for hard-POST)."""
+        invite = Invite.mint(
+            household_id=current_user.household_id,
+            created_by_user_id=current_user.id,
+        )
+        db.session.add(invite)
+        db.session.commit()
+        if request.headers.get("HX-Request"):
+            return render_template(
+                "_household_share.html",
+                household=current_user.household,
+                invites=_active_invites_for(current_user.household),
+                members=current_user.household.members.all(),
+            )
+        return redirect(url_for("pantry_list"))
+
+    @app.route("/household/invite/<int:invite_id>", methods=["DELETE"])
+    @login_required
+    def household_invite_revoke(invite_id: int):
+        invite = db.session.get(Invite, invite_id)
+        if invite is None or invite.household_id != current_user.household_id:
+            # 404 not 403 — don't leak existence of invites from other households
+            abort(404)
+        db.session.delete(invite)
+        db.session.commit()
+        return render_template(
+            "_household_share.html",
+            household=current_user.household,
+            invites=_active_invites_for(current_user.household),
+            members=current_user.household.members.all(),
+        )
+
+    @app.route("/join/<token>", methods=["GET"])
+    def join_landing(token: str):
+        """The shared URL. Renders different content depending on whether
+        the visitor is anonymous, already a member, or a logged-in member
+        of some other household who's about to switch."""
+        invite = Invite.query.filter_by(token=token).first()
+        if invite is None:
+            return render_template(
+                "join.html", invite=None, household=None,
+                error="This invite link is not recognized.",
+            ), 404
+        if not invite.is_active():
+            return render_template(
+                "join.html", invite=invite, household=invite.household,
+                error=invite.reason_inactive(),
+            ), 410  # Gone
+
+        if current_user.is_authenticated:
+            already_member = current_user.household_id == invite.household_id
+            return render_template(
+                "join.html",
+                invite=invite,
+                household=invite.household,
+                already_member=already_member,
+                # the current_user-side household (so we can show
+                # "Switch from X to Y?")
+                current_household=current_user.household,
+            )
+
+        # Anonymous: show signup + login CTAs that carry the token through.
+        return render_template(
+            "join.html",
+            invite=invite,
+            household=invite.household,
+            anonymous=True,
+        )
+
+    @app.route("/join/<token>", methods=["POST"])
+    @login_required
+    def join_commit(token: str):
+        """Logged-in confirmation step. Swaps user.household_id and consumes
+        the invite. The old household + items stay intact — no destructive
+        merge in v1."""
+        invite = Invite.query.filter_by(token=token).first()
+        if invite is None or not invite.is_active():
+            flash("That invite is no longer valid.", "error")
+            return redirect(url_for("pantry_list"))
+        if current_user.household_id == invite.household_id:
+            flash("You're already a member of that household.", "info")
+            return redirect(url_for("pantry_list"))
+
+        old_name = current_user.household.name if current_user.household else None
+        new_name = invite.household.name
+        current_user.household_id = invite.household_id
+        invite.consume()
+        db.session.commit()
+
+        if old_name:
+            flash(
+                f"Joined '{new_name}'. Your previous household '{old_name}' "
+                "and its items are still saved.",
+                "success",
+            )
+        else:
+            flash(f"Joined '{new_name}'!", "success")
+        return redirect(url_for("pantry_list"))
+
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "2A"}
+        return {"status": "ok", "phase": "2B"}
 
 
 def _ensure_phase_2a_columns() -> None:
@@ -452,6 +631,13 @@ def _run_phase_2a_migration() -> None:
         for item in orphan_shopping:
             item.household_id = item.added_by.household_id
         db.session.commit()
+
+
+def _active_invites_for(household: Household) -> list:
+    """Active = not expired AND has uses remaining. Sorted newest-first by
+    the relationship's order_by. Dead invites are kept in the DB for now
+    (Phase 2C deploy gets a periodic cleanup job)."""
+    return [i for i in household.invites.all() if i.is_active()]
 
 
 def _clean_optional(value) -> "str | None":

@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 2A complete — items are now owned by a **household** (with "added by [name]" provenance stamps on each row), built on top of the Phase 1 foundation (auth, pantry CRUD, shopping list with check-off, +Shop cross-link, bottom tab bar). See [PLAN.md](./PLAN.md) for the phased build plan. Phase 2B (the invite/join flow that lets two users share a household) is up next.
+**Status:** Phase 2B complete — multi-user households are real now. Invite a roommate via a magic link, they sign up (or log in) into your household, and you both see the same pantry + shopping list with "added by [name]" stamps. See [PLAN.md](./PLAN.md) for the phased build plan. Phase 2C (deploy to Fly.io so it actually runs on your household's phones) is up next.
 
 ## The idea in one paragraph
 
@@ -48,6 +48,17 @@ This (re-)creates two test accounts with sample pantry + shopping data. Your rea
 
 Re-running the script wipes only the items **each test user personally added** (NOT the rest of their household), so once Phase 2B's invite UI lands you can safely re-seed even when alice + bob are roommates. For a full reset: stop the server, `rm instance/pantrypal.sqlite3`, restart.
 
+### Inviting a roommate (Phase 2B)
+
+Scroll to the bottom of the pantry page — there's a "Household" card with your household name and member list. Tap **+ Invite** to mint a shareable link of the form `http://<host>/join/<token>`. Tap "Copy" and send it however you'd like.
+
+When your roommate opens the link:
+
+- **If they don't have a PantryPal account yet:** they see "[Your name] invited you to '[Your household]'" with a Create-account-and-join button. After signup they land directly in your household (no separate "household of one" is created for them).
+- **If they already have an account:** they sign in via the same link and see a confirm step: "Switch from '[their current household]' to '[your household]'?" Their previous household + items stay in the DB (non-destructive) so they can switch back later if needed.
+
+Invites default to **10 uses, 7-day expiration**. Both are tunable in `models.py` (`INVITE_DEFAULT_MAX_USES`, `INVITE_DEFAULT_TTL_DAYS`). You can revoke any active invite from the card.
+
 ### iPhone autofill (Keychain) + "Stay signed in"
 
 Two things make logging in on your phone painless:
@@ -74,8 +85,8 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 1B:** Pantry CRUD (add, edit, delete, search via htmx) — done
 - **Phase 1C:** Shopping list CRUD + bottom tab bar + pantry→shopping cross-link — done
 - **Phase 2A:** Households data model + "added by" provenance + in-place SQLite migration — done
-- **Phase 2B:** Magic-link invite/join flow — up next
-- **Phase 2C:** Deploy to Fly.io (Dockerfile + persistent volume for SQLite)
+- **Phase 2B:** Magic-link invite/join flow (shareable URL, sign-up-with-invite + logged-in-switch) — done
+- **Phase 2C:** Deploy to Fly.io (Dockerfile + persistent volume for SQLite) — up next
 - **Phase 3:** AI meal planning
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
 

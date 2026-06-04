@@ -7,9 +7,13 @@ existing `user_id` column re-mapped to mean "who added this" (provenance)
 via a Python-level rename. The DB column is intentionally NOT renamed,
 which keeps the migration to additive-only (add `households` table +
 `household_id` columns), no destructive ALTERs.
+Phase 2B: Invite — magic-link tokens that let new (or existing) users
+join a household. Pure new-table migration (no column adds), so
+db.create_all() is sufficient on this step.
 """
 
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -185,4 +189,91 @@ class ShoppingItem(db.Model):
         return (
             f"<ShoppingItem {self.name} checked={self.checked} "
             f"household={self.household_id} added_by={self.added_by_user_id}>"
+        )
+
+
+# --- Phase 2B: invites -----------------------------------------------------
+
+# Tunables. Generous-but-not-silly defaults; the UI doesn't expose per-invite
+# overrides yet (Phase 2C can add a "send to spouse only" 1-use variant).
+INVITE_DEFAULT_TTL_DAYS = 7
+INVITE_DEFAULT_MAX_USES = 10
+# 16 url-safe bytes -> 22 char token. ~10^38 keyspace, plenty for v1 even
+# with no rate-limiting; revisit only if we ever expose enumeration on a
+# public endpoint.
+INVITE_TOKEN_BYTES = 16
+
+
+class Invite(db.Model):
+    __tablename__ = "invites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(48), unique=True, nullable=False, index=True)
+    household_id = db.Column(
+        db.Integer, db.ForeignKey("households.id"),
+        nullable=False, index=True,
+    )
+    created_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    max_uses = db.Column(db.Integer, nullable=False, default=INVITE_DEFAULT_MAX_USES)
+    used_count = db.Column(db.Integer, nullable=False, default=0)
+
+    household = db.relationship(
+        "Household",
+        backref=db.backref(
+            "invites", lazy="dynamic", cascade="all, delete-orphan",
+            order_by="Invite.created_at.desc()",
+        ),
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_user_id])
+
+    @classmethod
+    def mint(
+        cls, *,
+        household_id: int,
+        created_by_user_id: int,
+        ttl_days: int = INVITE_DEFAULT_TTL_DAYS,
+        max_uses: int = INVITE_DEFAULT_MAX_USES,
+    ) -> "Invite":
+        """Build an unsaved Invite with a fresh token + sensible TTL. Caller
+        is responsible for `db.session.add()` + `commit()`."""
+        return cls(
+            token=secrets.token_urlsafe(INVITE_TOKEN_BYTES),
+            household_id=household_id,
+            created_by_user_id=created_by_user_id,
+            expires_at=datetime.utcnow() + timedelta(days=ttl_days),
+            max_uses=max_uses,
+            used_count=0,
+        )
+
+    def is_active(self) -> bool:
+        """True iff the invite can still accept a join (not expired, has
+        uses remaining)."""
+        return (
+            datetime.utcnow() < self.expires_at
+            and self.used_count < self.max_uses
+        )
+
+    def reason_inactive(self) -> str:
+        """For the join landing page so we can tell the user *why* a link
+        is dead rather than just saying 'invalid'."""
+        if datetime.utcnow() >= self.expires_at:
+            return "This invite link has expired."
+        if self.used_count >= self.max_uses:
+            return "This invite link has already been used the maximum number of times."
+        return "This invite link is no longer valid."
+
+    def consume(self) -> None:
+        """Increment usage counter. Single-threaded for the dev server;
+        Phase 2C deploy notes flag this as a race-condition spot worth
+        revisiting under multi-worker gunicorn."""
+        self.used_count += 1
+
+    def __repr__(self) -> str:
+        return (
+            f"<Invite token={self.token[:8]}… household={self.household_id} "
+            f"uses={self.used_count}/{self.max_uses}>"
         )
