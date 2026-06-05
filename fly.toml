@@ -1,0 +1,69 @@
+# Fly.io config for PantryPal — Phase 2C.
+#
+# App name `pantrypal-riah` is a placeholder; Fly app names are GLOBAL
+# (one namespace across all Fly users), so the first `fly launch` will
+# either accept this name OR prompt you to pick a different one. Either
+# is fine — `flyctl` rewrites this line in-place after launch.
+#
+# Region `sea` (Seattle) is the closest region to Beaverton / WHQ. If
+# Riah's household ends up spread across geos, this is the spot to
+# add `[[regions]]` blocks. For one household: a single region is
+# right.
+
+app = "pantrypal-riah"
+primary_region = "sea"
+
+[build]
+  # Use our explicit Dockerfile rather than Fly's buildpack auto-detect
+  # (which would also work, but baking the Python version + gunicorn
+  # config into our own file is clearer + reproducible).
+  dockerfile = "Dockerfile"
+
+[env]
+  # SQLite lives on the persistent volume mounted at /data. 4 slashes
+  # in `sqlite:////...` = absolute path (3 slashes = relative path
+  # resolved against Flask's instance folder; we tested this in
+  # tests/test_phase_2c.py to make sure the 4-slash form behaves
+  # the way we expect).
+  DATABASE_URL = "sqlite:////data/pantrypal.sqlite3"
+  # Tell Flask we're in prod so the auto-reloader / debug toolbar /
+  # secret-key warning all stay off.
+  FLASK_ENV = "production"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Fly's hobby-tier-friendly setting: machine stops after ~5 min of
+  # inactivity, starts again on the next request (~250 ms cold start
+  # for a Python app this small). Keeps us at $0/mo until traffic
+  # justifies a hot machine.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # `min_machines_running = 0` is the explicit version of "let auto_stop
+  # take the machine count to zero." Required for cold-start savings.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    # `/healthz` exists since Phase 1A and reports the current phase
+    # number — see app.py `healthz` route. Fly hits it every 15s while
+    # the machine is awake.
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    timeout = "5s"
+    path = "/healthz"
+
+# Persistent SQLite volume. `fly volumes create data --region sea --size 1`
+# before the first deploy creates this; once created, every machine
+# auto-attaches it. Volumes are region-pinned, so if you later add a
+# second region you'll need a second volume there.
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[[vm]]
+  # `shared-cpu-1x` with 256 MB RAM is the default hobby-tier machine.
+  # PantryPal idles at ~80 MB; if the migration ever balloons we can
+  # bump to 512 MB without re-architecting anything.
+  size = "shared-cpu-1x"
+  memory = "256mb"

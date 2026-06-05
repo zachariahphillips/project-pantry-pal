@@ -1,0 +1,54 @@
+# Keep the build context small and avoid shipping local state to prod.
+.git
+.gitignore
+.gitattributes
+.github
+
+# Local venv + bytecode
+.venv
+venv
+env
+ENV
+__pycache__
+*.py[cod]
+*$py.class
+.Python
+
+# Local dev DB + backups (prod has its own SQLite on /data via the Fly volume)
+instance/
+*.sqlite
+*.sqlite3
+*.bak
+*.db
+
+# Test runner artifacts (we don't run tests in the image)
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+.ruff_cache
+
+# Editor / OS noise
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+
+# Project docs not needed at runtime (saves a couple of KB and avoids
+# shipping a stale PLAN to prod by accident)
+PLAN.md
+README.md
+
+# Tests themselves don't need to be in the image
+tests/
+
+# Local-only env files — prod uses `fly secrets set`
+.env
+.env.local
+.env.*.local
+
+# Don't ship the Dockerfile/fly config into themselves
+Dockerfile
+.dockerignore
+fly.toml

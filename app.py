@@ -8,6 +8,9 @@ Phase 1C: per-user shopping list (with check-off + clear-checked) and a
 Phase 2A: households — items are owned by a household, with provenance
           (who added each item) preserved for the "added by X" stamps.
 Phase 2B: invite/join — magic-link tokens let users share a household.
+Phase 2C: deploy — Dockerfile + Fly.io config; app served via gunicorn
+          with single worker (SQLite single-writer constraint) and a
+          persistent volume mounted at /data for the DB file.
 See PLAN.md for the full phased build plan.
 """
 
@@ -544,7 +547,7 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "2B"}
+        return {"status": "ok", "phase": "2C"}
 
 
 def _ensure_phase_2a_columns() -> None:

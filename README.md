@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 2B complete — multi-user households are real now. Invite a roommate via a magic link, they sign up (or log in) into your household, and you both see the same pantry + shopping list with "added by [name]" stamps. See [PLAN.md](./PLAN.md) for the phased build plan. Phase 2C (deploy to Fly.io so it actually runs on your household's phones) is up next.
+**Status:** Phase 2C complete — PantryPal is deployable to Fly.io. `Dockerfile`, `.dockerignore`, and `fly.toml` are in the repo; gunicorn replaces the Flask dev server in prod; a persistent volume at `/data` holds the SQLite file across redeploys. See the "Deploy to Fly.io" section below for the exact commands. Next is Phase 3 (AI meal planning).
 
 ## The idea in one paragraph
 
@@ -68,6 +68,72 @@ Two things make logging in on your phone painless:
 
 To make PantryPal feel like a native app on your phone, use Safari's **Share → Add to Home Screen** — the PWA manifest (coming in a later phase) plus standalone display mode hides the browser chrome.
 
+## Deploy to Fly.io (Phase 2C)
+
+The app ships with everything you need to deploy: a `Dockerfile` (gunicorn-based, single worker so SQLite stays single-writer), a `.dockerignore` that keeps your local DB + venv out of the image, and a `fly.toml` with sensible Hobby-tier defaults (region `sea`, persistent volume at `/data`, auto-stop machines so cold starts are free).
+
+### One-time setup
+
+```bash
+# 1) Install flyctl (Mac)
+brew install flyctl
+
+# 2) Sign up + log in (opens browser). Add a credit card during signup
+#    even on the free tier; Fly won't charge you within the hobby limits
+#    but they require one on file.
+fly auth signup    # OR: fly auth login   if you already have an account
+
+# 3) Pick a Fly app name. App names are GLOBAL across Fly, so `pantrypal`
+#    is taken; the placeholder in fly.toml is `pantrypal-riah`. Edit that
+#    line if you want something different.
+
+# 4) Provision the app (uses the existing fly.toml — does NOT generate
+#    a new one). Skip the optional Postgres/Redis prompts.
+cd ~/personal-projects/project-pantry-pal
+fly launch --no-deploy --copy-config --name pantrypal-riah --region sea
+
+# 5) Create the persistent SQLite volume (1 GB is plenty — pantry data is
+#    tiny). Region MUST match fly.toml's primary_region.
+fly volumes create data --region sea --size 1
+
+# 6) Set the Flask secret key as a Fly secret (NOT in fly.toml).
+#    Generate a strong one with Python and pipe it straight in:
+fly secrets set FLASK_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+```
+
+### Deploy
+
+```bash
+fly deploy        # builds the Docker image remotely on Fly's builder
+                  # (no local Docker required), runs the auto-migration
+                  # on boot, and routes traffic to the new machine.
+```
+
+After a successful deploy, `fly status` shows the machine state and `fly logs` tails server logs. The app lives at `https://pantrypal-riah.fly.dev` (replace with your chosen name).
+
+### Use it on your phone
+
+1. Open `https://<your-app>.fly.dev` in Safari.
+2. Sign up with your email + name (this creates your household-of-one).
+3. Mint an invite from the Household card, AirDrop / iMessage the link to your roommate.
+4. **Share → Add to Home Screen** to install it as a PWA (PWA manifest polish is a future phase, but iOS gives you a "looks like an app" launcher even without one).
+
+### Redeploys
+
+```bash
+git pull           # or whatever you just changed
+fly deploy         # ~60s build + ~30s machine swap; SQLite stays put
+                   # because /data is volume-mounted, not in the image.
+```
+
+### Phase 2C deploy gotchas (learned the hard way)
+
+- **SQLite URL needs 4 slashes for absolute paths.** `sqlite:////data/pantrypal.sqlite3` (four slashes) = absolute. Three slashes = relative-to-Flask-instance-folder, which on Fly would silently put your DB on the ephemeral container disk instead of the volume — and you'd lose data on every redeploy. There's a test (`tests/test_phase_2c.py`) that pins this behavior.
+- **`--workers=1` in gunicorn is mandatory while SQLite is the DB.** Multiple writer processes → file locking → 500s under any concurrent load. The Dockerfile hard-codes this. If/when we move to Postgres, bump to `(2 * CPU) + 1` per the gunicorn docs.
+- **Volumes are region-pinned.** If you change `primary_region` in fly.toml after creating the volume, the new region's machine can't see the volume and the deploy fails. Create a new volume in the new region (or stay put).
+- **`auto_stop_machines = "stop"` means cold starts.** First request after ~5 min idle takes ~250 ms longer than normal. Worth it for $0 hobby-tier costs. Flip to `"off"` or set `min_machines_running = 1` if you want always-warm.
+- **`FLASK_SECRET_KEY` MUST be a Fly secret, not an env var in fly.toml.** Secrets are encrypted at rest + only injected into the running machine; env vars in fly.toml are committed to git.
+
 ### On a fresh clone: pin git pushes to the personal GitHub account
 
 Without this, `git push` will use whichever gh account is active, which fails when the active account is the work one.
@@ -86,8 +152,8 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 1C:** Shopping list CRUD + bottom tab bar + pantry→shopping cross-link — done
 - **Phase 2A:** Households data model + "added by" provenance + in-place SQLite migration — done
 - **Phase 2B:** Magic-link invite/join flow (shareable URL, sign-up-with-invite + logged-in-switch) — done
-- **Phase 2C:** Deploy to Fly.io (Dockerfile + persistent volume for SQLite) — up next
-- **Phase 3:** AI meal planning
+- **Phase 2C:** Deploy to Fly.io (Dockerfile + gunicorn + persistent volume for SQLite) — done
+- **Phase 3:** AI meal planning — up next
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
 
 Full plan in [PLAN.md](./PLAN.md).

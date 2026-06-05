@@ -5,5 +5,11 @@ flask-wtf>=1.2.0
 email-validator>=2.1.0
 python-dotenv>=1.0.0
 
+# --- production WSGI server (Phase 2C, Fly.io) ---
+# Pinned to a known-good 22.x. The Dockerfile runs `gunicorn --workers=1`
+# so SQLite stays single-writer; if we ever move to Postgres, bump
+# workers to (2 * CPU) + 1 per the gunicorn docs.
+gunicorn>=22.0.0,<23.0.0
+
 # --- dev / test only ---
 pytest>=8.0.0
