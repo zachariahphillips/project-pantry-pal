@@ -45,11 +45,11 @@ primary_region = "sea"
 
   [[http_service.checks]]
     # `/healthz` exists since Phase 1A and reports the current phase
-    # number — see app.py `healthz` route. Fly hits it every 15s while
+    # number — see app.py `healthz` route. Fly hits it every 30s while
     # the machine is awake.
     grace_period = "10s"
     interval = "30s"
-    method = "get"
+    method = "GET"
     timeout = "5s"
     path = "/healthz"
 

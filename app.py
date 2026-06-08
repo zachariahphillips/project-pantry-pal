@@ -15,12 +15,14 @@ See PLAN.md for the full phased build plan.
 """
 
 import os
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import (
     Flask, abort, flash, redirect, render_template, request, url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import csrf, db, login_manager
 from forms import LoginForm, PantryItemForm, ShoppingItemForm, SignupForm
@@ -29,16 +31,49 @@ from models import Household, Invite, PantryItem, ShoppingItem, User
 load_dotenv()
 
 
+# The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed
+# as a module constant so the production-guard check below can compare
+# without duplicating the literal string.
+_PLACEHOLDER_SECRET_KEY = "dev-secret-change-me-in-env"
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = os.environ.get(
-        "FLASK_SECRET_KEY", "dev-secret-change-me-in-env"
+        "FLASK_SECRET_KEY", _PLACEHOLDER_SECRET_KEY
     )
     app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
         "DATABASE_URL", "sqlite:///pantrypal.sqlite3"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    # Production-only guard: refuse to start if the secret key is still the
+    # placeholder (or empty). Without this, a `fly deploy` where the user
+    # forgot `fly secrets set FLASK_SECRET_KEY=...` would silently boot
+    # with a well-known key — session cookies become forgeable and CSRF
+    # tokens become predictable. Detected via FLASK_ENV which fly.toml
+    # already sets to "production".
+    if os.environ.get("FLASK_ENV", "").lower() == "production":
+        if (not app.config["SECRET_KEY"]
+                or app.config["SECRET_KEY"] == _PLACEHOLDER_SECRET_KEY):
+            raise RuntimeError(
+                "FLASK_SECRET_KEY is unset or is the default placeholder, "
+                "but FLASK_ENV=production. Refusing to start. Run "
+                "`fly secrets set FLASK_SECRET_KEY=\"$(python3 -c "
+                "'import secrets; print(secrets.token_hex(32))')\"` "
+                "and redeploy."
+            )
+
+    # Trust Fly.io's single edge proxy hop for X-Forwarded-{Proto,Host,For}.
+    # Without this, `request.is_secure` is False even on HTTPS deploys, and
+    # `url_for(_external=True)` builds `http://...` URLs — visible in the
+    # invite-share copy field, which would show http:// links to roommates.
+    # x_for/proto/host/port = 1 means "trust one upstream hop." Fly's
+    # architecture is exactly one hop (their edge proxy → our machine).
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1,
+    )
 
     db.init_app(app)
     csrf.init_app(app)  # exposes csrf_token() to Jinja and guards every POST
@@ -188,9 +223,14 @@ def _register_routes(app: Flask) -> None:
                 return redirect(url_for("join_landing", token=invite_token))
 
             # Honor Flask-Login's `?next=` redirect, but only if it's a safe
-            # relative path (avoid open-redirect attacks).
+            # relative path (avoid open-redirect attacks). The naive
+            # `startswith("/") and not startswith("//")` check let
+            # `?next=/\\evil.com` through (some browsers normalize `\\` to
+            # `//` and follow it off-site). Use werkzeug.url_parse and
+            # require both an empty netloc AND an empty scheme; this is
+            # the canonical Flask-Login pattern.
             next_url = request.args.get("next")
-            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+            if next_url and _is_safe_next_url(next_url):
                 return redirect(next_url)
             return redirect(url_for("pantry_list"))
 
@@ -641,6 +681,33 @@ def _active_invites_for(household: Household) -> list:
     the relationship's order_by. Dead invites are kept in the DB for now
     (Phase 2C deploy gets a periodic cleanup job)."""
     return [i for i in household.invites.all() if i.is_active()]
+
+
+def _is_safe_next_url(next_url: str) -> bool:
+    r"""
+    A `?next=` URL is safe iff it's a same-origin, scheme-less, host-less
+    path. Anything with a netloc OR a scheme can land the user off-site,
+    even if it starts with `/`. Specifically:
+      - `/pantry`         → safe
+      - `//evil.com`      → unsafe (protocol-relative)
+      - `/\evil.com`      → unsafe (browsers normalize \ to / — the
+                            server stores it URL-encoded as `/%5Cevil.com`
+                            but a 302 to that path still gets normalized
+                            client-side)
+      - `http://evil`     → unsafe (full URL)
+      - `javascript:…`    → unsafe (scheme)
+      - `\evil.com`       → unsafe (no leading slash, browser-normalized)
+    `urllib.parse.urlsplit` handles most of these uniformly; we also
+    block backslashes explicitly because urlsplit treats `/\evil.com`
+    as having an empty netloc (so it'd "pass") but browsers normalize
+    `\` to `/` so they treat it as `//evil.com`.
+    """
+    if not next_url:
+        return False
+    if "\\" in next_url:
+        return False
+    parsed = urlsplit(next_url)
+    return not parsed.netloc and not parsed.scheme
 
 
 def _clean_optional(value) -> "str | None":
