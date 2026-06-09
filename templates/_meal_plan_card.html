@@ -1,0 +1,93 @@
+{#
+  Phase 3A: rendered output of POST /meal-plan (and inline-rendered on
+  /pantry GET when the household has a recent plan).
+
+  The htmx target on the form is #meal-plan-result (innerHTML swap), so
+  this template MUST NOT include its own #meal-plan-result wrapper.
+
+  States:
+    plan + no error  → full card
+    plan = None + error string → red error card (422 / 502 responses)
+    plan = None + no error → empty (caller wants the slot blank)
+#}
+
+{% if error %}
+  <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+       role="status">
+    {{ error }}
+  </div>
+{% elif plan %}
+  <article id="meal-plan-{{ plan.id }}"
+           class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+    <header class="border-b border-stone-100 px-4 py-3">
+      <h3 class="text-base font-semibold text-stone-900">{{ plan.meal_name }}</h3>
+      <p class="mt-0.5 text-xs text-stone-500">
+        From <span class="italic">"{{ plan.prompt }}"</span>
+        {% if plan.created_by and plan.created_by.id != current_user.id %}
+          · asked by {{ plan.created_by.name }}
+        {% endif %}
+      </p>
+    </header>
+
+    {% if plan.have %}
+      <section class="border-b border-stone-100 px-4 py-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+          You have ({{ plan.have|length }})
+        </h4>
+        <ul class="mt-2 flex flex-wrap gap-1.5">
+          {% for item in plan.have %}
+            <li class="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs text-green-900 ring-1 ring-green-200">
+              {{ item }}
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if plan.need %}
+      <section class="border-b border-stone-100 px-4 py-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+          You need ({{ plan.need|length }})
+        </h4>
+        <ul class="mt-2 space-y-1.5">
+          {% for item in plan.need %}
+            <li class="flex items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
+              <span class="truncate">{{ item }}</span>
+              {# One-tap shopping-list add. Each row is its own tiny
+                 form so the hidden `name` field carries the item value
+                 cleanly (avoiding hx-vals JSON-escaping headaches).
+                 hx-swap="none" + HX-Trigger:shopping:added → toast. #}
+              <form hx-post="{{ url_for('meal_plan_need_to_shopping', plan_id=plan.id) }}"
+                    hx-swap="none"
+                    hx-on::after-request="if (event.detail.successful) { const b = this.querySelector('button'); const o = b.textContent; b.textContent = 'Added'; b.disabled = true; setTimeout(() => { b.textContent = o; b.disabled = false; }, 1500); }"
+                    class="flex-shrink-0">
+                <input type="hidden" name="name" value="{{ item }}" />
+                <button type="submit"
+                        aria-label="Add {{ item }} to shopping list"
+                        class="inline-flex h-8 items-center justify-center rounded-md bg-stone-900 px-2.5 text-xs font-medium text-white hover:bg-stone-700 disabled:opacity-60">
+                  + Shop
+                </button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if plan.steps %}
+      <section class="px-4 py-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+          Steps
+        </h4>
+        <ol class="mt-2 space-y-1.5 text-sm text-stone-800">
+          {% for step in plan.steps %}
+            <li class="flex gap-2">
+              <span class="flex-shrink-0 font-medium text-stone-500">{{ loop.index }}.</span>
+              <span>{{ step }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      </section>
+    {% endif %}
+  </article>
+{% endif %}

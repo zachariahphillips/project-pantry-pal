@@ -27,6 +27,7 @@ Run manually:
 from __future__ import annotations
 
 import http.cookiejar
+import os
 import re
 import secrets
 import sys
@@ -35,7 +36,7 @@ import urllib.parse
 import urllib.request
 
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("BASE", "http://127.0.0.1:8080")
 # Randomize email/name per run so the smoke test is idempotent against a
 # persistent gunicorn DB. (Restarting gunicorn between runs is a pain;
 # we'd rather pollute the smoke DB with N test users than couple the
@@ -115,7 +116,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 2C", '"phase":"2C"' in body or '"phase": "2C"' in body, body)
+    check("phase == 3A", '"phase":"3A"' in body or '"phase": "3A"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")

@@ -11,5 +11,13 @@ python-dotenv>=1.0.0
 # workers to (2 * CPU) + 1 per the gunicorn docs.
 gunicorn>=22.0.0,<23.0.0
 
+# --- AI meal planning (Phase 3A) ---
+# Pinned to 1.x to lock the `client.chat.completions.create()` +
+# `response_format={"type": "json_object"}` API surface we use in
+# _ask_openai_for_meal. The 2.x SDK (if/when it lands) reshapes the
+# client significantly. Reuse the same OPENAI_API_KEY env var as
+# project-pawsitive-coach — no need for a second key.
+openai>=1.40,<2.0
+
 # --- dev / test only ---
 pytest>=8.0.0

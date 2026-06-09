@@ -11,9 +11,16 @@ Phase 2B: invite/join — magic-link tokens let users share a household.
 Phase 2C: deploy — Dockerfile + Fly.io config; app served via gunicorn
           with single worker (SQLite single-writer constraint) and a
           persistent volume mounted at /data for the DB file.
+Phase 3A: AI meal planning — POST /meal-plan takes a free-text prompt,
+          ships it + the household's pantry to OpenAI in JSON mode,
+          stores the response as a MealPlan row, and renders a card
+          with have / need / steps. Each `need` item has a one-tap
+          "+ Shop" button that adds it to the shopping list.
 See PLAN.md for the full phased build plan.
 """
 
+import json
+import logging
 import os
 from urllib.parse import urlsplit
 
@@ -26,7 +33,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import csrf, db, login_manager
 from forms import LoginForm, PantryItemForm, ShoppingItemForm, SignupForm
-from models import Household, Invite, PantryItem, ShoppingItem, User
+from models import (
+    Household, Invite, MealPlan, PantryItem, ShoppingItem, User,
+)
+
+log = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -259,11 +270,16 @@ def _register_routes(app: Flask) -> None:
             return render_template("_pantry_list.html", items=items, query=query)
 
         form = PantryItemForm()
+        # Show the most recent meal plan inline so users coming back to
+        # /pantry see their last AI suggestion. None on a fresh household
+        # — the template handles that with an empty-state CTA.
+        latest_meal_plan = current_user.household.meal_plans.first()
         return render_template(
             "pantry.html", items=items, form=form, query=query,
             household=current_user.household,
             invites=_active_invites_for(current_user.household),
             members=current_user.household.members.all(),
+            latest_meal_plan=latest_meal_plan,
         )
 
     @app.route("/pantry", methods=["POST"])
@@ -585,9 +601,93 @@ def _register_routes(app: Flask) -> None:
             flash(f"Joined '{new_name}'!", "success")
         return redirect(url_for("pantry_list"))
 
+    # ---- Phase 3A: AI meal planning ---------------------------------
+
+    @app.route("/meal-plan", methods=["POST"])
+    @login_required
+    def meal_plan_create():
+        """Ask OpenAI for a meal plan based on the user's prompt + the
+        household's pantry. Stores the result as a MealPlan row and
+        renders the card. Roommates immediately see the plan because
+        it's household-scoped, not user-scoped."""
+        prompt = (request.form.get("prompt") or "").strip()
+        # Cap at 240 chars — long-tail prompts blow tokens for no benefit
+        # and make the response noisier. Phase 3C may add a UI counter.
+        if not prompt or len(prompt) > 240:
+            if request.headers.get("HX-Request"):
+                return render_template(
+                    "_meal_plan_card.html", plan=None,
+                    error="Tell me what you want to make (a few words is fine).",
+                ), 422
+            flash("Tell me what you want to make.", "error")
+            return redirect(url_for("pantry_list"))
+
+        pantry_items = current_user.household.pantry_items.all()
+        plan_dict = _ask_openai_for_meal(prompt, pantry_items)
+        if plan_dict is None:
+            # Helper logged the underlying failure. Surface a generic
+            # message to the user; Phase 3C will differentiate
+            # rate-limit / network / key-missing.
+            if request.headers.get("HX-Request"):
+                return render_template(
+                    "_meal_plan_card.html", plan=None,
+                    error="The AI is taking a nap. Try again in a moment.",
+                ), 502
+            flash("The AI is taking a nap. Try again in a moment.", "error")
+            return redirect(url_for("pantry_list"))
+
+        meal_name = (plan_dict.get("meal_name") or "").strip() or "Untitled meal"
+        plan = MealPlan(
+            household_id=current_user.household_id,
+            created_by_user_id=current_user.id,
+            prompt=prompt,
+            response_json=json.dumps(plan_dict),
+            meal_name=meal_name[:200],  # match column length
+        )
+        db.session.add(plan)
+        db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            return render_template("_meal_plan_card.html", plan=plan)
+        return redirect(url_for("pantry_list"))
+
+    @app.route(
+        "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
+    )
+    @login_required
+    def meal_plan_need_to_shopping(plan_id: int):
+        """One-tap copy of a single `need` item from a meal plan into the
+        household's shopping list. Same UX as `+ Shop` on a pantry row —
+        returns empty body + HX-Trigger so the existing toast fires."""
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        item_name = (request.form.get("name") or "").strip()
+        if not item_name:
+            abort(400)
+        # Sanity-check it's actually one of the plan's need items —
+        # prevents using this endpoint as a generic "add anything to
+        # shopping" backdoor that skips the regular validation.
+        if item_name not in plan.need:
+            abort(400)
+
+        shop = ShoppingItem(
+            added_by_user_id=current_user.id,
+            household_id=current_user.household_id,
+            name=item_name[:120],  # match column length
+            quantity=None,
+            unit=None,
+            # Source-trace so the user remembers WHY this is on the list.
+            notes=f"Suggested by AI for: {plan.meal_name}"[:280],
+        )
+        db.session.add(shop)
+        db.session.commit()
+        return "", 200, {"HX-Trigger": "shopping:added"}
+
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "2C"}
+        return {"status": "ok", "phase": "3A"}
 
 
 def _ensure_phase_2a_columns() -> None:
@@ -674,6 +774,103 @@ def _run_phase_2a_migration() -> None:
         for item in orphan_shopping:
             item.household_id = item.added_by.household_id
         db.session.commit()
+
+
+# --- Phase 3A: OpenAI client wiring -------------------------------------
+
+# Tunables. Kept as module constants so Phase 3C can move them into a
+# Flask config blob without changing call sites.
+_OPENAI_MODEL = "gpt-4o-mini"          # cheap + JSON-mode capable
+_OPENAI_TEMPERATURE = 0.7              # tasty but not chaotic
+_OPENAI_MAX_TOKENS = 1200              # ~600 words; enough for steps
+_OPENAI_TIMEOUT_SECONDS = 30           # generous; gunicorn timeout is 60
+
+
+def _ask_openai_for_meal(prompt: str, pantry_items: list) -> "dict | None":
+    """Ship the user's prompt + a structured pantry snapshot to OpenAI
+    in JSON mode. Returns the parsed dict on success, None on any
+    failure (missing API key, network/rate-limit, malformed JSON).
+
+    Kept as a top-level helper so tests can `monkeypatch.setattr` it to
+    a canned dict — no need to mock the OpenAI SDK shape itself, which
+    changes across SDK versions.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        log.warning("OPENAI_API_KEY not set; meal plan request returning None.")
+        return None
+
+    pantry_lines = []
+    for item in pantry_items:
+        qty = item.display_quantity()
+        suffix = f" ({qty})" if qty else ""
+        pantry_lines.append(f"- {item.name}{suffix}")
+    pantry_text = "\n".join(pantry_lines) if pantry_lines else "(empty pantry)"
+
+    # System prompt is intentionally specific about output shape — JSON
+    # mode guarantees we get JSON back but doesn't enforce field names,
+    # so we spell out the contract here. The "MUST use exact names"
+    # rule is what makes the +Shop button match: a `need` item that
+    # doesn't appear in the pantry can be added directly to shopping.
+    system = (
+        "You are PantryPal's meal-planning assistant. The user is "
+        "deciding what to cook. You will reply with a single JSON "
+        "object describing a meal they can make.\n\n"
+        f"Pantry (what they have at home):\n{pantry_text}\n\n"
+        "Reply with JSON in this EXACT shape:\n"
+        "{\n"
+        '  "meal_name": "<short title, e.g. \\"Spaghetti carbonara\\">",\n'
+        '  "have": ["<pantry items used, exact names from the list>"],\n'
+        '  "need": ["<missing ingredients>"],\n'
+        '  "steps": ["<short numbered steps>"]\n'
+        "}\n\n"
+        "Rules:\n"
+        "- 'have' items MUST be from the pantry list above, using the\n"
+        "  same names. If the pantry is empty, 'have' is [].\n"
+        "- 'need' items are things they don't have but need to buy.\n"
+        "- 'steps' is 3-7 short steps, 1-2 sentences each.\n"
+        "- If the user's request can't be made (e.g. they ask for\n"
+        "  something not really a meal), still return JSON — set\n"
+        "  meal_name to a graceful explanation and 'steps' to a one-\n"
+        "  item list with the explanation."
+    )
+
+    try:
+        # Import inside the function so a missing openai install only
+        # bites at meal-plan time, not at app-boot time. (Phase 3A
+        # requires it; but we'd rather a clean 502 than a hard fail
+        # on /pantry if someone deploys without installing deps.)
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key, timeout=_OPENAI_TIMEOUT_SECONDS)
+        response = client.chat.completions.create(
+            model=_OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=_OPENAI_TEMPERATURE,
+            max_tokens=_OPENAI_MAX_TOKENS,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content or "{}"
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            log.warning("OpenAI returned non-object JSON: %r", raw[:200])
+            return None
+        return parsed
+    except json.JSONDecodeError as e:
+        # JSON mode is supposed to guarantee valid JSON, but the spec
+        # allows partial responses if the model hits max_tokens mid-
+        # object. Log + null out so the route shows a generic error.
+        log.warning("OpenAI returned malformed JSON: %s", e)
+        return None
+    except Exception as e:
+        # Catches openai.RateLimitError, openai.APIConnectionError,
+        # openai.AuthenticationError, network timeouts, etc. Phase 3C
+        # will split these for better user messaging.
+        log.warning("OpenAI call failed: %s: %s", type(e).__name__, e)
+        return None
 
 
 def _active_invites_for(household: Household) -> list:

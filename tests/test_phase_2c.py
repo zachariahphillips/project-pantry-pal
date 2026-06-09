@@ -79,4 +79,4 @@ class TestHealthz:
         # Phase string is also the cue Fly's `fly logs` watch uses to
         # confirm the right code is live after a deploy. Bump this when
         # phase number changes.
-        assert resp.json == {"status": "ok", "phase": "2C"}
+        assert resp.json == {"status": "ok", "phase": "3A"}

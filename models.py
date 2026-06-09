@@ -10,8 +10,13 @@ which keeps the migration to additive-only (add `households` table +
 Phase 2B: Invite — magic-link tokens that let new (or existing) users
 join a household. Pure new-table migration (no column adds), so
 db.create_all() is sufficient on this step.
+Phase 3A: MealPlan — AI-generated meal plans (meal_name, have, need,
+steps). Stores the raw OpenAI JSON response so we can reformat the UI
+without re-paying for the API call, plus a denormalized meal_name for
+fast list rendering. Also a pure new-table migration.
 """
 
+import json
 import secrets
 from datetime import datetime, timedelta
 
@@ -276,4 +281,100 @@ class Invite(db.Model):
         return (
             f"<Invite token={self.token[:8]}… household={self.household_id} "
             f"uses={self.used_count}/{self.max_uses}>"
+        )
+
+
+# --- Phase 3A: AI meal plans -----------------------------------------------
+
+# Hard caps on what we ask the AI to produce + show in the UI. These are
+# intentionally generous (a real recipe rarely needs >10 ingredients or
+# >12 steps); the cap is mostly to prevent a runaway response from
+# blowing up the rendered card.
+MEAL_PLAN_MAX_HAVE = 15
+MEAL_PLAN_MAX_NEED = 15
+MEAL_PLAN_MAX_STEPS = 12
+
+
+class MealPlan(db.Model):
+    """A single AI-generated meal plan stored against the household.
+
+    We persist the raw JSON the model returned so future UI changes
+    (Phase 3B card polish, Phase 3C suggested-recipes-from-pantry) don't
+    require re-paying for the OpenAI call. The denormalized `meal_name`
+    column is just for fast "recent meals" rendering — saves a JSON
+    parse per row in list views.
+
+    Household-scoped (so roommates see each other's plans), with
+    provenance (`created_by_user_id`) for the "asked by Alice" stamp
+    we'll likely want in Phase 3B.
+    """
+    __tablename__ = "meal_plans"
+
+    id = db.Column(db.Integer, primary_key=True)
+    household_id = db.Column(
+        db.Integer, db.ForeignKey("households.id"),
+        nullable=False, index=True,
+    )
+    created_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True,
+    )
+    # The free-text prompt the user typed ("I want to make pasta carbonara").
+    # Keep as TEXT so we don't cap meal ideas at some arbitrary length;
+    # validation at the form layer keeps abuse small.
+    prompt = db.Column(db.Text, nullable=False)
+    # The raw JSON we got back from OpenAI, stored verbatim. Parsing
+    # happens lazily via `parsed`. If a future model spec changes the
+    # schema (e.g. adds "prep_time"), old rows still render via the
+    # existing have/need/steps fields.
+    response_json = db.Column(db.Text, nullable=False)
+    # Denormalized convenience for list views — `parsed.get("meal_name")`
+    # would also work but means a json.loads on every row.
+    meal_name = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    household = db.relationship(
+        "Household",
+        backref=db.backref(
+            "meal_plans", lazy="dynamic", cascade="all, delete-orphan",
+            order_by="MealPlan.created_at.desc()",
+        ),
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_user_id])
+
+    @property
+    def parsed(self) -> dict:
+        """Cached parse of `response_json`. Returns {} if the stored
+        value is somehow malformed (shouldn't happen post-validation in
+        the route, but defensive)."""
+        try:
+            data = json.loads(self.response_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _list_field(self, key: str, cap: int) -> list:
+        """Pull a list-typed field from `parsed`, defensively coerce to
+        strings, and cap to `cap` entries."""
+        value = self.parsed.get(key)
+        if not isinstance(value, list):
+            return []
+        cleaned = [str(v).strip() for v in value if str(v).strip()]
+        return cleaned[:cap]
+
+    @property
+    def have(self) -> list:
+        return self._list_field("have", MEAL_PLAN_MAX_HAVE)
+
+    @property
+    def need(self) -> list:
+        return self._list_field("need", MEAL_PLAN_MAX_NEED)
+
+    @property
+    def steps(self) -> list:
+        return self._list_field("steps", MEAL_PLAN_MAX_STEPS)
+
+    def __repr__(self) -> str:
+        return (
+            f"<MealPlan {self.meal_name!r} household={self.household_id} "
+            f"created_by={self.created_by_user_id}>"
         )

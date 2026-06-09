@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 2C complete — PantryPal is deployable to Fly.io. `Dockerfile`, `.dockerignore`, and `fly.toml` are in the repo; gunicorn replaces the Flask dev server in prod; a persistent volume at `/data` holds the SQLite file across redeploys. See the "Deploy to Fly.io" section below for the exact commands. Next is Phase 3 (AI meal planning).
+**Status:** Phase 3A complete — the AI meal planner is real. On `/pantry`, type `"pasta carbonara"` and tap **Ask AI** → in a few seconds you get a card with a suggested recipe, which pantry items it'll use, what you still need to buy, and the cooking steps. Each missing ingredient has a one-tap `+ Shop` button that copies it to the shopping list with a `Suggested by AI for: <meal>` note. Plans are household-scoped, so roommates see each other's meal ideas. Cost is uncapped for now — Phase 3C will add a per-user-per-day call limit + better error messaging. Next is Phase 3B (past-meals view + card polish).
 
 ## The idea in one paragraph
 
@@ -18,8 +18,11 @@ Python + Flask · SQLite (→ Postgres later) · Flask-Login · Tailwind CSS via
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then fill in FLASK_SECRET_KEY (OpenAI key not needed until Phase 3)
+cp .env.example .env   # then fill in FLASK_SECRET_KEY + OPENAI_API_KEY
 python -c "import secrets; print(secrets.token_hex(32))"  # paste output into FLASK_SECRET_KEY
+# OPENAI_API_KEY: reuse the same key from project-pawsitive-coach, or grab one
+# at https://platform.openai.com/api-keys. Without it, the meal-planner UI still
+# renders but POST /meal-plan returns a friendly 502 ("AI is taking a nap").
 python app.py
 ```
 
@@ -153,7 +156,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 2A:** Households data model + "added by" provenance + in-place SQLite migration — done
 - **Phase 2B:** Magic-link invite/join flow (shareable URL, sign-up-with-invite + logged-in-switch) — done
 - **Phase 2C:** Deploy to Fly.io (Dockerfile + gunicorn + persistent volume for SQLite) — done
-- **Phase 3:** AI meal planning — up next
+- **Phase 3A:** AI meal planning — plumbing + minimal UI (OpenAI JSON mode, `MealPlan` model, `+ Shop` on need items) — done
+- **Phase 3B:** Past-meals view + card polish + "Plan another" + bulk-add — up next
+- **Phase 3C:** Per-user-per-day rate limits + differentiated error messages + cost telemetry
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
 
 Full plan in [PLAN.md](./PLAN.md).
