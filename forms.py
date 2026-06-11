@@ -7,6 +7,19 @@ from flask_wtf import FlaskForm
 from wtforms import BooleanField, FloatField, PasswordField, StringField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
 
+# Single source of truth for the unit-dropdown options.
+# Used by both the pantry add/edit forms and the shopping add/edit forms.
+# Order is intentional: most common first (ea, g, kg…) so the dropdown
+# matches how a phone-thumb user would scan it. Inputs are NOT
+# validated against this list — the user can still type "bottle" or
+# "head of garlic" and submit it. The list is a UX shortcut, not a
+# constraint.
+UNIT_SUGGESTIONS = (
+    "ea", "g", "kg", "oz", "lb",
+    "ml", "L", "cup", "tbsp", "tsp",
+    "cans", "boxes", "bags", "bunches",
+)
+
 
 class SignupForm(FlaskForm):
     name = StringField(
@@ -77,9 +90,14 @@ class PantryItemForm(FlaskForm):
     unit = StringField(
         "Unit",
         validators=[Optional(), Length(max=40)],
+        # NB: no `list=` attribute — the unit dropdown is a custom
+        # combobox (see _macros.html / base.html JS), NOT an HTML5
+        # <datalist>. The native datalist popup renders as an OS-styled
+        # floating menu that's visually disconnected from the input,
+        # which looks broken on every browser. The combobox renders as
+        # a styled menu anchored directly below the input.
         render_kw={
             "autocomplete": "off",
-            "list": "unit-suggestions",
             "placeholder": "cans",
         },
     )

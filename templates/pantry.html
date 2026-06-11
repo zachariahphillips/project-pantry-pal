@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import unit_combobox %}
 
 {% block title %}Pantry · PantryPal{% endblock %}
 
@@ -36,7 +37,7 @@
         </div>
         <div>
           <label for="{{ form.unit.id }}" class="{{ label }}">{{ form.unit.label.text }}</label>
-          {{ form.unit(class=field) }}
+          {{ unit_combobox(form.unit, field) }}
         </div>
       </div>
       <div>
@@ -52,24 +53,6 @@
       Add to pantry
     </button>
   </form>
-
-  {# Datalist of common units. The datalist is referenced by every edit form too. #}
-  <datalist id="unit-suggestions">
-    <option value="ea"></option>
-    <option value="g"></option>
-    <option value="kg"></option>
-    <option value="oz"></option>
-    <option value="lb"></option>
-    <option value="ml"></option>
-    <option value="l"></option>
-    <option value="cup"></option>
-    <option value="tbsp"></option>
-    <option value="tsp"></option>
-    <option value="cans"></option>
-    <option value="boxes"></option>
-    <option value="bags"></option>
-    <option value="bunches"></option>
-  </datalist>
 
   {# ---------- Search + list ---------- #}
   <div class="mb-3">

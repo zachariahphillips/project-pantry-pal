@@ -32,7 +32,9 @@ from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import csrf, db, login_manager
-from forms import LoginForm, PantryItemForm, ShoppingItemForm, SignupForm
+from forms import (
+    UNIT_SUGGESTIONS, LoginForm, PantryItemForm, ShoppingItemForm, SignupForm,
+)
 from models import (
     Household, Invite, MealPlan, PantryItem, ShoppingItem, User,
 )
@@ -90,6 +92,11 @@ def create_app() -> Flask:
     csrf.init_app(app)  # exposes csrf_token() to Jinja and guards every POST
     login_manager.init_app(app)
     login_manager.login_view = "login"
+
+    # Expose UNIT_SUGGESTIONS to all templates so the unit combobox macro
+    # (_macros.html → unit_combobox) doesn't have to be passed it on every
+    # render. Same lifecycle as a Flask config value but at the Jinja layer.
+    app.jinja_env.globals["unit_suggestions"] = UNIT_SUGGESTIONS
     login_manager.login_message = "Please sign in to continue."
     login_manager.login_message_category = "info"
 

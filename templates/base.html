@@ -19,6 +19,14 @@
     .htmx-settling .htmx-added { opacity: 1; transition: opacity 200ms; }
     /* Tab bar respects the iPhone home-indicator safe area. */
     .tab-bar { padding-bottom: env(safe-area-inset-bottom); }
+    /* Unit combobox: hover + keyboard-active highlight on options. We do
+       this via an attribute (data-active) instead of a class so the JS
+       can set it during keyboard nav without fighting Tailwind's hover. */
+    [data-unit-option]:hover,
+    [data-unit-option][data-active] {
+      background-color: rgb(240 253 244); /* green-50 */
+      color: rgb(20 83 45);               /* green-900 */
+    }
   </style>
   <script>
     window.addEventListener('load', () => { document.body.style.visibility = 'visible'; });
@@ -39,6 +47,149 @@
       toast.classList.remove('opacity-0');
       clearTimeout(window.__toastTimer);
       window.__toastTimer = setTimeout(() => toast.classList.add('opacity-0'), 1800);
+    });
+
+    // ---------------------------------------------------------------
+    // Unit combobox (replaces the native <datalist>, which renders as
+    // an OS-styled floating popup that's visually disconnected from
+    // the input on every browser). Each [data-unit-combobox-wrapper]
+    // gets:
+    //   - focus on the input -> open the panel
+    //   - typing -> filter the visible options
+    //   - chevron click -> toggle the panel
+    //   - arrow up/down -> move highlight
+    //   - enter on a highlighted option -> pick it
+    //   - escape -> close
+    //   - click outside -> close
+    //   - tap on an option -> pick + close
+    // The input STAYS free-text: typing a unit not in the list and
+    // submitting works exactly like before.
+    // ---------------------------------------------------------------
+    function initUnitComboboxes(root) {
+      root = root || document;
+      root.querySelectorAll('[data-unit-combobox-wrapper]').forEach((wrapper) => {
+        // Idempotent — htmx swaps can re-run this against already-init
+        // wrappers (e.g. if an edit form swaps in next to an add form
+        // we already wired up).
+        if (wrapper.dataset.unitComboboxInit === '1') return;
+        wrapper.dataset.unitComboboxInit = '1';
+
+        const input  = wrapper.querySelector('[data-unit-combobox-input]');
+        const toggle = wrapper.querySelector('[data-unit-combobox-toggle]');
+        const panel  = wrapper.querySelector('[data-unit-combobox-panel]');
+        if (!input || !panel) return;
+        const items  = Array.from(panel.querySelectorAll('[data-unit-option]'));
+        let activeIndex = -1;
+
+        const visibleItems = () => items.filter((i) => !i.classList.contains('hidden'));
+
+        const updateActive = () => {
+          items.forEach((i) => i.removeAttribute('data-active'));
+          const vis = visibleItems();
+          if (activeIndex >= 0 && activeIndex < vis.length) {
+            vis[activeIndex].setAttribute('data-active', '');
+            vis[activeIndex].scrollIntoView({ block: 'nearest' });
+          }
+        };
+
+        const applyFilter = () => {
+          const q = input.value.trim().toLowerCase();
+          items.forEach((item) => {
+            const v = item.dataset.unitOption.toLowerCase();
+            const match = q === '' || v.includes(q);
+            item.classList.toggle('hidden', !match);
+          });
+          activeIndex = -1;
+          updateActive();
+        };
+
+        const open = () => {
+          panel.classList.remove('hidden');
+          input.setAttribute('aria-expanded', 'true');
+        };
+        const close = () => {
+          panel.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+          activeIndex = -1;
+          updateActive();
+        };
+        const isOpen = () => !panel.classList.contains('hidden');
+
+        const pick = (value) => {
+          input.value = value;
+          close();
+          // Fire input/change so any other listeners (form validation,
+          // htmx hx-trigger="input") see the value.
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        input.addEventListener('focus', () => { applyFilter(); open(); });
+        input.addEventListener('input', () => { applyFilter(); open(); });
+        input.addEventListener('keydown', (e) => {
+          const vis = visibleItems();
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!isOpen()) { applyFilter(); open(); }
+            activeIndex = Math.min(activeIndex + 1, vis.length - 1);
+            if (activeIndex < 0 && vis.length > 0) activeIndex = 0;
+            updateActive();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!isOpen()) { applyFilter(); open(); }
+            activeIndex = Math.max(activeIndex - 1, 0);
+            updateActive();
+          } else if (e.key === 'Enter') {
+            if (isOpen() && activeIndex >= 0 && vis[activeIndex]) {
+              e.preventDefault();
+              pick(vis[activeIndex].dataset.unitOption);
+            }
+            // Otherwise fall through and let the form submit normally.
+          } else if (e.key === 'Escape') {
+            if (isOpen()) { e.preventDefault(); close(); }
+          } else if (e.key === 'Tab') {
+            close();
+          }
+        });
+
+        // mousedown (not click) so we beat the input's blur handler —
+        // otherwise the input loses focus, the dropdown closes, and
+        // the click never lands on the option.
+        toggle.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          if (isOpen()) {
+            close();
+            input.focus();
+          } else {
+            input.focus();
+            applyFilter();
+            open();
+          }
+        });
+        items.forEach((item) => {
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            pick(item.dataset.unitOption);
+            input.focus();
+          });
+        });
+
+        // Close on click outside the whole wrapper.
+        document.addEventListener('mousedown', (e) => {
+          if (!wrapper.contains(e.target)) close();
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => initUnitComboboxes());
+    // htmx swaps in edit forms (e.g. tap pencil on a pantry row); re-init
+    // so the unit field in the swapped-in form gets wired up too. We
+    // listen on `document` (not `document.body`) because this script
+    // lives in <head> — body doesn't exist yet at script-eval time.
+    // htmx events bubble to document so this catches all swaps regardless
+    // of where they land in the DOM.
+    document.addEventListener('htmx:afterSwap', (evt) => {
+      initUnitComboboxes(evt.target);
     });
   </script>
 </head>

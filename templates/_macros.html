@@ -1,0 +1,61 @@
+{#
+  Jinja macros for reusable form components.
+
+  unit_combobox(field, css_class)
+    Renders a WTForms StringField as a custom combobox: the text input
+    looks like every other field, but tapping it (or its chevron) drops
+    down a styled menu of common units anchored directly below the
+    input. Typing filters the visible options; arrow keys navigate;
+    Enter picks the highlighted option; Escape closes. The input is
+    still free-text, so the user can type a unit not in the list and
+    submit it normally.
+
+    The behavior lives in base.html's <script> block (initUnitComboboxes),
+    which runs on DOMContentLoaded AND htmx:afterSwap so dynamically-
+    swapped edit forms get hooked up too.
+
+  Arguments:
+    field      — a WTForms StringField (e.g. form.unit)
+    css_class  — the Tailwind class string to apply to the <input>
+                 (so callers can pass the larger 'field' style on the
+                 add form vs the smaller 'field' style on edit forms,
+                 or 'field_error' when validation fails)
+#}
+
+{% macro unit_combobox(field, css_class) %}
+<div class="relative" data-unit-combobox-wrapper>
+  {# The input keeps all of its WTForms attrs (id, name, value, etc.).
+     We add data-unit-combobox-input as the JS hook, and pr-9 for the
+     chevron button on the right. #}
+  {{ field(class=css_class ~ " pr-9", **{
+      "autocomplete": "off",
+      "data-unit-combobox-input": "",
+      "role": "combobox",
+      "aria-autocomplete": "list",
+      "aria-expanded": "false",
+      "aria-controls": "unit-combobox-panel-" ~ field.id,
+  }) }}
+  <button type="button"
+          tabindex="-1"
+          aria-label="Show unit options"
+          data-unit-combobox-toggle
+          class="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded text-stone-400 hover:text-stone-600">
+    <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4">
+      <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <ul id="unit-combobox-panel-{{ field.id }}"
+      role="listbox"
+      data-unit-combobox-panel
+      class="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-auto rounded-xl border border-stone-200 bg-white py-1 shadow-lg hidden">
+    {% for u in unit_suggestions %}
+      <li role="option"
+          data-unit-option="{{ u }}"
+          class="cursor-pointer px-3 py-2 text-sm text-stone-700">
+        {{ u }}
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endmacro %}
