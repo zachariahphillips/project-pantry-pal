@@ -103,16 +103,29 @@
       </button>
     </form>
 
-    {# htmx-indicator class is auto-toggled by hx-indicator above. #}
+    {# htmx-indicator class is auto-toggled by hx-indicator above.
+       Card-shaped skeleton (Phase 3B): the page doesn't reflow when
+       the real card lands because the placeholder takes the same
+       footprint. Pulse-animated bars hint "this is loading", and the
+       small "Thinking… 2-5s" label sets the expected wait time. #}
     <div id="meal-plan-spinner"
-         class="htmx-indicator mt-3 flex items-center gap-2 text-xs text-stone-500"
-         role="status">
-      <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
-        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3"
-              stroke-linecap="round" class="opacity-75" />
-      </svg>
-      Thinking…
+         class="htmx-indicator mt-3"
+         role="status"
+         aria-live="polite">
+      <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <div class="border-b border-stone-100 px-4 py-3">
+          <div class="h-5 w-1/2 animate-pulse rounded bg-stone-200"></div>
+          <div class="mt-2 h-3 w-3/4 animate-pulse rounded bg-stone-100"></div>
+        </div>
+        <div class="space-y-2 px-4 py-3">
+          <div class="h-4 w-full animate-pulse rounded bg-stone-100"></div>
+          <div class="h-4 w-5/6 animate-pulse rounded bg-stone-100"></div>
+          <div class="h-4 w-3/5 animate-pulse rounded bg-stone-100"></div>
+        </div>
+        <p class="border-t border-stone-100 bg-stone-50 px-4 py-2 text-xs text-stone-400">
+          Thinking… (2–5 seconds)
+        </p>
+      </div>
     </div>
 
     {# Server-rendered slot for the meal plan card. On GET /pantry we

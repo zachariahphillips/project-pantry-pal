@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 3A complete — the AI meal planner is real. On `/pantry`, type `"pasta carbonara"` and tap **Ask AI** → in a few seconds you get a card with a suggested recipe, which pantry items it'll use, what you still need to buy, and the cooking steps. Each missing ingredient has a one-tap `+ Shop` button that copies it to the shopping list with a `Suggested by AI for: <meal>` note. Plans are household-scoped, so roommates see each other's meal ideas. Cost is uncapped for now — Phase 3C will add a per-user-per-day call limit + better error messaging. Next is Phase 3B (past-meals view + card polish).
+**Status:** Phase 3B complete — meal planning has a history view + bulk actions. The bottom tab bar now has a third **Meals** tab that lists every plan the household has asked for, newest first, with collapsed-by-default cards. The inline card on `/pantry` got a **Plan another meal** CTA (scrolls back to the prompt) and a card-shaped loading skeleton instead of the "Thinking…" text. Each card's "You need" section has a new **+ Shop all (N)** bulk button that copies every missing ingredient to the shopping list in one tap (with a toast that says "Added N items"). 107 pytest tests green; OpenAI is still uncapped — Phase 3C will add a per-user-per-day call limit, differentiated error messages, and prompt-injection mitigation before deploy is back on the table.
 
 ## The idea in one paragraph
 
@@ -157,8 +157,8 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 2B:** Magic-link invite/join flow (shareable URL, sign-up-with-invite + logged-in-switch) — done
 - **Phase 2C:** Deploy to Fly.io (Dockerfile + gunicorn + persistent volume for SQLite) — done
 - **Phase 3A:** AI meal planning — plumbing + minimal UI (OpenAI JSON mode, `MealPlan` model, `+ Shop` on need items) — done
-- **Phase 3B:** Past-meals view + card polish + "Plan another" + bulk-add — up next
-- **Phase 3C:** Per-user-per-day rate limits + differentiated error messages + cost telemetry
+- **Phase 3B:** Past-meals view (`/meals` tab) + card polish + "Plan another" + bulk `+ Shop all` + loading skeleton — done
+- **Phase 3C:** Per-user-per-day rate limits + differentiated error messages + prompt-injection mitigation + cost telemetry — up next
 - **Phase 4+:** Power-ups (barcode scan, receipt OCR, expiry tracking, etc.)
 
 Full plan in [PLAN.md](./PLAN.md).

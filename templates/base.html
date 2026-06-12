@@ -39,14 +39,24 @@
       if (meta) event.detail.headers['X-CSRFToken'] = meta.content;
     });
     // Brief bottom toast triggered by HX-Trigger response headers from
-    // cross-action routes (e.g. "+ Shop" on a pantry row).
-    document.addEventListener('shopping:added', () => {
+    // cross-action routes (e.g. "+ Shop" on a pantry row, +Shop All on
+    // a meal plan).
+    function showToast(text) {
       const toast = document.getElementById('toast');
       if (!toast) return;
-      toast.textContent = 'Added to shopping list';
+      toast.textContent = text;
       toast.classList.remove('opacity-0');
       clearTimeout(window.__toastTimer);
       window.__toastTimer = setTimeout(() => toast.classList.add('opacity-0'), 1800);
+    }
+    document.addEventListener('shopping:added', () => {
+      showToast('Added to shopping list');
+    });
+    // Bulk add from a meal-plan card. HX-Trigger payload is JSON with
+    // {count: N}; htmx fires the event with detail = {count: N}.
+    document.addEventListener('shopping:added-bulk', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Added 1 item to shopping' : `Added ${n} items to shopping`);
     });
 
     // ---------------------------------------------------------------
@@ -265,6 +275,17 @@
             <path d="M8 7V5a4 4 0 0 1 8 0v2" />
           </svg>
           <span>Shopping</span>
+        </a>
+        <a href="{{ url_for('meals_list') }}"
+           aria-current="{{ 'page' if page.startswith('meals') else 'false' }}"
+           class="{{ tab_base }} {{ tab_active if page.startswith('meals') else tab_inactive }}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6">
+            <path d="M3 2v7c0 1.1.9 2 2 2h4c1.1 0 2-.9 2-2V2"/>
+            <path d="M7 2v20"/>
+            <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
+          </svg>
+          <span>Meals</span>
         </a>
       </div>
     </nav>

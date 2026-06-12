@@ -1,15 +1,25 @@
 {#
-  Phase 3A: rendered output of POST /meal-plan (and inline-rendered on
-  /pantry GET when the household has a recent plan).
+  Meal-plan card. Renders both for POST /meal-plan responses (htmx
+  swap into #meal-plan-result on /pantry) AND for the list view on
+  /meals (multiple cards stacked).
 
-  The htmx target on the form is #meal-plan-result (innerHTML swap), so
-  this template MUST NOT include its own #meal-plan-result wrapper.
+  Context-sensitive bits:
+    context="inline" (default)  — used on /pantry. Sections start OPEN;
+                                  shows a "Plan another" CTA at the
+                                  bottom that scrolls back to the
+                                  prompt input and focuses it.
+    context="list"              — used on /meals. Sections start CLOSED
+                                  (so 20+ stacked cards stay scrollable).
+                                  No "Plan another" — the user can tap
+                                  the Pantry tab to get back to the
+                                  prompt.
 
-  States:
-    plan + no error  → full card
-    plan = None + error string → red error card (422 / 502 responses)
-    plan = None + no error → empty (caller wants the slot blank)
+  Error/empty states:
+    plan = None + error string  — red error card (422 / 502 responses).
+    plan = None + no error      — empty (caller wants the slot blank).
 #}
+{% set _context = context|default("inline") %}
+{% set _details_open = "open" if _context == "inline" else "" %}
 
 {% if error %}
   <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
@@ -30,56 +40,89 @@
     </header>
 
     {% if plan.have %}
-      <section class="border-b border-stone-100 px-4 py-3">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          You have ({{ plan.have|length }})
-        </h4>
-        <ul class="mt-2 flex flex-wrap gap-1.5">
+      <details {{ _details_open }} class="border-b border-stone-100 group">
+        <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500 hover:bg-stone-50">
+          <span>You have ({{ plan.have|length }})</span>
+          <svg viewBox="0 0 20 20" class="h-4 w-4 transition-transform group-open:rotate-180"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 8l5 5 5-5"/>
+          </svg>
+        </summary>
+        <ul class="flex flex-wrap gap-1.5 px-4 pb-3">
           {% for item in plan.have %}
             <li class="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs text-green-900 ring-1 ring-green-200">
               {{ item }}
             </li>
           {% endfor %}
         </ul>
-      </section>
+      </details>
     {% endif %}
 
     {% if plan.need %}
-      <section class="border-b border-stone-100 px-4 py-3">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          You need ({{ plan.need|length }})
-        </h4>
-        <ul class="mt-2 space-y-1.5">
-          {% for item in plan.need %}
-            <li class="flex items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
-              <span class="truncate">{{ item }}</span>
-              {# One-tap shopping-list add. Each row is its own tiny
-                 form so the hidden `name` field carries the item value
-                 cleanly (avoiding hx-vals JSON-escaping headaches).
-                 hx-swap="none" + HX-Trigger:shopping:added → toast. #}
-              <form hx-post="{{ url_for('meal_plan_need_to_shopping', plan_id=plan.id) }}"
-                    hx-swap="none"
-                    hx-on::after-request="if (event.detail.successful) { const b = this.querySelector('button'); const o = b.textContent; b.textContent = 'Added'; b.disabled = true; setTimeout(() => { b.textContent = o; b.disabled = false; }, 1500); }"
-                    class="flex-shrink-0">
-                <input type="hidden" name="name" value="{{ item }}" />
-                <button type="submit"
-                        aria-label="Add {{ item }} to shopping list"
-                        class="inline-flex h-8 items-center justify-center rounded-md bg-stone-900 px-2.5 text-xs font-medium text-white hover:bg-stone-700 disabled:opacity-60">
-                  + Shop
-                </button>
-              </form>
-            </li>
-          {% endfor %}
-        </ul>
-      </section>
+      <details {{ _details_open }} class="border-b border-stone-100 group">
+        <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500 hover:bg-stone-50">
+          <span>You need ({{ plan.need|length }})</span>
+          <svg viewBox="0 0 20 20" class="h-4 w-4 transition-transform group-open:rotate-180"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 8l5 5 5-5"/>
+          </svg>
+        </summary>
+        <div class="px-4 pb-3">
+          {# Bulk +Shop All button. POSTs to the bulk-add endpoint,
+             returns no body + HX-Trigger:shopping:added-bulk → toast
+             with item count. Intentionally NOT idempotent: tapping
+             twice = duplicate shopping rows. Matches the single-item
+             +Shop behavior. #}
+          <form hx-post="{{ url_for('meal_plan_need_all_to_shopping', plan_id=plan.id) }}"
+                hx-swap="none"
+                hx-on::after-request="if (event.detail.successful) { const b = this.querySelector('button'); const o = b.textContent; b.textContent = 'Added'; b.disabled = true; setTimeout(() => { b.textContent = o; b.disabled = false; }, 1500); }"
+                class="mb-2">
+            <button type="submit"
+                    aria-label="Add all {{ plan.need|length }} missing items to shopping list"
+                    class="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-60">
+              <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+                   stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 5h14M3 10h14M3 15h9M15 13v4M13 15h4"/>
+              </svg>
+              + Shop all ({{ plan.need|length }})
+            </button>
+          </form>
+
+          <ul class="space-y-1.5">
+            {% for item in plan.need %}
+              <li class="flex items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
+                <span class="truncate">{{ item }}</span>
+                <form hx-post="{{ url_for('meal_plan_need_to_shopping', plan_id=plan.id) }}"
+                      hx-swap="none"
+                      hx-on::after-request="if (event.detail.successful) { const b = this.querySelector('button'); const o = b.textContent; b.textContent = 'Added'; b.disabled = true; setTimeout(() => { b.textContent = o; b.disabled = false; }, 1500); }"
+                      class="flex-shrink-0">
+                  <input type="hidden" name="name" value="{{ item }}" />
+                  <button type="submit"
+                          aria-label="Add {{ item }} to shopping list"
+                          class="inline-flex h-8 items-center justify-center rounded-md bg-stone-900 px-2.5 text-xs font-medium text-white hover:bg-stone-700 disabled:opacity-60">
+                    + Shop
+                  </button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </details>
     {% endif %}
 
     {% if plan.steps %}
-      <section class="px-4 py-3">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Steps
-        </h4>
-        <ol class="mt-2 space-y-1.5 text-sm text-stone-800">
+      <details {{ _details_open }} class="group">
+        <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500 hover:bg-stone-50">
+          <span>Steps</span>
+          <svg viewBox="0 0 20 20" class="h-4 w-4 transition-transform group-open:rotate-180"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 8l5 5 5-5"/>
+          </svg>
+        </summary>
+        <ol class="space-y-1.5 px-4 pb-3 text-sm text-stone-800">
           {% for step in plan.steps %}
             <li class="flex gap-2">
               <span class="flex-shrink-0 font-medium text-stone-500">{{ loop.index }}.</span>
@@ -87,7 +130,23 @@
             </li>
           {% endfor %}
         </ol>
-      </section>
+      </details>
+    {% endif %}
+
+    {% if _context == "inline" %}
+      <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
+        {# "Plan another" — pure client-side: scrolls back to the prompt
+           input on /pantry and focuses it. No server round-trip. #}
+        <button type="button"
+                onclick="(function(){ const i = document.getElementById('meal-plan-prompt'); if (i) { i.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>i.focus(), 350); } })()"
+                class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800">
+          <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 4v12M4 10h12"/>
+          </svg>
+          Plan another meal
+        </button>
+      </footer>
     {% endif %}
   </article>
 {% endif %}

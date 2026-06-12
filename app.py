@@ -16,6 +16,14 @@ Phase 3A: AI meal planning — POST /meal-plan takes a free-text prompt,
           stores the response as a MealPlan row, and renders a card
           with have / need / steps. Each `need` item has a one-tap
           "+ Shop" button that adds it to the shopping list.
+Phase 3B: AI meal planning, polish — third "Meals" bottom-tab routes to
+          GET /meals which lists every past plan for the household,
+          newest first, with collapsed-by-default cards. New POST
+          /meal-plan/<id>/need-all-to-shopping bulk-adds every needed
+          item in one DB transaction. The inline card on /pantry gets
+          a "Plan another" CTA (client-side scroll back to the prompt)
+          and the htmx loading state is now a card-shaped skeleton
+          instead of a "Thinking…" text line.
 See PLAN.md for the full phased build plan.
 """
 
@@ -692,9 +700,78 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         return "", 200, {"HX-Trigger": "shopping:added"}
 
+    # ---- Phase 3B: past meals list + bulk shop-all ------------------
+
+    @app.route("/meals", methods=["GET"])
+    @login_required
+    def meals_list():
+        """List every meal plan ever made for the household, newest
+        first. Each plan renders as a collapsed-by-default card (so
+        scrolling through 20 expanded cards isn't a chore). Each card
+        still has all the per-need-item +Shop buttons plus the new
+        +Shop All Missing button at the top of the need section.
+
+        No pagination yet — at ~50 plans/month this'll be fine for
+        years. Phase 3C+ can add a `before=<date>` query param.
+        """
+        plans = current_user.household.meal_plans.all()
+        return render_template("meals.html", plans=plans)
+
+    @app.route(
+        "/meal-plan/<int:plan_id>/need-all-to-shopping", methods=["POST"]
+    )
+    @login_required
+    def meal_plan_need_all_to_shopping(plan_id: int):
+        """Bulk-copy every `need` item from a meal plan into the
+        household's shopping list. Single DB transaction, single toast.
+
+        Matches the existing single-item `+ Shop` behavior in being
+        intentionally non-idempotent: tapping the button twice creates
+        2 shopping rows per item. Per the PLAN.md gotcha, silent dedupe
+        is the wrong fix — if a real user complains, the right answer
+        is a confirmation/merge UX. Until then, predictability over
+        cleverness.
+        """
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        need_items = plan.need  # already capped + cleaned by MealPlan
+        if not need_items:
+            # Nothing to add — but return 200 so the htmx swap completes
+            # cleanly. The card just won't have a +Shop All button to
+            # tap in this case (template hides it when need is empty).
+            return "", 200, {"HX-Trigger": "shopping:added"}
+
+        source_note = f"Suggested by AI for: {plan.meal_name}"[:280]
+        new_rows = [
+            ShoppingItem(
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
+                name=item_name[:120],
+                quantity=None,
+                unit=None,
+                notes=source_note,
+            )
+            for item_name in need_items
+        ]
+        db.session.add_all(new_rows)
+        db.session.commit()
+
+        # Surface the count in the HX-Trigger payload so the toast can
+        # say "Added 4 items to shopping" instead of the generic msg.
+        # base.html's listener parses HX-Trigger as either a bare name
+        # or a JSON object with detail; we pass the JSON form.
+        import json as _json
+        return "", 200, {
+            "HX-Trigger": _json.dumps({
+                "shopping:added-bulk": {"count": len(new_rows)},
+            }),
+        }
+
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "3A"}
+        return {"status": "ok", "phase": "3B"}
 
 
 def _ensure_phase_2a_columns() -> None:
