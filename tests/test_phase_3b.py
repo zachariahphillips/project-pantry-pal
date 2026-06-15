@@ -54,12 +54,26 @@ def _body(resp) -> str:
 
 
 def _stub_openai(monkeypatch, return_value):
+    """Patch `app._ask_openai_for_meal`. Phase 3C: helper now returns
+    a `(dict | None, error_kind | None)` tuple — this wrapper accepts
+    dict / None / tuple / callable and converts to the right shape.
+    See test_phase_3a.py for the long-form docstring."""
+    def _wrap(value):
+        if isinstance(value, tuple):
+            return value
+        if value is None:
+            return (None, "unknown")
+        return (value, None)
+
     if callable(return_value):
-        monkeypatch.setattr("app._ask_openai_for_meal", return_value)
+        def wrapped(prompt, pantry):
+            return _wrap(return_value(prompt, pantry))
+        monkeypatch.setattr("app._ask_openai_for_meal", wrapped)
     else:
+        wrapped_value = _wrap(return_value)
         monkeypatch.setattr(
             "app._ask_openai_for_meal",
-            lambda prompt, pantry: return_value,
+            lambda prompt, pantry: wrapped_value,
         )
 
 

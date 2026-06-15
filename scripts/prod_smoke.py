@@ -112,11 +112,11 @@ def main() -> int:
     print(f"  target: {BASE}")
     print()
 
-    # ----- Phase 1A: healthz reports phase 2C -----
+    # ----- healthz reports the current phase -----
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 3B", '"phase":"3B"' in body or '"phase": "3B"' in body, body)
+    check("phase == 3C", '"phase":"3C"' in body or '"phase": "3C"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")

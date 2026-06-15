@@ -62,14 +62,37 @@ def _seed_pantry(client, items: list[tuple[str, float | None, str | None]]):
 
 def _stub_openai(monkeypatch, return_value):
     """Patch `app._ask_openai_for_meal` to return `return_value`.
-    Callable form (a function): forwarded the actual args so tests can
-    inspect what was passed."""
+
+    Phase 3C: the helper now returns a `(plan_dict | None, error_kind | None)`
+    tuple. To keep existing 3A/3B tests untouched, this wrapper auto-
+    converts shorthand inputs to the new shape:
+
+    - A dict          → `(dict, None)`   (success)
+    - None            → `(None, "unknown")`  (generic failure)
+    - A 2-tuple       → passed through unchanged (new 3C tests use this
+                        to simulate specific failure kinds)
+    - A callable      → wrapped: its return value is run through the
+                        same shorthand-conversion logic above
+
+    This lets a 3C test do `_stub_openai(m, (None, "rate_limit"))` to
+    simulate a 429, while every dict-returning 3A/3B test keeps working.
+    """
+    def _wrap(value):
+        if isinstance(value, tuple):
+            return value
+        if value is None:
+            return (None, "unknown")
+        return (value, None)
+
     if callable(return_value):
-        monkeypatch.setattr("app._ask_openai_for_meal", return_value)
+        def wrapped(prompt, pantry):
+            return _wrap(return_value(prompt, pantry))
+        monkeypatch.setattr("app._ask_openai_for_meal", wrapped)
     else:
+        wrapped_value = _wrap(return_value)
         monkeypatch.setattr(
             "app._ask_openai_for_meal",
-            lambda prompt, pantry: return_value,
+            lambda prompt, pantry: wrapped_value,
         )
 
 
