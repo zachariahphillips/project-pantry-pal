@@ -74,12 +74,44 @@
 
   {# ---------- AI meal planner (Phase 3A) ---------- #}
   <section class="mt-8" aria-labelledby="meal-plan-heading">
-    <h2 id="meal-plan-heading" class="text-sm font-semibold text-stone-900">
-      Plan a meal
-    </h2>
+    <div class="flex items-baseline justify-between gap-2">
+      <h2 id="meal-plan-heading" class="text-sm font-semibold text-stone-900">
+        Plan a meal
+      </h2>
+      {# Phase 3D: cost pill. Populated client-side from GET /cost on
+         page load and after every successful POST /meal-plan. Stays
+         hidden if /cost fails so a broken endpoint can't break the UI.
+         Color shifts amber at ≤3 remaining, red at 0. #}
+      <span id="meal-plan-cost-pill"
+            class="hidden text-[11px] font-medium tabular-nums text-stone-500"
+            aria-live="polite"></span>
+    </div>
     <p class="mt-0.5 text-xs text-stone-500">
       Tell the AI what you want to make. It'll check your pantry and tell you what to buy.
     </p>
+
+    {# Phase 3D: prompt chips. Tap to prefill the input below — does NOT
+       auto-submit, so the user can tweak before pressing Ask AI. The
+       chip's data-prompt-chip is the verbatim text we drop into the
+       prompt field; the inner <span> is the short button label. We
+       keep the label and the prompt separate so we can show "Quick
+       (< 30 min)" but actually send "A quick meal, under 30 minutes"
+       (which steers the model better). #}
+    {% set chip_class = "inline-flex items-center rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-700 hover:border-green-600 hover:bg-green-50 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-300" %}
+    {% set chips = [
+      ("Tonight's dinner", "Tonight's dinner"),
+      ("Quick (< 30 min)", "A quick meal, under 30 minutes"),
+      ("Vegetarian", "A vegetarian meal"),
+      ("Comfort food", "Something comforting"),
+      ("Use what we have", "Use mostly what we already have in the pantry"),
+    ] %}
+    <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Quick prompts">
+      {% for label, prompt in chips %}
+        <button type="button"
+                data-prompt-chip="{{ prompt }}"
+                class="{{ chip_class }}">{{ label }}</button>
+      {% endfor %}
+    </div>
 
     <form hx-post="{{ url_for('meal_plan_create') }}"
           hx-target="#meal-plan-result"
@@ -144,4 +176,59 @@
   {# ---------- Household share card (Phase 2B) ---------- #}
   {% include "_household_share.html" %}
 </section>
+
+{# ---------- Phase 3D: meal-planner chips + cost pill ---------- #}
+<script>
+  (function () {
+    // Prefill the prompt input from a chip tap. We intentionally don't
+    // auto-submit — the chip is a suggestion, so the user can edit
+    // ("Vegetarian" → "Vegetarian Thai") before pressing Ask AI.
+    const input = document.getElementById('meal-plan-prompt');
+    document.querySelectorAll('[data-prompt-chip]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!input) return;
+        input.value = btn.dataset.promptChip;
+        input.focus();
+        const len = input.value.length;
+        try { input.setSelectionRange(len, len); } catch (_) { /* noop */ }
+      });
+    });
+
+    // Cost pill. Fetches /cost on initial page load + after every
+    // successful POST /meal-plan so the count reflects the just-fired
+    // call. Fails silently — a broken /cost shouldn't break the page.
+    const pill = document.getElementById('meal-plan-cost-pill');
+    async function refreshCostPill() {
+      if (!pill) return;
+      try {
+        const r = await fetch('/cost', { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const remaining = d.your_calls_remaining;
+        const limit = d.your_daily_limit;
+        if (remaining === 0) {
+          pill.textContent = 'Limit hit — resets midnight UTC';
+        } else {
+          pill.textContent = `${remaining} of ${limit} left today`;
+        }
+        pill.classList.remove(
+          'hidden', 'text-stone-500', 'text-amber-700', 'text-red-700'
+        );
+        if (remaining === 0)        pill.classList.add('text-red-700');
+        else if (remaining <= 3)    pill.classList.add('text-amber-700');
+        else                        pill.classList.add('text-stone-500');
+      } catch (_) {
+        // network/JSON error — pill stays hidden
+      }
+    }
+    refreshCostPill();
+    document.addEventListener('htmx:afterRequest', (evt) => {
+      if (evt.detail && evt.detail.successful
+          && evt.detail.pathInfo
+          && evt.detail.pathInfo.requestPath === '/meal-plan') {
+        refreshCostPill();
+      }
+    });
+  })();
+</script>
 {% endblock %}
