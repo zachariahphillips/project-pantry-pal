@@ -183,18 +183,43 @@ class TestMealsListPage:
 # ---------------------------------------------------------------------------
 
 class TestPantryInlineCard:
-    def test_inline_card_starts_expanded(
+    def test_pantry_priming_renders_as_collapsed_teaser(
             self, client, app, monkeypatch):
+        """Phase 3E: when GET /pantry primes #meal-plan-result with the
+        household's latest plan, render it as a "Last meal" teaser —
+        sections start CLOSED so the user sees the planner above-the-
+        fold instead of a wall of cooking steps. A "Last meal · View
+        all →" framing line wraps the card.
+
+        POST /meal-plan responses still render expanded (covered by
+        `test_inline_card_has_plan_another_cta` below — the priming
+        case and the fresh-response case use DIFFERENT contexts on the
+        same partial)."""
         sign_up(client, "alice@example.com", "Alice")
         _stub_openai(monkeypatch, CANNED_PLAN_A)
         _make_plan(client)
 
         resp = client.get("/pantry")
         body = _body(resp)
-        # At least one <details open> (have/need/steps all open)
-        assert "<details open" in body, (
-            "/pantry latest plan should render with sections expanded."
+
+        # The card itself still renders (meal name in the header).
+        assert CANNED_PLAN_A["meal_name"] in body
+
+        # Phase 3E inverts the prior 3B behavior: priming on page load
+        # is now COLLAPSED (no <details open> anywhere in the body).
+        assert "<details open" not in body, (
+            "Phase 3E: /pantry priming should render the latest plan "
+            "with sections collapsed (teaser mode)."
         )
+
+        # "Last meal" framing + "View all" link to /meals.
+        assert "Last meal" in body
+        assert "View all" in body
+
+        # The "Plan another" footer is inline-only; should NOT appear
+        # in teaser mode. This is what differentiates the priming case
+        # from a fresh POST /meal-plan response.
+        assert "Plan another meal" not in body
 
     def test_inline_card_has_plan_another_cta(
             self, client, app, monkeypatch):

@@ -4,15 +4,24 @@
   /meals (multiple cards stacked).
 
   Context-sensitive bits:
-    context="inline" (default)  — used on /pantry. Sections start OPEN;
-                                  shows a "Plan another" CTA at the
-                                  bottom that scrolls back to the
-                                  prompt input and focuses it.
+    context="inline" (default)  — used on /pantry for FRESH POST /meal-plan
+                                  responses. Sections start OPEN; shows a
+                                  "Plan another" CTA at the bottom that
+                                  scrolls back to the prompt input and
+                                  focuses it.
+    context="teaser"            — used on /pantry to prime the slot on
+                                  page load with the household's latest
+                                  plan. Sections start CLOSED; no "Plan
+                                  another" footer. Surrounding template
+                                  adds a "Last meal · View all →" label.
     context="list"              — used on /meals. Sections start CLOSED
                                   (so 20+ stacked cards stay scrollable).
                                   No "Plan another" — the user can tap
                                   the Pantry tab to get back to the
                                   prompt.
+
+  Both "teaser" and "list" rely on the same `_details_open == ""`
+  branch; they differ only in caller intent + surrounding framing.
 
   Error/empty states:
     plan = None + error string  — red error card (422 / 502 responses).

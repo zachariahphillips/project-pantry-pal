@@ -8,74 +8,14 @@
   <div class="mb-5">
     <h1 class="text-2xl font-semibold tracking-tight">Your pantry</h1>
     <p class="mt-1 text-sm text-stone-500">
-      Track what you've got at home. The AI meal planner will use this list in Phase 3.
+      What you've got at home — and what to cook with it.
     </p>
   </div>
 
-  {# ---------- Add form ---------- #}
-  {% set field = "block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" %}
-  {% set label = "mb-1 block text-xs font-medium text-stone-600" %}
-
-  <form method="post"
-        action="{{ url_for('pantry_add') }}"
-        hx-post="{{ url_for('pantry_add') }}"
-        hx-target="#pantry-list"
-        hx-swap="outerHTML"
-        hx-on::after-request="if (event.detail.successful) this.reset();"
-        class="mb-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-    {{ form.hidden_tag() }}
-
-    <div class="space-y-3">
-      <div>
-        <label for="{{ form.name.id }}" class="{{ label }}">{{ form.name.label.text }}</label>
-        {{ form.name(class=field, **{"autocomplete": "off"}) }}
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label for="{{ form.quantity.id }}" class="{{ label }}">{{ form.quantity.label.text }}</label>
-          {{ form.quantity(class=field) }}
-        </div>
-        <div>
-          <label for="{{ form.unit.id }}" class="{{ label }}">{{ form.unit.label.text }}</label>
-          {{ unit_combobox(form.unit, field) }}
-        </div>
-      </div>
-      <div>
-        <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
-        {{ form.notes(class=field) }}
-      </div>
-    </div>
-
-    <div id="add-form-errors" class="mt-2 empty:hidden"></div>
-
-    <button type="submit"
-            class="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
-      Add to pantry
-    </button>
-  </form>
-
-  {# ---------- Search + list ---------- #}
-  <div class="mb-3">
-    <label for="search" class="sr-only">Search pantry</label>
-    <input id="search"
-           type="search"
-           name="q"
-           value="{{ query }}"
-           placeholder="Search pantry"
-           autocomplete="off"
-           hx-get="{{ url_for('pantry_list') }}"
-           hx-trigger="keyup changed delay:250ms, search"
-           hx-target="#pantry-list"
-           hx-swap="outerHTML"
-           class="block w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-  </div>
-
-  {% include "_pantry_list.html" %}
-
-  {# ---------- AI meal planner (Phase 3A) ---------- #}
-  <section class="mt-8" aria-labelledby="meal-plan-heading">
+  {# ---------- AI meal planner (Phase 3A, promoted above the fold in 3E) ---------- #}
+  <section aria-labelledby="meal-plan-heading">
     <div class="flex items-baseline justify-between gap-2">
-      <h2 id="meal-plan-heading" class="text-sm font-semibold text-stone-900">
+      <h2 id="meal-plan-heading" class="text-base font-semibold text-stone-900">
         Plan a meal
       </h2>
       {# Phase 3D: cost pill. Populated client-side from GET /cost on
@@ -160,18 +100,92 @@
       </div>
     </div>
 
-    {# Server-rendered slot for the meal plan card. On GET /pantry we
-       prime it with the latest plan so users coming back see their
-       last suggestion. Successive POST /meal-plan responses swap the
-       innerHTML of this div. #}
+    {# Server-rendered slot for the meal plan card.
+       Phase 3E: when priming on GET /pantry we render with
+       context="teaser" so the historical plan shows collapsed (the user
+       came back to plan something NEW, not to re-read what they cooked
+       last night) and we add a "Last meal · View all →" framing line
+       above it. The framing label sits INSIDE #meal-plan-result so the
+       htmx innerHTML swap from a fresh POST /meal-plan response cleanly
+       replaces both the framing and the teaser with a fresh expanded
+       card (default context="inline"). #}
     <div id="meal-plan-result" class="mt-3">
       {% if latest_meal_plan %}
-        {% with plan = latest_meal_plan %}
+        <div class="mb-2 flex items-baseline justify-between gap-2">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+            Last meal
+          </span>
+          <a href="{{ url_for('meals_list') }}"
+             class="text-xs font-medium text-green-700 hover:text-green-800">
+            View all →
+          </a>
+        </div>
+        {% with plan = latest_meal_plan, context = "teaser" %}
           {% include "_meal_plan_card.html" %}
         {% endwith %}
       {% endif %}
     </div>
   </section>
+
+  {# ---------- Add form ---------- #}
+  {% set field = "block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" %}
+  {% set label = "mb-1 block text-xs font-medium text-stone-600" %}
+
+  <form method="post"
+        action="{{ url_for('pantry_add') }}"
+        hx-post="{{ url_for('pantry_add') }}"
+        hx-target="#pantry-list"
+        hx-swap="outerHTML"
+        hx-on::after-request="if (event.detail.successful) this.reset();"
+        class="mt-8 mb-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+    {{ form.hidden_tag() }}
+
+    <div class="space-y-3">
+      <div>
+        <label for="{{ form.name.id }}" class="{{ label }}">{{ form.name.label.text }}</label>
+        {{ form.name(class=field, **{"autocomplete": "off"}) }}
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="{{ form.quantity.id }}" class="{{ label }}">{{ form.quantity.label.text }}</label>
+          {{ form.quantity(class=field) }}
+        </div>
+        <div>
+          <label for="{{ form.unit.id }}" class="{{ label }}">{{ form.unit.label.text }}</label>
+          {{ unit_combobox(form.unit, field) }}
+        </div>
+      </div>
+      <div>
+        <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
+        {{ form.notes(class=field) }}
+      </div>
+    </div>
+
+    <div id="add-form-errors" class="mt-2 empty:hidden"></div>
+
+    <button type="submit"
+            class="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
+      Add to pantry
+    </button>
+  </form>
+
+  {# ---------- Search + list ---------- #}
+  <div class="mb-3">
+    <label for="search" class="sr-only">Search pantry</label>
+    <input id="search"
+           type="search"
+           name="q"
+           value="{{ query }}"
+           placeholder="Search pantry"
+           autocomplete="off"
+           hx-get="{{ url_for('pantry_list') }}"
+           hx-trigger="keyup changed delay:250ms, search"
+           hx-target="#pantry-list"
+           hx-swap="outerHTML"
+           class="block w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+  </div>
+
+  {% include "_pantry_list.html" %}
 
   {# ---------- Household share card (Phase 2B) ---------- #}
   {% include "_household_share.html" %}
