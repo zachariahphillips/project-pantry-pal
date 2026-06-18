@@ -709,10 +709,15 @@ def _register_routes(app: Flask) -> None:
         OpenAI (so a misuse loop bills at most N calls/day per
         account), and maps the helper's (dict, error_kind) tuple to
         the right user-facing message + status code.
+
+        Phase 3F: the rate-limit + OpenAI + persist + render-card
+        steady-state is factored into `_create_meal_plan_card_response`
+        so the new POST /meal-plan/from/<plan_id> ("Cook again")
+        route can share it without duplication.
         """
         prompt = (request.form.get("prompt") or "").strip()
         # Cap at 240 chars — long-tail prompts blow tokens for no benefit
-        # and make the response noisier. Phase 3C may add a UI counter.
+        # and make the response noisier.
         if not prompt or len(prompt) > 240:
             if request.headers.get("HX-Request"):
                 return render_template(
@@ -722,60 +727,28 @@ def _register_routes(app: Flask) -> None:
             flash("Tell me what you want to make.", "error")
             return redirect(url_for("pantry_list"))
 
-        # Phase 3C: per-user daily cap, evaluated BEFORE the OpenAI
-        # call so an exhausted user pays no token cost on the rejection
-        # path. We use UTC midnight as the reset boundary — same as
-        # `created_at` is stored — so the rollover is unambiguous.
-        # Per-user (not per-household) so one user can't accidentally
-        # burn the whole household's daily quota.
-        daily_limit = _get_daily_limit()
-        used_today = _meal_plans_today_for_user(current_user.id)
-        if used_today >= daily_limit:
-            cap_msg = (
-                f"You've used your {daily_limit} AI meal plans for "
-                "today. The limit resets at midnight UTC."
-            )
-            if request.headers.get("HX-Request"):
-                return render_template(
-                    "_meal_plan_card.html", plan=None, error=cap_msg,
-                ), 429
-            flash(cap_msg, "error")
-            return redirect(url_for("pantry_list"))
+        return _create_meal_plan_card_response(prompt)
 
-        pantry_items = current_user.household.pantry_items.all()
-        plan_dict, error_kind = _ask_openai_for_meal(prompt, pantry_items)
-        if plan_dict is None:
-            # Helper logged the underlying failure. Map the error kind
-            # to a user-facing message + status; fall back to the
-            # generic "AI is taking a nap" copy if we got an unknown
-            # kind back somehow (shouldn't happen but defends against
-            # future SDK additions).
-            user_msg = MEAL_PLAN_ERROR_KIND_TO_USER_MESSAGE.get(
-                error_kind,
-                MEAL_PLAN_ERROR_KIND_TO_USER_MESSAGE["unknown"],
-            )
-            status = MEAL_PLAN_ERROR_KIND_TO_STATUS.get(error_kind, 502)
-            if request.headers.get("HX-Request"):
-                return render_template(
-                    "_meal_plan_card.html", plan=None, error=user_msg,
-                ), status
-            flash(user_msg, "error")
-            return redirect(url_for("pantry_list"))
+    @app.route("/meal-plan/from/<int:plan_id>", methods=["POST"])
+    @login_required
+    def meal_plan_cook_again(plan_id: int):
+        """Phase 3F: re-run a past meal plan's prompt against the CURRENT
+        household pantry. Creates a BRAND-NEW MealPlan row (so history
+        accumulates rather than mutating the source plan) with the same
+        prompt text, `current_user` as the creator (regardless of who
+        originally asked), and the household's pantry as it is RIGHT
+        NOW — so "Cook again" three weeks after the original yields
+        different `have` vs `need` based on what's actually on hand.
 
-        meal_name = (plan_dict.get("meal_name") or "").strip() or "Untitled meal"
-        plan = MealPlan(
-            household_id=current_user.household_id,
-            created_by_user_id=current_user.id,
-            prompt=prompt,
-            response_json=json.dumps(plan_dict),
-            meal_name=meal_name[:200],  # match column length
-        )
-        db.session.add(plan)
-        db.session.commit()
-
-        if request.headers.get("HX-Request"):
-            return render_template("_meal_plan_card.html", plan=plan)
-        return redirect(url_for("pantry_list"))
+        Counts against the daily rate limit the same as a fresh ask
+        — the OpenAI call is just as expensive. Household-scoped: 404
+        when the source plan belongs to a different household (don't
+        leak existence by returning 403).
+        """
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+        return _create_meal_plan_card_response(plan.prompt)
 
     @app.route(
         "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
@@ -1262,6 +1235,74 @@ def _ask_openai_for_meal(
         # surface a generic "try again" message.
         log.warning("OpenAI call failed: %s: %s", type(e).__name__, e)
         return None, "unknown"
+
+
+def _create_meal_plan_card_response(prompt: str):
+    """Phase 3F: shared steady-state of `POST /meal-plan` (free-text
+    ask) and `POST /meal-plan/from/<plan_id>` ("Cook again" — replay a
+    past plan's prompt). Both routes:
+
+      1. Check the per-user daily rate limit (Phase 3C)
+      2. Snapshot the household's pantry RIGHT NOW
+      3. Call OpenAI; map (None, kind) → friendly error card + status
+      4. Persist a brand-new MealPlan row (history accumulates)
+      5. Render the card (htmx) or redirect to /pantry (form post)
+
+    Caller is responsible for prompt validation upstream — the two
+    routes source the prompt differently (form input vs. existing DB
+    column) and have different validation rules.
+
+    Lives at module scope so it can be unit-tested in isolation if
+    we ever want to; today the route-level tests cover it end-to-end.
+    """
+    daily_limit = _get_daily_limit()
+    used_today = _meal_plans_today_for_user(current_user.id)
+    if used_today >= daily_limit:
+        cap_msg = (
+            f"You've used your {daily_limit} AI meal plans for "
+            "today. The limit resets at midnight UTC."
+        )
+        if request.headers.get("HX-Request"):
+            return render_template(
+                "_meal_plan_card.html", plan=None, error=cap_msg,
+            ), 429
+        flash(cap_msg, "error")
+        return redirect(url_for("pantry_list"))
+
+    pantry_items = current_user.household.pantry_items.all()
+    plan_dict, error_kind = _ask_openai_for_meal(prompt, pantry_items)
+    if plan_dict is None:
+        # Helper logged the underlying failure. Map the error kind
+        # to a user-facing message + status; fall back to the
+        # generic "AI is taking a nap" copy if we got an unknown
+        # kind back somehow (shouldn't happen but defends against
+        # future SDK additions).
+        user_msg = MEAL_PLAN_ERROR_KIND_TO_USER_MESSAGE.get(
+            error_kind,
+            MEAL_PLAN_ERROR_KIND_TO_USER_MESSAGE["unknown"],
+        )
+        status = MEAL_PLAN_ERROR_KIND_TO_STATUS.get(error_kind, 502)
+        if request.headers.get("HX-Request"):
+            return render_template(
+                "_meal_plan_card.html", plan=None, error=user_msg,
+            ), status
+        flash(user_msg, "error")
+        return redirect(url_for("pantry_list"))
+
+    meal_name = (plan_dict.get("meal_name") or "").strip() or "Untitled meal"
+    plan = MealPlan(
+        household_id=current_user.household_id,
+        created_by_user_id=current_user.id,
+        prompt=prompt,
+        response_json=json.dumps(plan_dict),
+        meal_name=meal_name[:200],  # match column length
+    )
+    db.session.add(plan)
+    db.session.commit()
+
+    if request.headers.get("HX-Request"):
+        return render_template("_meal_plan_card.html", plan=plan)
+    return redirect(url_for("pantry_list"))
 
 
 def _active_invites_for(household: Household) -> list:

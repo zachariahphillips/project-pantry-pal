@@ -12,11 +12,15 @@
   </div>
 
   {% if plans %}
-    <div class="space-y-3">
+    {# id="meals-list" is the htmx target for "Cook again →" buttons on
+       each card. They POST /meal-plan/from/<id> and prepend the fresh
+       card to the top of this list via hx-swap="afterbegin". #}
+    <div id="meals-list" class="space-y-3">
       {% for plan in plans %}
         {# context="list" → sections start collapsed (otherwise the page
-           is a wall of expanded cards) AND there's no "Plan another"
-           footer (you'd tap Pantry to get back to the prompt). #}
+           is a wall of expanded cards) AND the footer is a "Cook again
+           →" button (Phase 3F) instead of /pantry's "Plan another"
+           scroll-back. #}
         {% with context="list" %}
           {% include "_meal_plan_card.html" %}
         {% endwith %}

@@ -469,3 +469,273 @@ class TestMealPlanModel:
                 meal_name="X",
             )
             assert len(mp.steps) == MEAL_PLAN_MAX_STEPS
+
+
+# ---------------------------------------------------------------------------
+# Phase 3F: "Cook again" — POST /meal-plan/from/<plan_id> replays a past
+# plan's prompt against the household's CURRENT pantry. Shares the
+# rate-limit + OpenAI + persist + render logic with POST /meal-plan via
+# the `_create_meal_plan_card_response` helper, so these tests focus on
+# the bits that differ: prompt-from-DB sourcing, current-pantry semantics,
+# new-row creation, provenance, household scoping, and UI surface area.
+# ---------------------------------------------------------------------------
+
+
+def _make_plan_and_id(client, app, monkeypatch, prompt="pasta carbonara"):
+    """Sign up alice, seed a small pantry, stub OpenAI to CANNED_PLAN,
+    and POST /meal-plan with `prompt`. Returns the new MealPlan.id."""
+    sign_up(client, "alice@example.com", "Alice")
+    _seed_pantry(client, [("Pasta", 1, "lb"), ("Eggs", 6, "ea")])
+    _stub_openai(monkeypatch, CANNED_PLAN)
+    client.post("/meal-plan", data={"prompt": prompt}, htmx=True)
+    with app.app_context():
+        from models import MealPlan
+        return MealPlan.query.one().id
+
+
+class TestCookAgain:
+    def test_creates_new_meal_plan_row_with_same_prompt(
+            self, client, app, monkeypatch):
+        """Cook again should append a brand-new MealPlan to history,
+        not mutate or replace the source plan. The new row's prompt
+        matches the source prompt verbatim."""
+        plan_id = _make_plan_and_id(client, app, monkeypatch, prompt="pasta night")
+
+        with app.app_context():
+            from models import MealPlan
+            assert MealPlan.query.count() == 1
+
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 200
+
+        with app.app_context():
+            from models import MealPlan
+            plans = MealPlan.query.order_by(MealPlan.id).all()
+            assert len(plans) == 2, (
+                "Cook again must accumulate history, not overwrite "
+                "the source plan."
+            )
+            assert plans[0].id == plan_id, "Source plan must be untouched."
+            assert plans[0].prompt == "pasta night"
+            assert plans[1].prompt == "pasta night", (
+                "New plan must replay the source prompt verbatim."
+            )
+            assert plans[1].id != plan_id
+
+    def test_replays_against_current_pantry_not_stale_snapshot(
+            self, client, app, monkeypatch):
+        """The whole point of Cook again is "use what you have NOW."
+        The helper must receive the household's pantry AS OF the
+        Cook-again call — not the pantry that existed when the
+        original plan was made."""
+        captured = {}
+
+        # Original ask sees a 2-item pantry...
+        sign_up(client, "alice@example.com", "Alice")
+        _seed_pantry(client, [("Pasta", 1, "lb"), ("Eggs", 6, "ea")])
+        _stub_openai(monkeypatch, CANNED_PLAN)
+        client.post("/meal-plan", data={"prompt": "pasta"}, htmx=True)
+
+        with app.app_context():
+            from models import MealPlan
+            plan_id = MealPlan.query.one().id
+
+        # ...then the pantry changes (added bacon, removed nothing) before
+        # the user comes back days later and taps Cook again. The helper
+        # should see the NEW pantry contents.
+        _seed_pantry(client, [("Bacon", 1, "lb")])
+
+        def capture(prompt, pantry):
+            captured["pantry_names"] = sorted(p.name for p in pantry)
+            return CANNED_PLAN
+
+        _stub_openai(monkeypatch, capture)
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 200
+        assert captured["pantry_names"] == ["Bacon", "Eggs", "Pasta"], (
+            "Cook again must snapshot the pantry RIGHT NOW, not "
+            "rehydrate from the source plan."
+        )
+
+    def test_returns_rendered_card_html_for_htmx(
+            self, client, app, monkeypatch):
+        plan_id = _make_plan_and_id(client, app, monkeypatch)
+
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 200
+        body = _body(resp)
+        # The newly rendered card has the meal_name from the canned
+        # response and the original prompt in the "From '...'" header.
+        assert "Spaghetti carbonara" in body
+        assert "pasta carbonara" in body
+
+    def test_non_htmx_post_redirects_to_pantry(
+            self, client, app, monkeypatch):
+        """Form posts (no HX-Request header) should redirect back to
+        /pantry — same convention as POST /meal-plan."""
+        plan_id = _make_plan_and_id(client, app, monkeypatch)
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=False)
+        assert resp.status_code == 302
+        assert "/pantry" in resp.headers["Location"]
+
+    def test_unknown_plan_id_returns_404(
+            self, client, app, monkeypatch):
+        sign_up(client, "h@example.com", "H")
+        _stub_openai(monkeypatch, CANNED_PLAN)
+        resp = client.post("/meal-plan/99999", htmx=True)
+        # Route shape is /meal-plan/from/<id> — 99999 alone hits a
+        # different route; verify the actual cook-again URL too.
+        resp = client.post("/meal-plan/from/99999", htmx=True)
+        assert resp.status_code == 404
+
+    def test_cross_household_source_plan_returns_404(
+            self, two_clients, app, monkeypatch):
+        """Bob in household B cannot Cook again on a plan owned by
+        Alice in household A. Returns 404 (not 403) so we don't leak
+        the existence of cross-household plan IDs."""
+        alice, bob = two_clients
+        sign_up(alice, "alice@example.com", "Alice")
+        sign_up(bob, "bob@example.com", "Bob")
+
+        _seed_pantry(alice, [("Pasta", 1, "lb")])
+        _stub_openai(monkeypatch, CANNED_PLAN)
+        alice.post("/meal-plan", data={"prompt": "pasta"}, htmx=True)
+        with app.app_context():
+            from models import MealPlan
+            alices_plan_id = MealPlan.query.one().id
+
+        resp = bob.post(
+            f"/meal-plan/from/{alices_plan_id}", htmx=True,
+        )
+        assert resp.status_code == 404
+
+        # And no new plan should have been created in either household
+        with app.app_context():
+            from models import MealPlan
+            assert MealPlan.query.count() == 1
+
+    def test_provenance_is_current_user_not_original_asker(
+            self, app, monkeypatch):
+        """If Alice asked the original plan and Bob (her roommate)
+        taps Cook again, the new plan should be attributed to Bob
+        (he's the one who decided to cook it again). Same provenance
+        convention as the "I'm home →" move (Phase 3F Chunk A)."""
+        from tests.conftest import Client
+        from models import Household, Invite, User
+        from extensions import db
+
+        alice_c = Client(app.test_client())
+        bob_c = Client(app.test_client())
+
+        sign_up(alice_c, "alice@example.com", "Alice")
+        sign_up(bob_c, "bob@example.com", "Bob")
+
+        # Move bob into alice's household via direct DB update (same
+        # shortcut other tests in this file use; an invite round-trip
+        # is exercised in test_phase_2b).
+        with app.app_context():
+            alice = User.query.filter_by(email="alice@example.com").one()
+            bob = User.query.filter_by(email="bob@example.com").one()
+            bob.household_id = alice.household_id
+            db.session.commit()
+            alice_household_id = alice.household_id
+            alice_id = alice.id
+            bob_id = bob.id
+
+        _seed_pantry(alice_c, [("Pasta", 1, "lb")])
+        _stub_openai(monkeypatch, CANNED_PLAN)
+        alice_c.post(
+            "/meal-plan", data={"prompt": "pasta"}, htmx=True,
+        )
+        with app.app_context():
+            from models import MealPlan
+            plan_id = MealPlan.query.one().id
+            assert MealPlan.query.one().created_by_user_id == alice_id
+
+        # Bob (the roommate) taps Cook again
+        resp = bob_c.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 200
+
+        with app.app_context():
+            from models import MealPlan
+            plans = MealPlan.query.order_by(MealPlan.id).all()
+            assert len(plans) == 2
+            assert plans[0].created_by_user_id == alice_id, (
+                "Source plan provenance must NOT be rewritten."
+            )
+            assert plans[1].created_by_user_id == bob_id, (
+                "New plan must be attributed to whoever tapped Cook "
+                "again — not the original asker."
+            )
+            # Both plans live in the same household
+            assert plans[1].household_id == alice_household_id
+
+    def test_counts_against_daily_rate_limit(
+            self, client, app, monkeypatch):
+        """Cook again uses the same OpenAI quota as a fresh ask —
+        the call costs the same. With limit=2, one fresh ask + one
+        cook-again fully consumes the day; a third request 429s."""
+        monkeypatch.setenv("MEAL_PLAN_DAILY_LIMIT", "2")
+        sign_up(client, "rate@example.com", "Rate")
+        _seed_pantry(client, [("Pasta", 1, "lb")])
+        _stub_openai(monkeypatch, CANNED_PLAN)
+
+        # 1st call: fresh ask (1/2 used)
+        resp = client.post(
+            "/meal-plan", data={"prompt": "p"}, htmx=True,
+        )
+        assert resp.status_code == 200
+        with app.app_context():
+            from models import MealPlan
+            plan_id = MealPlan.query.one().id
+
+        # 2nd call: cook again (2/2 used)
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 200
+
+        # 3rd call: cook again again — should 429
+        resp = client.post(f"/meal-plan/from/{plan_id}", htmx=True)
+        assert resp.status_code == 429, _body(resp)
+        body = _body(resp)
+        assert "2 AI meal plans" in body
+        assert "midnight UTC" in body
+
+        # And the failed call did NOT land a new MealPlan row
+        with app.app_context():
+            from models import MealPlan
+            assert MealPlan.query.count() == 2
+
+    def test_anonymous_post_redirects_to_login(self, client):
+        """Endpoint is @login_required — anonymous users get bounced
+        to /login like every other authed route."""
+        resp = client.post("/meal-plan/from/1")
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+
+    def test_cook_again_button_renders_only_on_meals_list(
+            self, client, app, monkeypatch):
+        """The button is scoped to context="list" in the card partial,
+        which is the only context /meals uses. /pantry's priming
+        teaser MUST NOT show it (the prompt input is right there —
+        the user should retype, not replay)."""
+        plan_id = _make_plan_and_id(client, app, monkeypatch)
+        cook_again_url = f"/meal-plan/from/{plan_id}"
+
+        # /meals — button should be present
+        meals_body = _body(client.get("/meals"))
+        assert cook_again_url in meals_body, (
+            "Cook again button missing from /meals — the entire "
+            "feature is hidden from the user."
+        )
+        assert 'id="meals-list"' in meals_body, (
+            "/meals must have id='meals-list' on the card wrapper "
+            "so the htmx prepend target works."
+        )
+
+        # /pantry — teaser MUST NOT contain the button (only the
+        # collapsed source plan as context="teaser")
+        pantry_body = _body(client.get("/pantry"))
+        assert cook_again_url not in pantry_body, (
+            "Cook again button must NOT appear in the /pantry teaser. "
+            "The prompt input is right above — the user should retype."
+        )

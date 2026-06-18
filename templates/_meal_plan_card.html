@@ -16,12 +16,16 @@
                                   adds a "Last meal · View all →" label.
     context="list"              — used on /meals. Sections start CLOSED
                                   (so 20+ stacked cards stay scrollable).
-                                  No "Plan another" — the user can tap
-                                  the Pantry tab to get back to the
-                                  prompt.
+                                  Footer shows a "Cook again →" button
+                                  (Phase 3F) that POSTs to
+                                  /meal-plan/from/<plan.id> — replays
+                                  the prompt against the CURRENT pantry
+                                  state and prepends a fresh card to
+                                  the top of #meals-list.
 
   Both "teaser" and "list" rely on the same `_details_open == ""`
-  branch; they differ only in caller intent + surrounding framing.
+  branch; they differ only in caller intent + surrounding framing
+  (and the list-only "Cook again →" footer).
 
   Error/empty states:
     plan = None + error string  — red error card (422 / 502 responses).
@@ -154,6 +158,36 @@
             <path d="M10 4v12M4 10h12"/>
           </svg>
           Plan another meal
+        </button>
+      </footer>
+    {% elif _context == "list" %}
+      {# Phase 3F: "Cook again →" — re-runs THIS plan's prompt against
+         the household's CURRENT pantry. Posts to
+         /meal-plan/from/<plan_id> which creates a brand-new MealPlan
+         row (history accumulates rather than overwriting) and prepends
+         the fresh card to the top of #meals-list. The new card lands
+         in "list" context too, so it also gets its own "Cook again →"
+         button. Same daily rate limit as a fresh ask — the OpenAI
+         call costs the same.
+
+         hx-disabled-elt="this" + the button-local text swap give the
+         user a "Thinking…" affordance during the 2-5s OpenAI round-
+         trip without needing a global skeleton on /meals. #}
+      <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
+        <button type="button"
+                hx-post="{{ url_for('meal_plan_cook_again', plan_id=plan.id) }}"
+                hx-target="#meals-list"
+                hx-swap="afterbegin"
+                hx-disabled-elt="this"
+                hx-on::before-request="this.dataset.origText = this.innerHTML; this.innerHTML = 'Thinking\u2026';"
+                hx-on::after-request="this.innerHTML = this.dataset.origText;"
+                aria-label="Cook this meal again with the current pantry"
+                class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
+          <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4v5h.582M19.418 11A8.001 8.001 0 0 1 5.582 9M19 16v-5h-.582M4.582 9A8.001 8.001 0 0 1 18.418 11"/>
+          </svg>
+          Cook again →
         </button>
       </footer>
     {% endif %}
