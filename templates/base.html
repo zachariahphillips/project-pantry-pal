@@ -58,6 +58,19 @@
       const n = (e.detail && e.detail.count) || 0;
       showToast(n === 1 ? 'Added 1 item to shopping' : `Added ${n} items to shopping`);
     });
+    // Phase 3F: "I'm home" toast — confirms how many shopping items
+    // just moved into the pantry as new rows.
+    document.addEventListener('shopping:moved-to-pantry', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Moved 1 item to pantry' : `Moved ${n} items to pantry`);
+    });
+    // Phase 3F: "Clear checked" toast — pre-3F this route silently
+    // re-rendered, so the user had no confirmation that anything
+    // happened beyond the items disappearing from the list.
+    document.addEventListener('shopping:cleared-checked', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Cleared 1 checked item' : `Cleared ${n} checked items`);
+    });
 
     // ---------------------------------------------------------------
     // Unit combobox (replaces the native <datalist>, which renders as

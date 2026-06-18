@@ -1,17 +1,38 @@
 <div id="shopping-list" class="space-y-2">
+  {# Phase 3F: shopping-actions bar.
+     Shows only when the household has at least one checked item.
+     "Clear checked" (secondary, white) = drop them entirely without
+       touching the pantry. Confirmation modal because it's destructive.
+     "I'm home →" (primary, green) = the killer-feature flow. Move
+       checked items into the pantry (always as new rows; no dedupe
+       — see shopping_move_checked_to_pantry docstring) and remove
+       them from shopping. No hx-confirm because the action is
+       non-destructive (items just relocate to the pantry where they
+       can be edited/deleted normally). #}
   {% if checked_count and checked_count > 0 %}
-    <div class="flex items-center justify-between rounded-xl bg-stone-100 px-4 py-2">
+    {% set _s = "" if checked_count == 1 else "s" %}
+    <div class="flex items-center justify-between gap-2 rounded-xl bg-stone-100 px-4 py-2">
       <p class="text-xs text-stone-600">
         {{ checked_count }} checked off
       </p>
-      <button type="button"
-              hx-post="{{ url_for('shopping_clear_checked') }}"
-              hx-target="#shopping-list"
-              hx-swap="outerHTML"
-              hx-confirm="Clear all checked items from your shopping list?"
-              class="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50">
-        Clear checked
-      </button>
+      <div class="flex items-center gap-2">
+        <button type="button"
+                hx-post="{{ url_for('shopping_clear_checked') }}"
+                hx-target="#shopping-list"
+                hx-swap="outerHTML"
+                hx-confirm="Clear {{ checked_count }} checked item{{ _s }} from your shopping list?"
+                class="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50">
+          Clear checked
+        </button>
+        <button type="button"
+                hx-post="{{ url_for('shopping_move_checked_to_pantry') }}"
+                hx-target="#shopping-list"
+                hx-swap="outerHTML"
+                aria-label="I'm home — move {{ checked_count }} checked item{{ _s }} into the pantry"
+                class="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-green-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">
+          I'm home →
+        </button>
+      </div>
     </div>
   {% endif %}
 

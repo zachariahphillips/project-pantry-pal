@@ -514,10 +514,81 @@ def _register_routes(app: Flask) -> None:
             db.session.delete(item)
         db.session.commit()
         items = current_user.household.shopping_items.all()
-        return render_template(
+        body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=0,
         )
+        # Phase 3F: fire a toast so the user gets confirmation that
+        # something happened. Pre-3F this route silently re-rendered
+        # the list, which made it ambiguous whether the tap landed —
+        # especially with hx-confirm (the modal swallowed perceived
+        # feedback). Only fire when something was actually deleted so
+        # a stale double-tap doesn't show "Cleared 0 items".
+        if deleted:
+            return body, 200, {
+                "HX-Trigger": json.dumps({
+                    "shopping:cleared-checked": {"count": len(deleted)}
+                })
+            }
+        return body
+
+    @app.route("/shopping/move-checked-to-pantry", methods=["POST"])
+    @login_required
+    def shopping_move_checked_to_pantry():
+        """Phase 3F: "I'm home" — every CHECKED shopping item in the
+        user's household becomes a NEW pantry row, then the original
+        shopping items are deleted. Atomic — all or nothing inside
+        one db.session.commit().
+
+        Dup handling: always add a new pantry row. If "Milk" is already
+        in the pantry, you'll get a second "Milk" row. This matches the
+        codebase's established "two taps = two rows" philosophy (see
+        `pantry_item_to_shopping` above, and the
+        `test_two_taps_create_two_rows_no_dedupe` test guarding it).
+        Households dedupe manually via the pantry row's Edit/Delete.
+
+        Provenance: the new pantry row's `added_by_user_id` is set to
+        `current_user` — the person who actually brought the items
+        home — NOT the roommate who originally put them on the shopping
+        list. Same pattern as `pantry_item_to_shopping`.
+
+        Household-scoped: only items in the caller's household are
+        considered. A user in household A cannot touch household B's
+        shopping items even by guessing IDs (the filter is on
+        household_id, not on item IDs).
+        """
+        checked = current_user.household.shopping_items.filter_by(
+            checked=True,
+        ).all()
+        for s in checked:
+            new_pantry = PantryItem(
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
+                name=s.name,
+                quantity=s.quantity,
+                unit=s.unit,
+                notes=s.notes,
+            )
+            db.session.add(new_pantry)
+            db.session.delete(s)
+        db.session.commit()
+        moved = len(checked)
+
+        items = current_user.household.shopping_items.all()
+        body = render_template(
+            "_shopping_list.html", items=items, query="",
+            checked_count=0,
+        )
+        if moved > 0:
+            return body, 200, {
+                "HX-Trigger": json.dumps({
+                    "shopping:moved-to-pantry": {"count": moved}
+                })
+            }
+        # Defensive: button shouldn't be tappable with 0 checked
+        # (the action bar is gated behind {% if checked_count > 0 %})
+        # but a curl POST could still hit this. No-op, no toast.
+        return body
 
     # ---- Phase 2B: invite/join ---------------------------------------
 
