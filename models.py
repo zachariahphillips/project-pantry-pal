@@ -46,9 +46,18 @@ class Household(db.Model):
         backref="household",
         lazy="dynamic",
         cascade="all, delete-orphan",
-        # Unchecked items first (False sorts before True), then newest within
-        # each group. Keeps "what still needs buying" at the top of the list.
-        order_by="ShoppingItem.checked.asc(), ShoppingItem.added_at.desc()",
+        # Unchecked items first (False sorts before True), then within each
+        # group: checked items sort by checked_at DESC (most-recently
+        # crossed off at the top of the checked section — most likely
+        # undo target). Unchecked items all have checked_at IS NULL
+        # which sorts LAST in DESC on SQLite, so they tie on that key
+        # and fall through to added_at.desc() — preserving the original
+        # "newest unchecked at top" behavior. Phase 3G.
+        order_by=(
+            "ShoppingItem.checked.asc(), "
+            "ShoppingItem.checked_at.desc(), "
+            "ShoppingItem.added_at.desc()"
+        ),
     )
 
     def __repr__(self) -> str:
@@ -179,6 +188,14 @@ class ShoppingItem(db.Model):
     notes = db.Column(db.String(280), nullable=True)
     checked = db.Column(db.Boolean, default=False, nullable=False, index=True)
     added_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Phase 3G: timestamp of the most recent False→True toggle. NULL
+    # while the item is unchecked. Powers "most-recently-checked at
+    # top of the checked section" sort + a future "undo last check"
+    # feature. Cleared (set to None) when the user un-checks an item.
+    # Added as a lazy ALTER in `_ensure_shopping_checked_at_column`;
+    # legacy checked rows get backfilled with added_at so the sort
+    # order is stable across the migration boundary.
+    checked_at = db.Column(db.DateTime, nullable=True, index=True)
 
     def display_quantity(self) -> str:
         if self.quantity is None and not self.unit:

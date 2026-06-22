@@ -38,6 +38,7 @@ See PLAN.md for the full phased build plan.
 import json
 import logging
 import os
+from datetime import datetime
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -120,8 +121,12 @@ def create_app() -> Flask:
         # Phase 1A: bootstrap the schema on startup. We'll switch to
         # Flask-Migrate in Phase 2 when the schema needs to evolve without
         # dropping data. For Phase 2A's additive change (households table,
-        # household_id columns) create_all is enough — see _run_phase_2a_migration
-        # for the row-level backfill.
+        # household_id columns) create_all is enough — see
+        # _run_phase_2a_migration for the row-level backfill. Phase 3G's
+        # shopping_items.checked_at column add is also chained inside
+        # _run_phase_2a_migration so ALL schema ALTERs run before any
+        # ORM-level queries (which would otherwise SELECT columns the
+        # legacy DB doesn't yet have).
         db.create_all()
         _run_phase_2a_migration()
 
@@ -497,6 +502,11 @@ def _register_routes(app: Flask) -> None:
     def shopping_item_toggle(item_id: int):
         item = _get_shopping_item_or_404(item_id)
         item.checked = not item.checked
+        # Phase 3G: track WHEN we crossed it off so the checked section
+        # can sort by most-recently-checked-first. Cleared on un-check
+        # so a re-check resets the timestamp (preventing a re-checked
+        # item from sorting against its stale prior position).
+        item.checked_at = datetime.utcnow() if item.checked else None
         db.session.commit()
         # Re-render the whole list so checked items re-sort to the bottom.
         items = current_user.household.shopping_items.all()
@@ -938,6 +948,56 @@ def _ensure_phase_2a_columns() -> None:
                 conn.exec_driver_sql(sql)
 
 
+def _ensure_shopping_checked_at_column() -> None:
+    """Phase 3G: add the `shopping_items.checked_at` column if missing,
+    and backfill legacy checked rows with `added_at` so the new sort
+    order (most-recently-checked at top of the checked section)
+    doesn't shuffle legacy data unpredictably on first boot.
+
+    Idempotent: on a DB that already has the column AND has nothing
+    to backfill, this is two cheap SELECTs and no commits. Safe to run
+    on every startup. Same lazy-ALTER pattern as
+    `_ensure_phase_2a_columns` — we don't pull in Alembic for a single
+    nullable column.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("shopping_items"):
+        return
+
+    cols = {c["name"] for c in inspector.get_columns("shopping_items")}
+    column_was_added = False
+    if "checked_at" not in cols:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                'ALTER TABLE shopping_items ADD COLUMN checked_at DATETIME'
+            )
+        column_was_added = True
+
+    # Backfill: every row that's `checked=True` but has `checked_at IS NULL`
+    # needs a value. Two cases land here:
+    #   1. We just ran the ALTER above — every pre-existing checked row
+    #      starts at NULL.
+    #   2. A row was checked off pre-3G (or a future bug) skipped setting
+    #      checked_at. The backfill is defensive against both.
+    # We use `added_at` as the stand-in: it's the least-wrong "when was
+    # this checked" approximation (no information loss happens; the
+    # only consequence is that pre-3G checked items sort by added_at
+    # within the checked group, which matches their pre-3G position).
+    needs_backfill = ShoppingItem.query.filter(
+        ShoppingItem.checked.is_(True),
+        ShoppingItem.checked_at.is_(None),
+    ).all()
+    if needs_backfill:
+        for item in needs_backfill:
+            item.checked_at = item.added_at
+        db.session.commit()
+    elif column_was_added:
+        # We added the column but found no rows to backfill — still
+        # commit an empty session so the ALTER is durable in test
+        # contexts that share a session.
+        db.session.commit()
+
+
 def _run_phase_2a_migration() -> None:
     """
     Backfill households for any user that doesn't have one yet, and point
@@ -954,6 +1014,12 @@ def _run_phase_2a_migration() -> None:
     # create_all() handles new TABLES but never adds COLUMNS to existing
     # tables — the upgrade path from Phase 1C to 2A needs this explicit ALTER.
     _ensure_phase_2a_columns()
+    # Phase 3G's shopping_items.checked_at also has to be added BEFORE
+    # any ORM queries run below — otherwise SQLAlchemy generates SELECT
+    # statements with `checked_at` against a legacy DB that doesn't
+    # have the column yet, and the backfill below dies on the ShoppingItem
+    # query. Chained here for the same reason the 2A column add is.
+    _ensure_shopping_checked_at_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:

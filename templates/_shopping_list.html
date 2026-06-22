@@ -37,7 +37,32 @@
   {% endif %}
 
   {% if items %}
-    {% for item in items %}{% include "_shopping_item.html" %}{% endfor %}
+    {# Phase 3G: split into unchecked + checked sections so we can drop
+       a "Checked off (N)" label divider between them. The backend
+       passes `items` already sorted (unchecked first, then checked
+       most-recently-checked first) — Jinja just splits, doesn't sort.
+       Using filters keeps the existing single-list backend contract
+       intact across all 6 routes that re-render this partial. #}
+    {% set _unchecked = items | rejectattr("checked") | list %}
+    {% set _checked = items | selectattr("checked") | list %}
+
+    {% for item in _unchecked %}{% include "_shopping_item.html" %}{% endfor %}
+
+    {% if _checked %}
+      {# Label divider — small uppercase label on the left, hairline
+         rule filling the remaining width. Subtle enough not to
+         compete with the action bar above; structured enough to
+         clearly bracket the strikethrough section below. The pt-3
+         gives breathing room when the list above is non-empty
+         (and isn't loud when the unchecked list is empty either). #}
+      <div class="flex items-center gap-3 px-1 pt-3 pb-1">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+          Checked off ({{ _checked|length }})
+        </span>
+        <span class="h-px flex-1 bg-stone-200"></span>
+      </div>
+      {% for item in _checked %}{% include "_shopping_item.html" %}{% endfor %}
+    {% endif %}
   {% else %}
     <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
       {% if query %}
