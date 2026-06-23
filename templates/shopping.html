@@ -15,42 +15,105 @@
   {% set field = "block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" %}
   {% set label = "mb-1 block text-xs font-medium text-stone-600" %}
 
+  {# Phase 3H — Theme 3 Chunk A: quick-add bar.
+     Pre-3H this was a ~250px form-card (name + qty + unit + notes + a
+     full-width "Add to shopping list" button) that pushed every item
+     below the fold on mobile, even though ~80% of shopping items only
+     need a name. The new layout is a single inline `[Item name] [+]`
+     bar with the rest tucked behind a collapsible "More details"
+     expander.
+
+     The form / route / WTForm shape is unchanged — qty/unit/notes are
+     still submitted, just not shown by default. The hx-on::after-request
+     handler does three things on success so users can rapid-fire add
+     multiple items: reset values, collapse the details element back to
+     its default (so a one-off qty edit doesn't sticky for the next
+     item), and refocus the name input (keyboard stays up on mobile).
+  #}
   <form method="post"
         action="{{ url_for('shopping_add') }}"
         hx-post="{{ url_for('shopping_add') }}"
         hx-target="#shopping-list"
         hx-swap="outerHTML"
-        hx-on::after-request="if (event.detail.successful) this.reset();"
-        class="mb-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+        hx-on::after-request="
+          if (event.detail.successful) {
+            this.reset();
+            const det = this.querySelector('details');
+            if (det) det.open = false;
+            const nameInput = this.querySelector('input[name=name]');
+            if (nameInput) nameInput.focus();
+          }
+        "
+        class="mb-5 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
     {{ form.hidden_tag() }}
 
-    <div class="space-y-3">
-      <div>
-        <label for="{{ form.name.id }}" class="{{ label }}">{{ form.name.label.text }}</label>
-        {{ form.name(class=field, **{"autocomplete": "off", "placeholder": "e.g. tortillas"}) }}
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label for="{{ form.quantity.id }}" class="{{ label }}">{{ form.quantity.label.text }}</label>
-          {{ form.quantity(class=field) }}
-        </div>
-        <div>
-          <label for="{{ form.unit.id }}" class="{{ label }}">{{ form.unit.label.text }}</label>
-          {{ unit_combobox(form.unit, field) }}
-        </div>
-      </div>
-      <div>
-        <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
-        {{ form.notes(class=field, **{"placeholder": "e.g. Costco brand"}) }}
-      </div>
+    {# Quick-add bar: name input fills available width, "+" submit
+       button is icon-only with an aria-label for screen readers. The
+       sr-only label points at the name input for assistive tech;
+       sighted users get the placeholder + the surrounding context
+       ("Shopping list" h1 directly above). #}
+    <div class="flex gap-2">
+      <label for="{{ form.name.id }}" class="sr-only">{{ form.name.label.text }}</label>
+      {{ form.name(
+          class=field + " flex-1",
+          **{"autocomplete": "off", "placeholder": "Add an item (e.g. tortillas)"}
+      ) }}
+      <button type="submit"
+              aria-label="Add to shopping list"
+              class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
+        <svg viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor"
+             stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M10 4v12M4 10h12"/>
+        </svg>
+      </button>
     </div>
 
+    {# Errors slot — populated by hx-retarget on 422 responses. Empty
+       and hidden in the steady state. Positioned BEFORE the details
+       expander so qty/unit/notes errors are visible without needing
+       the user to re-open "More details" (the server keeps the details
+       open on error by re-rendering the field set; see <details open>
+       below — currently we don't drive that, so a qty error today would
+       show up here but the qty field would re-collapse on re-render.
+       Acceptable for v1; the validators today only fail on name length
+       which surfaces inline against the always-visible name input). #}
     <div id="shopping-add-form-errors" class="mt-2 empty:hidden"></div>
 
-    <button type="submit"
-            class="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
-      Add to shopping list
-    </button>
+    {# "More details" expander. Native details/summary is the right
+       primitive here — semantic, keyboard-accessible (Space/Enter on
+       the summary toggles it), and degrades gracefully without JS.
+       Note the qty/unit/notes form fields stay SUBMITTABLE even when
+       the details element is collapsed (they're still in the form,
+       just not visible) — that's how a user who expands, fills out
+       qty, and hits Enter in the name field still gets qty in the
+       POST body. #}
+    <details class="mt-2 group">
+      <summary class="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-stone-500 hover:text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-300">
+        <svg viewBox="0 0 20 20" class="h-3 w-3 transition-transform group-open:rotate-90"
+             fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 5l5 5-5 5"/>
+        </svg>
+        <span>More details</span>
+      </summary>
+      <div class="mt-3 space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="{{ form.quantity.id }}" class="{{ label }}">{{ form.quantity.label.text }}</label>
+            {{ form.quantity(class=field) }}
+          </div>
+          <div>
+            <label for="{{ form.unit.id }}" class="{{ label }}">{{ form.unit.label.text }}</label>
+            {{ unit_combobox(form.unit, field) }}
+          </div>
+        </div>
+        <div>
+          <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
+          {{ form.notes(class=field, **{"placeholder": "e.g. Costco brand"}) }}
+        </div>
+      </div>
+    </details>
   </form>
 
   <div class="mb-3">
