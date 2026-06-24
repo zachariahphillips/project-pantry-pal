@@ -14,6 +14,12 @@ Phase 3A: MealPlan — AI-generated meal plans (meal_name, have, need,
 steps). Stores the raw OpenAI JSON response so we can reformat the UI
 without re-paying for the API call, plus a denormalized meal_name for
 fast list rendering. Also a pure new-table migration.
+Phase 3I: ShoppingNameFrequency — append-only counter of how often a
+household has added each shopping item NAME, used to power the
+"Add again" smart-recall chips on /shopping. Needed because the
+shopping_items table is hard-deleted on cleanup (Clear checked,
+"I'm home", explicit Delete), so it carries no historical signal.
+Pure new-table migration.
 """
 
 import json
@@ -394,4 +400,84 @@ class MealPlan(db.Model):
         return (
             f"<MealPlan {self.meal_name!r} household={self.household_id} "
             f"created_by={self.created_by_user_id}>"
+        )
+
+
+# --- Phase 3I: shopping name frequency ------------------------------------
+
+# Cap on how many "Add again" chips we surface on /shopping. Five is
+# enough to show genuine patterns without overwhelming the strip on
+# mobile (~3 chips per row at typical phone width).
+SHOPPING_SUGGESTION_LIMIT = 5
+
+# Distinct-historical-names threshold before we render any chips at all.
+# Brand-new households with only 1-2 historical adds get nothing — chips
+# would feel noisy and unhelpful at that scale. Once they cross this
+# bar (signaling actual usage patterns), the chip strip lights up.
+SHOPPING_SUGGESTION_MIN_DISTINCT = 3
+
+
+class ShoppingNameFrequency(db.Model):
+    """Append-only counter: how many times has this household added a
+    shopping item with this NAME (case-insensitive)?
+
+    Why a separate table instead of aggregating from `shopping_items`?
+    `shopping_items` rows are hard-deleted on cleanup (Clear checked,
+    "I'm home", explicit Delete), so the table carries zero historical
+    signal — at any moment it just reflects the current list. To rank
+    chips by "what you usually buy" we need an append-only record that
+    survives the cleanup. One row per (household, name_lower); we
+    UPSERT-style bump `count` and refresh `last_added_at` on each new
+    add. `display_name` tracks the most-recent casing the user typed
+    so the chip honors their preferred form ("milk" → "Milk" if they
+    later capitalized it).
+
+    All shopping-item add paths bump this counter through
+    `_bump_shopping_name_frequency` in app.py — the regular add form,
+    the pantry's "+ Shop" cross-link, and both meal-plan-needs
+    cross-links. Chip taps re-bump because they go through the same
+    /shopping POST route, so popular chips stay popular (intentional
+    feedback loop).
+    """
+    __tablename__ = "shopping_name_frequencies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    household_id = db.Column(
+        db.Integer, db.ForeignKey("households.id"),
+        nullable=False, index=True,
+    )
+    # Lowercased, stripped name. The uniqueness constraint
+    # (household_id, name_lower) is the primary lookup key — a single
+    # SELECT against this index decides whether we INSERT or UPDATE
+    # on each bump.
+    name_lower = db.Column(db.String(120), nullable=False, index=True)
+    # The most-recent casing the user typed. Used as the chip label
+    # so the chip reflects how the household actually writes the item.
+    display_name = db.Column(db.String(120), nullable=False)
+    count = db.Column(db.Integer, nullable=False, default=1)
+    last_added_at = db.Column(
+        db.DateTime, default=datetime.utcnow, nullable=False,
+    )
+
+    household = db.relationship(
+        "Household",
+        backref=db.backref(
+            "shopping_name_frequencies",
+            lazy="dynamic",
+            cascade="all, delete-orphan",
+            order_by="ShoppingNameFrequency.count.desc()",
+        ),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "household_id", "name_lower",
+            name="uq_shopping_name_freq_household_name",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ShoppingNameFrequency {self.display_name!r} "
+            f"(count={self.count}, household={self.household_id})>"
         )

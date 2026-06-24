@@ -1,4 +1,52 @@
 <div id="shopping-list" class="space-y-2">
+  {# Phase 3I: "Add again" smart-recall chips.
+     Top-N most-frequently-added shopping names for this household,
+     ranked by all-time add count from the ShoppingNameFrequency
+     counter table (the shopping_items table itself is hard-deleted
+     on cleanup so it carries no historical signal — see model
+     docstring). Suggestions for items currently on the list are
+     filtered server-side in `_top_shopping_suggestions`, so as soon
+     as the user taps "Milk" the chip vanishes from the next render
+     (the chips live INSIDE this partial — every state-changing route
+     re-renders the partial and recomputes suggestions).
+
+     Hidden entirely when:
+       - the household has fewer than 3 distinct historical names
+         (suppressed at the helper level — chips with 1-2 options
+         feel like noise on a brand-new account)
+       - every top-ranked name is already on the list (nothing to
+         suggest right now)
+
+     Each chip is a button that POSTs to the existing /shopping route
+     with just `name=`. The hx-vals JSON is rendered via `tojson` so
+     names with quotes/backslashes serialize safely. The route bumps
+     the frequency again on every chip tap, so popular chips stay
+     popular (intentional feedback loop). #}
+  {% if suggestions %}
+    <div class="flex flex-wrap items-center gap-1.5 pb-1"
+         aria-label="Add again">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+        Add again
+      </span>
+      {% for suggestion in suggestions %}
+        <button type="button"
+                hx-post="{{ url_for('shopping_add') }}"
+                hx-vals='{"name": {{ suggestion|tojson }}}'
+                hx-target="#shopping-list"
+                hx-swap="outerHTML"
+                aria-label="Add {{ suggestion }} to shopping list"
+                class="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 shadow-sm hover:border-green-600 hover:bg-green-50 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
+          <svg viewBox="0 0 20 20" class="h-3 w-3" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="M10 4v12M4 10h12"/>
+          </svg>
+          {{ suggestion }}
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {# Phase 3F: shopping-actions bar.
      Shows only when the household has at least one checked item.
      "Clear checked" (secondary, white) = drop them entirely without

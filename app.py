@@ -53,7 +53,9 @@ from forms import (
     UNIT_SUGGESTIONS, LoginForm, PantryItemForm, ShoppingItemForm, SignupForm,
 )
 from models import (
-    Household, Invite, MealPlan, PantryItem, ShoppingItem, User,
+    Household, Invite, MealPlan, PantryItem, ShoppingItem,
+    ShoppingNameFrequency, SHOPPING_SUGGESTION_LIMIT,
+    SHOPPING_SUGGESTION_MIN_DISTINCT, User,
 )
 
 log = logging.getLogger(__name__)
@@ -396,6 +398,7 @@ def _register_routes(app: Flask) -> None:
             notes=None,  # notes are pantry-context, not shopping-context
         )
         db.session.add(shop)
+        _bump_shopping_name_frequency(current_user.household_id, item.name)
         db.session.commit()
         # Empty body + an HX-Trigger header so the button can flash a
         # transient "Added" without us having to re-render anything.
@@ -410,17 +413,21 @@ def _register_routes(app: Flask) -> None:
             items_q = items_q.filter(ShoppingItem.name.ilike(f"%{query}%"))
         items = items_q.all()
         checked_count = sum(1 for i in items if i.checked)
+        # Phase 3I: "Add again" chips ranked from the household's
+        # all-time add frequency. Excludes names currently on the
+        # list so the chips stay forward-looking, not duplicative.
+        suggestions = _top_shopping_suggestions(current_user.household)
 
         if request.headers.get("HX-Request"):
             return render_template(
                 "_shopping_list.html", items=items, query=query,
-                checked_count=checked_count,
+                checked_count=checked_count, suggestions=suggestions,
             )
 
         form = ShoppingItemForm()
         return render_template(
             "shopping.html", items=items, form=form, query=query,
-            checked_count=checked_count,
+            checked_count=checked_count, suggestions=suggestions,
         )
 
     @app.route("/shopping", methods=["POST"])
@@ -428,23 +435,26 @@ def _register_routes(app: Flask) -> None:
     def shopping_add():
         form = ShoppingItemForm()
         if form.validate_on_submit():
+            name = form.name.data.strip()
             item = ShoppingItem(
                 added_by_user_id=current_user.id,
                 household_id=current_user.household_id,
-                name=form.name.data.strip(),
+                name=name,
                 quantity=form.quantity.data,
                 unit=_clean_optional(form.unit.data),
                 notes=_clean_optional(form.notes.data),
             )
             db.session.add(item)
+            _bump_shopping_name_frequency(current_user.household_id, name)
             db.session.commit()
 
             if request.headers.get("HX-Request"):
                 items = current_user.household.shopping_items.all()
                 checked_count = sum(1 for i in items if i.checked)
+                suggestions = _top_shopping_suggestions(current_user.household)
                 return render_template(
                     "_shopping_list.html", items=items, query="",
-                    checked_count=checked_count,
+                    checked_count=checked_count, suggestions=suggestions,
                 )
             return redirect(url_for("shopping_list"))
 
@@ -492,9 +502,10 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
+        suggestions = _top_shopping_suggestions(current_user.household)
         return render_template(
             "_shopping_list.html", items=items, query="",
-            checked_count=checked_count,
+            checked_count=checked_count, suggestions=suggestions,
         )
 
     @app.route("/shopping/<int:item_id>/toggle", methods=["POST"])
@@ -511,9 +522,10 @@ def _register_routes(app: Flask) -> None:
         # Re-render the whole list so checked items re-sort to the bottom.
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
+        suggestions = _top_shopping_suggestions(current_user.household)
         return render_template(
             "_shopping_list.html", items=items, query="",
-            checked_count=checked_count,
+            checked_count=checked_count, suggestions=suggestions,
         )
 
     @app.route("/shopping/clear-checked", methods=["POST"])
@@ -524,9 +536,10 @@ def _register_routes(app: Flask) -> None:
             db.session.delete(item)
         db.session.commit()
         items = current_user.household.shopping_items.all()
+        suggestions = _top_shopping_suggestions(current_user.household)
         body = render_template(
             "_shopping_list.html", items=items, query="",
-            checked_count=0,
+            checked_count=0, suggestions=suggestions,
         )
         # Phase 3F: fire a toast so the user gets confirmation that
         # something happened. Pre-3F this route silently re-rendered
@@ -585,9 +598,10 @@ def _register_routes(app: Flask) -> None:
         moved = len(checked)
 
         items = current_user.household.shopping_items.all()
+        suggestions = _top_shopping_suggestions(current_user.household)
         body = render_template(
             "_shopping_list.html", items=items, query="",
-            checked_count=0,
+            checked_count=0, suggestions=suggestions,
         )
         if moved > 0:
             return body, 200, {
@@ -791,6 +805,9 @@ def _register_routes(app: Flask) -> None:
             notes=f"Suggested by AI for: {plan.meal_name}"[:280],
         )
         db.session.add(shop)
+        _bump_shopping_name_frequency(
+            current_user.household_id, item_name[:120],
+        )
         db.session.commit()
         return "", 200, {"HX-Trigger": "shopping:added"}
 
@@ -850,6 +867,10 @@ def _register_routes(app: Flask) -> None:
             for item_name in need_items
         ]
         db.session.add_all(new_rows)
+        for item_name in need_items:
+            _bump_shopping_name_frequency(
+                current_user.household_id, item_name[:120],
+            )
         db.session.commit()
 
         # Surface the count in the HX-Trigger payload so the toast can
@@ -996,6 +1017,106 @@ def _ensure_shopping_checked_at_column() -> None:
         # commit an empty session so the ALTER is durable in test
         # contexts that share a session.
         db.session.commit()
+
+
+def _bump_shopping_name_frequency(household_id: int, raw_name: str) -> None:
+    """Phase 3I: increment (or insert) the household's add-count for
+    this shopping-item name. Called from EVERY ShoppingItem creation
+    path so the "Add again" chip strip ranks accurately — see model
+    docstring for why we need a separate append-only table instead
+    of aggregating from shopping_items directly.
+
+    Case-insensitive: "Milk", "milk", and "MILK" all hit the same
+    counter. `display_name` is rewritten to the most-recent casing so
+    the chip honors how the household most-recently wrote the item.
+
+    Caller is responsible for committing the session — this helper
+    only `add()`s / mutates so it composes cleanly inside the route's
+    existing transaction (one commit covers item + frequency bump).
+
+    No-ops on blank names. Defensive: callers already strip + validate,
+    but a future code path could miss it and we don't want a UNIQUE
+    constraint violation on (household_id, '').
+    """
+    name = (raw_name or "").strip()
+    if not name:
+        return
+    lower = name.lower()
+    existing = ShoppingNameFrequency.query.filter_by(
+        household_id=household_id, name_lower=lower,
+    ).first()
+    if existing is not None:
+        existing.count += 1
+        existing.display_name = name  # most-recent casing wins
+        existing.last_added_at = datetime.utcnow()
+    else:
+        db.session.add(ShoppingNameFrequency(
+            household_id=household_id,
+            name_lower=lower,
+            display_name=name,
+            count=1,
+        ))
+
+
+def _top_shopping_suggestions(
+    household, limit: int = SHOPPING_SUGGESTION_LIMIT,
+    min_distinct: int = SHOPPING_SUGGESTION_MIN_DISTINCT,
+) -> "list[str]":
+    """Phase 3I: top-N "Add again" chip names for this household.
+
+    Ranked by all-time add count desc, ties broken by most-recently-
+    added so a tie between two equally-frequent items shows the one
+    you bought more recently. Names currently on the shopping list
+    (checked OR unchecked, case-insensitive match) are excluded — the
+    chips are forward-looking ("things you usually buy") not duplicators.
+    Once a row gets cleared from the list, the chip becomes eligible
+    again on the next page render.
+
+    Returns `[]` when the household has fewer than `min_distinct`
+    distinct historical names — chips with only 1-2 options feel like
+    noise on a brand-new account. The bar is generous enough to suppress
+    the strip on a household that just signed up but low enough that
+    a week of normal use lights it up.
+
+    Helper is intentionally non-transactional and lives at module
+    scope so it's trivial to call from any view that renders
+    `_shopping_list.html` (which is six routes today).
+    """
+    total_distinct = household.shopping_name_frequencies.count()
+    if total_distinct < min_distinct:
+        return []
+
+    # Names currently on the shopping list (any state). Case-folded
+    # for the exclusion match — the chip might be "Milk" but the
+    # current item could be "milk".
+    current_lower = {
+        (item.name or "").strip().lower()
+        for item in household.shopping_items.all()
+    }
+
+    # Pull `limit + len(current)` candidates so the exclusion can never
+    # leave us short. In the worst case where every top-ranked name is
+    # currently on the list, we still surface the top `limit` chips
+    # from items NOT on the list (subject to total_distinct supply).
+    over_fetch = limit + len(current_lower)
+    candidates = (
+        household.shopping_name_frequencies
+        .order_by(
+            ShoppingNameFrequency.count.desc(),
+            ShoppingNameFrequency.last_added_at.desc(),
+        )
+        .limit(over_fetch)
+        .all()
+    )
+
+    out: list[str] = []
+    for freq in candidates:
+        if freq.name_lower in current_lower:
+            continue
+        out.append(freq.display_name)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _run_phase_2a_migration() -> None:
