@@ -64,11 +64,14 @@
         {{ checked_count }} checked off
       </p>
       <div class="flex items-center gap-2">
+        {# Phase 3J: hx-confirm removed. The 5-second toast with an
+           Undo CTA is the safety net now — double friction (confirm
+           modal + button tap) is bad mobile UX, and the toast pattern
+           matches Gmail/iOS Mail. #}
         <button type="button"
                 hx-post="{{ url_for('shopping_clear_checked') }}"
                 hx-target="#shopping-list"
                 hx-swap="outerHTML"
-                hx-confirm="Clear {{ checked_count }} checked item{{ _s }} from your shopping list?"
                 class="inline-flex h-8 items-center justify-center rounded-lg bg-white px-3 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50">
           Clear checked
         </button>

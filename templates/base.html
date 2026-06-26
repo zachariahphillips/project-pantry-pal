@@ -40,15 +40,79 @@
     });
     // Brief bottom toast triggered by HX-Trigger response headers from
     // cross-action routes (e.g. "+ Shop" on a pantry row, +Shop All on
-    // a meal plan).
-    function showToast(text) {
+    // a meal plan). Optionally supports an inline action button — pass
+    // {label, url} as the 2nd arg to render e.g. "Cleared 3 items · Undo"
+    // where the action POSTs to `url` and re-swaps the shopping list.
+    //   - text-only: 1.8s, decorative-only (pointer-events-none)
+    //   - with action: 5s, tappable, Phase 3J undo for destructive
+    //     shopping actions
+    function showToast(text, action) {
       const toast = document.getElementById('toast');
       if (!toast) return;
-      toast.textContent = text;
+      const toastText = document.getElementById('toast-text');
+      const toastAction = document.getElementById('toast-action');
+      if (!toastText || !toastAction) return;
+      toastText.textContent = text;
+      if (action && action.url) {
+        toastAction.textContent = action.label || 'Undo';
+        toastAction.dataset.url = action.url;
+        toastAction.classList.remove('hidden');
+        // Pointer-events on the WHOLE toast so the button can be tapped;
+        // text remains a no-op target so it doesn't intercept stray taps
+        // meant for the list below.
+        toast.classList.remove('pointer-events-none');
+        toast.classList.add('pointer-events-auto');
+      } else {
+        toastAction.classList.add('hidden');
+        toastAction.removeAttribute('data-url');
+        toast.classList.add('pointer-events-none');
+        toast.classList.remove('pointer-events-auto');
+      }
       toast.classList.remove('opacity-0');
       clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => toast.classList.add('opacity-0'), 1800);
+      // Action-bearing toasts hang around for 5s so the user has a
+      // realistic window to spot + tap Undo before it vanishes; pure
+      // info toasts stay at 1.8s.
+      const duration = (action && action.url) ? 5000 : 1800;
+      window.__toastTimer = setTimeout(() => {
+        toast.classList.add('opacity-0');
+        toastAction.classList.add('hidden');
+        toastAction.removeAttribute('data-url');
+        toast.classList.add('pointer-events-none');
+        toast.classList.remove('pointer-events-auto');
+      }, duration);
     }
+    // Undo button click handler. We wire ONE listener up front and read
+    // the live url off the data attr — saves re-binding on every toast.
+    // htmx.ajax is used directly so CSRF is auto-attached via the
+    // configRequest listener above; the response re-swaps #shopping-list
+    // identically to the destructive route that opened the toast.
+    document.addEventListener('DOMContentLoaded', () => {
+      const action = document.getElementById('toast-action');
+      if (!action) return;
+      action.addEventListener('click', () => {
+        const url = action.dataset.url;
+        if (!url) return;
+        if (window.htmx) {
+          window.htmx.ajax('POST', url, {
+            target: '#shopping-list', swap: 'outerHTML',
+          });
+        }
+        // Hide immediately — the success toast (`shopping:undone`) will
+        // re-open it with confirmation text, OR the no-op case just
+        // leaves the bar empty.
+        const toast = document.getElementById('toast');
+        if (toast) {
+          toast.classList.add('opacity-0');
+          toast.classList.add('pointer-events-none');
+          toast.classList.remove('pointer-events-auto');
+        }
+        action.classList.add('hidden');
+        action.removeAttribute('data-url');
+        clearTimeout(window.__toastTimer);
+      });
+    });
+
     document.addEventListener('shopping:added', () => {
       showToast('Added to shopping list');
     });
@@ -64,12 +128,34 @@
       const n = (e.detail && e.detail.count) || 0;
       showToast(n === 1 ? 'Moved 1 item to pantry' : `Moved ${n} items to pantry`);
     });
-    // Phase 3F: "Clear checked" toast — pre-3F this route silently
-    // re-rendered, so the user had no confirmation that anything
-    // happened beyond the items disappearing from the list.
+    // Phase 3F + 3J: "Clear checked" toast. Now ships with an Undo
+    // CTA when the payload includes an `undoUrl` (bulk under the
+    // session cookie cap). When too many items were cleared to
+    // snapshot safely, the toast renders text-only.
     document.addEventListener('shopping:cleared-checked', (e) => {
       const n = (e.detail && e.detail.count) || 0;
-      showToast(n === 1 ? 'Cleared 1 checked item' : `Cleared ${n} checked items`);
+      const undoUrl = (e.detail && e.detail.undoUrl) || null;
+      const text = n === 1 ? 'Cleared 1 checked item' : `Cleared ${n} checked items`;
+      showToast(text, undoUrl ? { label: 'Undo', url: undoUrl } : null);
+    });
+    // Phase 3J: item Delete fires a toast with the item's name (capped
+    // server-side at 40 chars) and an Undo CTA. Single-item snapshots
+    // never exceed the session cookie cap, so undoUrl is always set
+    // unless something's wrong server-side.
+    document.addEventListener('shopping:deleted', (e) => {
+      const name = (e.detail && e.detail.name) || 'item';
+      const undoUrl = (e.detail && e.detail.undoUrl) || null;
+      showToast(
+        `Deleted "${name}"`,
+        undoUrl ? { label: 'Undo', url: undoUrl } : null,
+      );
+    });
+    // Phase 3J: confirmation toast after a successful Undo. Text-only
+    // (no action) — there's no "undo the undo" by design; users redo by
+    // tapping Delete / Clear again.
+    document.addEventListener('shopping:undone', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Restored 1 item' : `Restored ${n} items`);
     });
 
     // ---------------------------------------------------------------
@@ -303,11 +389,25 @@
       </div>
     </nav>
 
-    {# Toast slot. Sits above the tab bar; fired by HX-Trigger events. #}
+    {# Toast slot. Sits above the tab bar; fired by HX-Trigger events.
+
+       Text + optional action button live in two child slots so the
+       showToast() JS can swap pieces independently. Default state
+       (`pointer-events-none`) keeps the toast tap-transparent over
+       the list below; an action toast (Phase 3J undo) flips to
+       `pointer-events-auto` while it's visible so the Undo button
+       is tappable. #}
     <div id="toast"
          role="status"
          aria-live="polite"
-         class="pointer-events-none fixed inset-x-0 bottom-24 z-40 mx-auto w-fit max-w-[80%] rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white opacity-0 transition-opacity duration-300"></div>
+         class="pointer-events-none fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[90%] items-center gap-3 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white opacity-0 transition-opacity duration-300">
+      <span id="toast-text"></span>
+      <button id="toast-action"
+              type="button"
+              class="hidden -my-1 ml-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide text-green-300 hover:text-green-200 focus:outline-none focus:ring-2 focus:ring-green-400">
+        Undo
+      </button>
+    </div>
   {% endif %}
 </body>
 </html>

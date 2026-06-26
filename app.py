@@ -43,7 +43,7 @@ from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import (
-    Flask, abort, flash, redirect, render_template, request, url_for,
+    Flask, abort, flash, redirect, render_template, request, session, url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -497,16 +497,43 @@ def _register_routes(app: Flask) -> None:
     @app.route("/shopping/<int:item_id>", methods=["DELETE"])
     @login_required
     def shopping_item_delete(item_id: int):
+        """Phase 3J: snapshots the item into the session BEFORE the
+        delete commits, then fires a toast with an Undo CTA. The
+        hx-confirm modal that used to guard this button is gone —
+        the 5-second toast IS the safety net (cleaner mobile UX
+        than the double-friction confirm + tap pattern)."""
         item = _get_shopping_item_or_404(item_id)
+        # Capture the friendly name BEFORE we delete — used in the toast
+        # text and the post-commit response can't read off a deleted row.
+        item_name = item.name
+        item_snapshot = [item]  # list-of-one to share the bulk helper
+
+        # Snapshot stored BEFORE the delete commits, so attribute access
+        # on the row is still valid.
+        stored = _store_undo_snapshot(
+            "delete_one", item_snapshot, current_user.household_id,
+        )
         db.session.delete(item)
         db.session.commit()
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         suggestions = _top_shopping_suggestions(current_user.household)
-        return render_template(
+        body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=checked_count, suggestions=suggestions,
         )
+        # Cap display name in the toast so a 120-char item doesn't blow
+        # past the toast's max-width on mobile.
+        toast_name = (item_name or "item")[:40]
+        trigger_payload = {
+            "shopping:deleted": {
+                "name": toast_name,
+                "undoUrl": (
+                    url_for("shopping_undo") if stored else None
+                ),
+            }
+        }
+        return body, 200, {"HX-Trigger": json.dumps(trigger_payload)}
 
     @app.route("/shopping/<int:item_id>/toggle", methods=["POST"])
     @login_required
@@ -531,7 +558,23 @@ def _register_routes(app: Flask) -> None:
     @app.route("/shopping/clear-checked", methods=["POST"])
     @login_required
     def shopping_clear_checked():
+        """Phase 3J: snapshots the cleared items into the session
+        BEFORE delete (so attributes are still readable), then emits
+        the count + undoUrl in the HX-Trigger payload. The hx-confirm
+        modal is gone — the 5s toast is the safety net.
+
+        If the cleared set exceeds UNDO_SNAPSHOT_MAX_ITEMS, the action
+        still completes but the toast is text-only (no Undo CTA). A
+        50-item clear shouldn't silently truncate to 25 on undo, so
+        we'd rather no-undo than partial-undo. Realistic shopping
+        lists don't hit this cap; the cap exists to keep the signed
+        session cookie under the browser's 4KB limit.
+        """
         deleted = current_user.household.shopping_items.filter_by(checked=True).all()
+        # Snapshot BEFORE delete (lazy attrs need the row to still exist).
+        stored = _store_undo_snapshot(
+            "clear_checked", deleted, current_user.household_id,
+        )
         for item in deleted:
             db.session.delete(item)
         db.session.commit()
@@ -541,18 +584,62 @@ def _register_routes(app: Flask) -> None:
             "_shopping_list.html", items=items, query="",
             checked_count=0, suggestions=suggestions,
         )
-        # Phase 3F: fire a toast so the user gets confirmation that
-        # something happened. Pre-3F this route silently re-rendered
-        # the list, which made it ambiguous whether the tap landed —
-        # especially with hx-confirm (the modal swallowed perceived
-        # feedback). Only fire when something was actually deleted so
-        # a stale double-tap doesn't show "Cleared 0 items".
+        # Only fire when something was actually deleted so a stale
+        # double-tap (e.g. via curl) doesn't show "Cleared 0 items".
         if deleted:
             return body, 200, {
                 "HX-Trigger": json.dumps({
-                    "shopping:cleared-checked": {"count": len(deleted)}
+                    "shopping:cleared-checked": {
+                        "count": len(deleted),
+                        # `null` undoUrl tells the toast listener to
+                        # render text-only (no Undo button). Used when
+                        # the snapshot would exceed the cookie cap.
+                        "undoUrl": (
+                            url_for("shopping_undo") if stored else None
+                        ),
+                    }
                 })
             }
+        return body
+
+    @app.route("/shopping/undo", methods=["POST"])
+    @login_required
+    def shopping_undo():
+        """Phase 3J: restore the items captured in the most-recent
+        destructive shopping action. Idempotent on the empty case —
+        if there's no snapshot (already restored, expired session,
+        action wasn't undoable), we just re-render the current list
+        with no items added and no toast. The Undo button is the
+        only path here today, so a missing snapshot usually means
+        a stale tap after another destructive action overwrote it.
+
+        Household-scoped: `_restore_shopping_snapshot` refuses to
+        restore if the snapshot's household_id doesn't match. Defense
+        in depth against a forged session.
+        """
+        snap = session.pop(SHOPPING_UNDO_SESSION_KEY, None)
+        restored = 0
+        if snap is not None:
+            restored = _restore_shopping_snapshot(
+                snap, current_user.household_id,
+            )
+            db.session.commit()
+        items = current_user.household.shopping_items.all()
+        checked_count = sum(1 for i in items if i.checked)
+        suggestions = _top_shopping_suggestions(current_user.household)
+        body = render_template(
+            "_shopping_list.html", items=items, query="",
+            checked_count=checked_count, suggestions=suggestions,
+        )
+        if restored > 0:
+            return body, 200, {
+                "HX-Trigger": json.dumps({
+                    "shopping:undone": {"count": restored}
+                })
+            }
+        # No-op case: render the list but don't fire a "Restored 0"
+        # toast (would only be noise to the user — they're effectively
+        # tapping a dead button).
         return body
 
     @app.route("/shopping/move-checked-to-pantry", methods=["POST"])
@@ -1017,6 +1104,116 @@ def _ensure_shopping_checked_at_column() -> None:
         # commit an empty session so the ALTER is durable in test
         # contexts that share a session.
         db.session.commit()
+
+
+# --- Phase 3J: undo for destructive shopping-list actions -----------------
+
+# Session key holding the snapshot of the most recent destructive shopping
+# action. One slot — last-action-wins. New destructive actions overwrite,
+# successful undo + page reload both clear it.
+SHOPPING_UNDO_SESSION_KEY = "shopping_undo"
+
+# Cap on how many items can be captured into a single undo snapshot.
+# Flask's default SecureCookieSession lives in a signed cookie with a
+# ~4KB browser limit; ~250 bytes/item leaves comfortable headroom at 25.
+# When a bulk Clear exceeds this, the action still goes through but we
+# omit the Undo CTA (text-only toast) rather than ship a truncated
+# undo that silently loses items.
+UNDO_SNAPSHOT_MAX_ITEMS = 25
+
+
+def _snapshot_shopping_items(items) -> "list[dict]":
+    """Serialize ShoppingItem rows into plain dicts safe to put in a
+    Flask signed-cookie session.
+
+    Captures everything needed to recreate the row at its ORIGINAL
+    position in the list (preserving `added_at`) and in its ORIGINAL
+    state (preserving `checked` + `checked_at`). Provenance
+    (`added_by_user_id`) is preserved so the undo doesn't rewrite
+    history to credit whoever tapped Undo.
+
+    Caller MUST read these attributes BEFORE calling `db.session.delete()`,
+    otherwise SQLAlchemy may have already flushed the row and lazy
+    attribute access dies.
+    """
+    return [{
+        "name": i.name,
+        "quantity": i.quantity,
+        "unit": i.unit,
+        "notes": i.notes,
+        "checked": bool(i.checked),
+        "checked_at": i.checked_at.isoformat() if i.checked_at else None,
+        "added_at": i.added_at.isoformat() if i.added_at else None,
+        "added_by_user_id": i.added_by_user_id,
+    } for i in items]
+
+
+def _store_undo_snapshot(action: str, items, household_id: int) -> bool:
+    """Build a snapshot from `items` and stash it in the user's session
+    keyed by `SHOPPING_UNDO_SESSION_KEY`. Returns True iff the snapshot
+    was small enough to store (≤ UNDO_SNAPSHOT_MAX_ITEMS) — caller uses
+    the return to decide whether to surface an Undo CTA in the toast.
+
+    On `False` we explicitly pop any prior snapshot so a stale "Undo
+    last Delete" CTA can't survive a giant Clear that itself can't
+    be undone — that'd be confusing ("Undo? Of what?").
+    """
+    snap = _snapshot_shopping_items(items)
+    if not snap or len(snap) > UNDO_SNAPSHOT_MAX_ITEMS:
+        session.pop(SHOPPING_UNDO_SESSION_KEY, None)
+        return False
+    session[SHOPPING_UNDO_SESSION_KEY] = {
+        "action": action,
+        "items": snap,
+        "household_id": household_id,
+    }
+    return True
+
+
+def _restore_shopping_snapshot(snapshot: dict, household_id: int) -> int:
+    """Recreate ShoppingItem rows from a session snapshot. Returns the
+    count restored.
+
+    Defensive against snapshot tampering / cross-household leakage:
+    refuses to restore if the snapshot's household_id doesn't match
+    the caller's. Each entry's `added_by_user_id` is preserved as-is
+    from the snapshot (the original adder), since the goal of undo
+    is to put the row back exactly how it was — not to credit the
+    user who tapped Undo with someone else's add.
+
+    `added_at` / `checked_at` are parsed back from ISO strings; if
+    parsing fails (corrupt session), we let SQLAlchemy default the
+    column and continue — better partial restore than no restore.
+    """
+    if snapshot.get("household_id") != household_id:
+        return 0
+    restored = 0
+    for entry in snapshot.get("items", []):
+        item = ShoppingItem(
+            household_id=household_id,
+            added_by_user_id=entry.get("added_by_user_id"),
+            name=(entry.get("name") or "")[:120],
+            quantity=entry.get("quantity"),
+            unit=entry.get("unit"),
+            notes=entry.get("notes"),
+            checked=bool(entry.get("checked", False)),
+        )
+        # Honor original timestamps so the restored row appears in
+        # its original list position — using `utcnow()` instead would
+        # surprise the user by jumping the row to the top.
+        if entry.get("checked_at"):
+            try:
+                item.checked_at = datetime.fromisoformat(entry["checked_at"])
+            except (ValueError, TypeError):
+                item.checked_at = None
+        if entry.get("added_at"):
+            try:
+                item.added_at = datetime.fromisoformat(entry["added_at"])
+            except (ValueError, TypeError):
+                pass  # let SQLAlchemy default fire
+        db.session.add(item)
+        restored += 1
+    return restored
 
 
 def _bump_shopping_name_frequency(household_id: int, raw_name: str) -> None:

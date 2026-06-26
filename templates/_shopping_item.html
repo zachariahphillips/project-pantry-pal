@@ -36,11 +36,12 @@
             class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
       Edit
     </button>
+    {# Phase 3J: hx-confirm removed. Delete fires an undo-able toast
+       on the swapped list, same pattern as Clear checked. #}
     <button type="button"
             hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
             hx-target="#shopping-list"
             hx-swap="outerHTML"
-            hx-confirm="Delete &quot;{{ item.name }}&quot; from your shopping list?"
             class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
       Delete
     </button>
