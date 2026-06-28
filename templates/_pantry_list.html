@@ -1,4 +1,50 @@
 <div id="pantry-list" class="space-y-2">
+  {# Phase 4A: sort pill row.
+     Tap-to-sort the pantry, with the active option highlighted dark.
+     The pills live INSIDE this partial so every state-changing swap
+     (add, delete, search) re-renders them with the right active
+     state — same pattern as the "Add again" chips on /shopping.
+
+     Wiring:
+       - hx-get includes ?sort=<key> in the URL, hx-push-url puts that
+         into the browser so reload + bookmark honor the selection.
+       - hx-include="[name='q']" pulls the LIVE search input value at
+         request time (the input lives outside the partial; without
+         this, switching sort would lose whatever the user has typed).
+       - hx-target/swap mirror the search input's contract: replace
+         this whole partial in place.
+
+     Hidden entirely on a brand-new pantry with no query (`items or
+     query`). Pills only matter when there's a list to organize or
+     when the user is actively searching (sort still useful in case
+     they clear the search). #}
+  {% if items or query %}
+    <div class="flex flex-wrap items-center gap-1.5 pb-2"
+         aria-label="Sort pantry">
+      <span class="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+        Sort
+      </span>
+      {% for key, label in pantry_sort_options.items() %}
+        {% set is_active = (sort_key == key) %}
+        <button type="button"
+                hx-get="{{ url_for('pantry_list', sort=key) }}"
+                hx-target="#pantry-list"
+                hx-swap="outerHTML"
+                hx-include="[name='q']"
+                hx-push-url="true"
+                aria-pressed="{{ 'true' if is_active else 'false' }}"
+                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-stone-300
+                  {% if is_active %}
+                    border border-stone-800 bg-stone-800 text-white
+                  {% else %}
+                    border border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50
+                  {% endif %}">
+          {{ label }}
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {% if items %}
     {% for item in items %}{% include "_pantry_item.html" %}{% endfor %}
   {% else %}

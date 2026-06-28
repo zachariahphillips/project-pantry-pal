@@ -172,6 +172,13 @@
   {# ---------- Search + list ---------- #}
   <div class="mb-3">
     <label for="search" class="sr-only">Search pantry</label>
+    {# Phase 4A: hx-vals reads the active sort from window.location at
+       request time, so each keystroke-driven search preserves the
+       sort pill the user picked. Reading from the URL (vs a hidden
+       form input) is what lets the search input stay OUTSIDE the
+       re-rendered partial — no focus-loss / cursor-position issues
+       from re-rendering it on every swap. The sort URL is kept in
+       sync via the pills' hx-push-url=true. #}
     <input id="search"
            type="search"
            name="q"
@@ -179,6 +186,7 @@
            placeholder="Search pantry"
            autocomplete="off"
            hx-get="{{ url_for('pantry_list') }}"
+           hx-vals='js:{sort: new URLSearchParams(window.location.search).get("sort") || "newest"}'
            hx-trigger="keyup changed delay:250ms, search"
            hx-target="#pantry-list"
            hx-swap="outerHTML"

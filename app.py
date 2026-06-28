@@ -39,7 +39,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from dotenv import load_dotenv
 from flask import (
@@ -291,13 +291,19 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def pantry_list():
         query = (request.args.get("q") or "").strip()
+        sort_key = _normalize_pantry_sort(request.args.get("sort"))
         items_q = current_user.household.pantry_items
         if query:
             items_q = items_q.filter(PantryItem.name.ilike(f"%{query}%"))
+        items_q = _apply_pantry_sort(items_q, sort_key)
         items = items_q.all()
 
         if request.headers.get("HX-Request"):
-            return render_template("_pantry_list.html", items=items, query=query)
+            return render_template(
+                "_pantry_list.html", items=items, query=query,
+                sort_key=sort_key,
+                pantry_sort_options=PANTRY_SORT_OPTIONS,
+            )
 
         form = PantryItemForm()
         # Show the most recent meal plan inline so users coming back to
@@ -306,6 +312,8 @@ def _register_routes(app: Flask) -> None:
         latest_meal_plan = current_user.household.meal_plans.first()
         return render_template(
             "pantry.html", items=items, form=form, query=query,
+            sort_key=sort_key,
+            pantry_sort_options=PANTRY_SORT_OPTIONS,
             household=current_user.household,
             invites=_active_invites_for(current_user.household),
             members=current_user.household.members.all(),
@@ -331,8 +339,17 @@ def _register_routes(app: Flask) -> None:
             if request.headers.get("HX-Request"):
                 # Re-render the whole list so the empty state disappears
                 # cleanly and ordering stays in sync with the DB.
-                items = current_user.household.pantry_items.all()
-                return render_template("_pantry_list.html", items=items, query="")
+                # Phase 4A: preserve the user's active sort across adds.
+                sort_key = _current_pantry_sort_from_request()
+                items_q = _apply_pantry_sort(
+                    current_user.household.pantry_items, sort_key,
+                )
+                items = items_q.all()
+                return render_template(
+                    "_pantry_list.html", items=items, query="",
+                    sort_key=sort_key,
+                    pantry_sort_options=PANTRY_SORT_OPTIONS,
+                )
             return redirect(url_for("pantry_list"))
 
         if request.headers.get("HX-Request"):
@@ -379,8 +396,16 @@ def _register_routes(app: Flask) -> None:
         item = _get_pantry_item_or_404(item_id)
         db.session.delete(item)
         db.session.commit()
-        items = current_user.household.pantry_items.all()
-        return render_template("_pantry_list.html", items=items, query="")
+        # Phase 4A: preserve the user's active sort across deletes.
+        sort_key = _current_pantry_sort_from_request()
+        items = _apply_pantry_sort(
+            current_user.household.pantry_items, sort_key,
+        ).all()
+        return render_template(
+            "_pantry_list.html", items=items, query="",
+            sort_key=sort_key,
+            pantry_sort_options=PANTRY_SORT_OPTIONS,
+        )
 
     @app.route("/pantry/<int:item_id>/add-to-shopping", methods=["POST"])
     @login_required
@@ -1729,6 +1754,92 @@ def _clean_optional(value) -> "str | None":
         return None
     cleaned = str(value).strip()
     return cleaned or None
+
+
+# --- Phase 4A: pantry sort ------------------------------------------------
+
+# Order matters — drives the visual order of the pill row.
+# Values are the human-readable labels shown on each pill.
+PANTRY_SORT_OPTIONS: "dict[str, str]" = {
+    "newest": "Newest",
+    "oldest": "Oldest",
+    "name": "A\u2013Z",  # en-dash so it reads "A–Z"
+}
+PANTRY_SORT_DEFAULT = "newest"
+
+
+def _normalize_pantry_sort(raw: "str | None") -> str:
+    """Coerce a query-string sort key to a supported option, falling back
+    to the default on anything unrecognized. Defensive against URL
+    tampering and stale bookmarks pointing at retired sort keys — the
+    user's request never errors over a bad `?sort=` value, it just
+    silently degrades to Newest.
+    """
+    if raw in PANTRY_SORT_OPTIONS:
+        return raw
+    return PANTRY_SORT_DEFAULT
+
+
+def _current_pantry_sort_from_request() -> str:
+    """For htmx mutation routes (add, delete) that re-render
+    `_pantry_list.html` — read the user's active sort from the
+    `HX-Current-URL` header so the post-mutation swap preserves their
+    selection.
+
+    Without this, adding an item while sorted A–Z would silently flip
+    the list back to Newest, which is the existing bug pre-4A. The
+    add/delete buttons themselves don't carry sort in their request
+    URL (a POST to /pantry, a DELETE to /pantry/<id>); htmx instead
+    sends the page URL in the `HX-Current-URL` header so the server
+    can recover context like this.
+
+    Falls back to the default for non-htmx requests, missing headers,
+    or malformed URLs — anything that can't yield a clean sort key
+    becomes "newest" rather than raising.
+    """
+    current_url = request.headers.get("HX-Current-URL", "")
+    if not current_url:
+        return PANTRY_SORT_DEFAULT
+    try:
+        parsed = urlsplit(current_url)
+        params = dict(parse_qsl(parsed.query))
+        return _normalize_pantry_sort(params.get("sort"))
+    except (ValueError, TypeError):
+        return PANTRY_SORT_DEFAULT
+
+
+def _apply_pantry_sort(query, sort_key: str):
+    """Apply the ORDER BY for `sort_key` to a PantryItem query, after
+    clearing whatever default order_by the dynamic relationship attached.
+    Each branch includes a stable tiebreaker so same-second adds don't
+    re-shuffle between requests (a flake risk for the test suite and
+    a UX confuser for users adding items in rapid succession).
+
+    Caller MUST pre-normalize via `_normalize_pantry_sort`.
+    """
+    # `.order_by(None)` strips the relationship's default ORDER BY before
+    # we layer the requested one on top — otherwise SQLAlchemy emits
+    # `ORDER BY added_at DESC, <new key>` and the new key is functionally
+    # ignored (added_at is already unique per row).
+    query = query.order_by(None)
+
+    if sort_key == "oldest":
+        return query.order_by(
+            PantryItem.added_at.asc(), PantryItem.id.asc(),
+        )
+    if sort_key == "name":
+        # SQLite collates with case-sensitivity by default; lower() is
+        # the portable way to get case-insensitive A–Z. Within ties on
+        # name (e.g. two rows both named "Milk"), the newer row sorts
+        # first — matches the user expectation that re-adds appear above
+        # older duplicates.
+        return query.order_by(
+            db.func.lower(PantryItem.name).asc(),
+            PantryItem.added_at.desc(),
+        )
+    return query.order_by(
+        PantryItem.added_at.desc(), PantryItem.id.desc(),
+    )
 
 
 def _get_pantry_item_or_404(item_id: int) -> PantryItem:
