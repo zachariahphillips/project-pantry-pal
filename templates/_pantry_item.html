@@ -10,11 +10,27 @@
         {% if item.notes %}{{ item.notes }}{% endif %}
       </p>
     {% endif %}
-    {# Phase 2A: provenance stamp. Hidden when current_user added it
-       themselves (avoids "added by you" noise in solo households). #}
-    {% if item.added_by and item.added_by.id != current_user.id %}
-      <p class="mt-1 text-[11px] text-stone-400">added by {{ item.added_by.name }}</p>
-    {% endif %}
+    {# Phase 2A/4B: provenance + relative-time stamp on one line.
+       Always shows a timestamp ("added 2d ago") so the user has temporal
+       context on every row. When someone ELSE added the item, the
+       attribution layers in front: "added by Alice · 2d ago" — keeps
+       the existing "added by X" wording for solo-vs-shared parity and
+       so the test asserting on that string stays green.
+
+       Stale-age treatment (Phase 4B): the whole line flips from
+       text-stone-400 to text-amber-600 once an item is older than
+       PANTRY_STALE_AGE_DAYS (14 days). It's a soft nudge — the line
+       stays the same size and position, just shifts hue. No new
+       elements, no layout shift, no per-card icon to track. #}
+    {% set _is_stale = item.added_at | is_stale_age %}
+    <p class="mt-1 text-[11px] {% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
+      {% if item.added_by and item.added_by.id != current_user.id -%}
+        added by {{ item.added_by.name }} ·
+      {%- else -%}
+        added
+      {%- endif %}
+      <time datetime="{{ item.added_at.isoformat() }}Z">{{ item.added_at | relative_time }}</time>
+    </p>
   </div>
   <div class="flex flex-shrink-0 items-center gap-1">
     <button type="button"

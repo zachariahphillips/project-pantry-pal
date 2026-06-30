@@ -116,6 +116,14 @@ def create_app() -> Flask:
     # (_macros.html → unit_combobox) doesn't have to be passed it on every
     # render. Same lifecycle as a Flask config value but at the Jinja layer.
     app.jinja_env.globals["unit_suggestions"] = UNIT_SUGGESTIONS
+
+    # Phase 4B: register relative-time + staleness filters so the pantry
+    # item partial can render "added 2d ago" without computing in Python
+    # at the view layer. Filters take a naive UTC datetime; staleness
+    # threshold lives in PANTRY_STALE_AGE_DAYS so a future per-household
+    # or per-category threshold has one place to evolve from.
+    app.jinja_env.filters["relative_time"] = _humanize_relative_time
+    app.jinja_env.filters["is_stale_age"] = _is_pantry_item_stale
     login_manager.login_message = "Please sign in to continue."
     login_manager.login_message_category = "info"
 
@@ -1754,6 +1762,78 @@ def _clean_optional(value) -> "str | None":
         return None
     cleaned = str(value).strip()
     return cleaned or None
+
+
+# --- Phase 4B: relative-time + staleness ---------------------------------
+
+# Items older than this in calendar days get a subtle amber-tinted
+# timestamp on the pantry card — a "this has been here a while" nudge
+# without being so loud it screams over pantry staples (olive oil, rice,
+# etc.). 14 days is conservative enough to avoid noise but short enough
+# to catch genuinely forgotten produce.
+#
+# A future Chunk C might layer a "Stale (N)" filter chip or a per-
+# category threshold on top, but the constant stays the single source
+# of truth for "what counts as stale" so they all agree.
+PANTRY_STALE_AGE_DAYS = 14
+
+
+def _humanize_relative_time(dt, now=None) -> str:
+    """Render a naive-UTC datetime as a short Slack/Twitter-style
+    relative time string.
+
+    Buckets:
+        < 60s        → "just now"
+        < 60m        → "5m ago"
+        < 24h        → "3h ago"
+        < 7d         → "2d ago"
+        < 30d        → "3w ago"
+        same year    → "Jun 18"
+        cross-year   → "Jun 18, '25"
+
+    Clock-skew safety: if `dt` is in the future relative to `now` (e.g.
+    a few seconds of NTP drift on a multi-process setup), we treat it
+    as "just now" rather than rendering a confusing negative duration.
+
+    `now` is injectable for deterministic tests; production callers
+    pass nothing and we read `datetime.utcnow()`.
+    """
+    if dt is None:
+        return ""
+    now = now or datetime.utcnow()
+    seconds = (now - dt).total_seconds()
+    if seconds < 60:
+        return "just now"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = int(seconds // 3600)
+    if hours < 24:
+        return f"{hours}h ago"
+    days = int(seconds // 86400)
+    if days < 7:
+        return f"{days}d ago"
+    if days < 30:
+        weeks = days // 7
+        return f"{weeks}w ago"
+    # Absolute date for older items. Constructing day-of-month manually
+    # (vs `%-d`) sidesteps a Windows portability gotcha — `%-d` is
+    # supported on macOS/Linux but not Windows.
+    month = dt.strftime("%b")
+    if dt.year == now.year:
+        return f"{month} {dt.day}"
+    return f"{month} {dt.day}, '{dt.strftime('%y')}"
+
+
+def _is_pantry_item_stale(dt, now=None) -> bool:
+    """Has this pantry item been sitting around long enough to warrant
+    the subtle amber treatment? `PANTRY_STALE_AGE_DAYS` is the cutoff
+    in calendar days. None inputs are NOT stale (defensive — better to
+    render normally than crash on a missing timestamp)."""
+    if dt is None:
+        return False
+    now = now or datetime.utcnow()
+    return (now - dt).days >= PANTRY_STALE_AGE_DAYS
 
 
 # --- Phase 4A: pantry sort ------------------------------------------------
