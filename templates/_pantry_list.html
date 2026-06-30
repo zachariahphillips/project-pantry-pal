@@ -18,30 +18,63 @@
      query`). Pills only matter when there's a list to organize or
      when the user is actively searching (sort still useful in case
      they clear the search). #}
-  {% if items or query %}
-    <div class="flex flex-wrap items-center gap-1.5 pb-2"
-         aria-label="Sort pantry">
-      <span class="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
-        Sort
-      </span>
-      {% for key, label in pantry_sort_options.items() %}
-        {% set is_active = (sort_key == key) %}
-        <button type="button"
-                hx-get="{{ url_for('pantry_list', sort=key) }}"
-                hx-target="#pantry-list"
-                hx-swap="outerHTML"
-                hx-include="[name='q']"
-                hx-push-url="true"
-                aria-pressed="{{ 'true' if is_active else 'false' }}"
-                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-stone-300
-                  {% if is_active %}
-                    border border-stone-800 bg-stone-800 text-white
-                  {% else %}
-                    border border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50
-                  {% endif %}">
-          {{ label }}
-        </button>
-      {% endfor %}
+  {% set _filter_active = (filter_key == "low") %}
+  {% if items or query or filter_key %}
+    {# Phase 4A sort + Phase 4C filter share one flex row, but each is
+       its own labeled region for screen readers — same pattern as
+       split radio-group fieldsets. Sort is always shown when the row
+       is visible; Filter only when there's at least one low-stock
+       item (or it's currently active so the user can deactivate it
+       even after the last low item was resolved). #}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 pb-2">
+      <div class="flex flex-wrap items-center gap-1.5"
+           aria-label="Sort pantry">
+        <span class="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+          Sort
+        </span>
+        {% for key, label in pantry_sort_options.items() %}
+          {% set is_active = (sort_key == key) %}
+          <button type="button"
+                  hx-get="{{ url_for('pantry_list', sort=key, filter=filter_key or none) }}"
+                  hx-target="#pantry-list"
+                  hx-swap="outerHTML"
+                  hx-include="[name='q']"
+                  hx-push-url="true"
+                  aria-pressed="{{ 'true' if is_active else 'false' }}"
+                  class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-stone-300
+                    {% if is_active %}
+                      border border-stone-800 bg-stone-800 text-white
+                    {% else %}
+                      border border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50
+                    {% endif %}">
+            {{ label }}
+          </button>
+        {% endfor %}
+      </div>
+
+      {% if low_count > 0 or _filter_active %}
+        <div class="flex flex-wrap items-center gap-1.5"
+             aria-label="Filter pantry">
+          <span class="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+            Filter
+          </span>
+          <button type="button"
+                  hx-get="{{ url_for('pantry_list', sort=sort_key, filter=none if _filter_active else 'low') }}"
+                  hx-target="#pantry-list"
+                  hx-swap="outerHTML"
+                  hx-include="[name='q']"
+                  hx-push-url="true"
+                  aria-pressed="{{ 'true' if _filter_active else 'false' }}"
+                  class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-red-200
+                    {% if _filter_active %}
+                      border border-red-700 bg-red-700 text-white
+                    {% else %}
+                      border border-red-300 bg-white text-red-700 hover:border-red-500 hover:bg-red-50
+                    {% endif %}">
+            Low ({{ low_count }})
+          </button>
+        </div>
+      {% endif %}
     </div>
   {% endif %}
 
@@ -49,7 +82,17 @@
     {% for item in items %}{% include "_pantry_item.html" %}{% endfor %}
   {% else %}
     <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
-      {% if query %}
+      {# Phase 4C: empty-state copy branches on (query, filter_key)
+         so the user always sees a message that matches what they
+         did. "No matches" alone is unhelpful when the empty set
+         came from the Low filter, not the search box. #}
+      {% if query and filter_key == "low" %}
+        <p class="text-sm font-medium text-stone-700">No low-stock items match "{{ query }}".</p>
+        <p class="mt-1 text-xs text-stone-500">Clear the search or turn off the Low filter to see more.</p>
+      {% elif filter_key == "low" %}
+        <p class="text-sm font-medium text-stone-700">Nothing low-stock right now.</p>
+        <p class="mt-1 text-xs text-stone-500">Tap Low again to see everything.</p>
+      {% elif query %}
         <p class="text-sm font-medium text-stone-700">No matches for "{{ query }}".</p>
         <p class="mt-1 text-xs text-stone-500">Try a shorter search or clear the box.</p>
       {% else %}

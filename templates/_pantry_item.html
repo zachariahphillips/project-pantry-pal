@@ -3,9 +3,19 @@
   <div class="min-w-0 flex-1">
     <p class="truncate text-sm font-medium text-stone-900">{{ item.name }}</p>
     {% set qty = item.display_quantity() %}
+    {% set _is_low = item | is_low_stock %}
+    {# Phase 4C: inline "Low" pill on the qty line whenever the item
+       qualifies (quantity is set AND ≤ PANTRY_LOW_STOCK_THRESHOLD).
+       Placed right next to the qty because the badge IS modifying
+       the quantity — reads as "1 cup, which is Low". Untracked
+       items (qty is None) can't be low, so this pill never appears
+       without a visible quantity to anchor it. #}
     {% if qty or item.notes %}
       <p class="mt-0.5 text-xs text-stone-500">
         {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
+        {% if _is_low -%}
+          <span class="ml-1 inline-flex items-center rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">Low</span>
+        {%- endif %}
         {% if qty and item.notes %} · {% endif %}
         {% if item.notes %}{{ item.notes }}{% endif %}
       </p>

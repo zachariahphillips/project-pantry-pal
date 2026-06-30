@@ -124,6 +124,7 @@ def create_app() -> Flask:
     # or per-category threshold has one place to evolve from.
     app.jinja_env.filters["relative_time"] = _humanize_relative_time
     app.jinja_env.filters["is_stale_age"] = _is_pantry_item_stale
+    app.jinja_env.filters["is_low_stock"] = _is_pantry_item_low
     login_manager.login_message = "Please sign in to continue."
     login_manager.login_message_category = "info"
 
@@ -300,16 +301,19 @@ def _register_routes(app: Flask) -> None:
     def pantry_list():
         query = (request.args.get("q") or "").strip()
         sort_key = _normalize_pantry_sort(request.args.get("sort"))
-        items_q = current_user.household.pantry_items
-        if query:
-            items_q = items_q.filter(PantryItem.name.ilike(f"%{query}%"))
-        items_q = _apply_pantry_sort(items_q, sort_key)
-        items = items_q.all()
+        filter_key = _normalize_pantry_filter(request.args.get("filter"))
+        items = _fetch_pantry_items_for_render(
+            query=query, sort_key=sort_key, filter_key=filter_key,
+        )
+        # Phase 4C: chip label count, scoped to the current search so
+        # "Low (3)" + tap → exactly 3 results, no surprises.
+        low_count = _count_low_pantry_items(query=query)
 
         if request.headers.get("HX-Request"):
             return render_template(
                 "_pantry_list.html", items=items, query=query,
-                sort_key=sort_key,
+                sort_key=sort_key, filter_key=filter_key,
+                low_count=low_count,
                 pantry_sort_options=PANTRY_SORT_OPTIONS,
             )
 
@@ -320,7 +324,8 @@ def _register_routes(app: Flask) -> None:
         latest_meal_plan = current_user.household.meal_plans.first()
         return render_template(
             "pantry.html", items=items, form=form, query=query,
-            sort_key=sort_key,
+            sort_key=sort_key, filter_key=filter_key,
+            low_count=low_count,
             pantry_sort_options=PANTRY_SORT_OPTIONS,
             household=current_user.household,
             invites=_active_invites_for(current_user.household),
@@ -347,15 +352,18 @@ def _register_routes(app: Flask) -> None:
             if request.headers.get("HX-Request"):
                 # Re-render the whole list so the empty state disappears
                 # cleanly and ordering stays in sync with the DB.
-                # Phase 4A: preserve the user's active sort across adds.
+                # Phase 4A/4C: preserve the user's active sort AND filter
+                # across adds (both come from HX-Current-URL since the
+                # add POST has no query string of its own).
                 sort_key = _current_pantry_sort_from_request()
-                items_q = _apply_pantry_sort(
-                    current_user.household.pantry_items, sort_key,
+                filter_key = _current_pantry_filter_from_request()
+                items = _fetch_pantry_items_for_render(
+                    sort_key=sort_key, filter_key=filter_key,
                 )
-                items = items_q.all()
                 return render_template(
                     "_pantry_list.html", items=items, query="",
-                    sort_key=sort_key,
+                    sort_key=sort_key, filter_key=filter_key,
+                    low_count=_count_low_pantry_items(),
                     pantry_sort_options=PANTRY_SORT_OPTIONS,
                 )
             return redirect(url_for("pantry_list"))
@@ -404,14 +412,16 @@ def _register_routes(app: Flask) -> None:
         item = _get_pantry_item_or_404(item_id)
         db.session.delete(item)
         db.session.commit()
-        # Phase 4A: preserve the user's active sort across deletes.
+        # Phase 4A/4C: preserve sort + filter across deletes.
         sort_key = _current_pantry_sort_from_request()
-        items = _apply_pantry_sort(
-            current_user.household.pantry_items, sort_key,
-        ).all()
+        filter_key = _current_pantry_filter_from_request()
+        items = _fetch_pantry_items_for_render(
+            sort_key=sort_key, filter_key=filter_key,
+        )
         return render_template(
             "_pantry_list.html", items=items, query="",
-            sort_key=sort_key,
+            sort_key=sort_key, filter_key=filter_key,
+            low_count=_count_low_pantry_items(),
             pantry_sort_options=PANTRY_SORT_OPTIONS,
         )
 
@@ -1836,6 +1846,36 @@ def _is_pantry_item_stale(dt, now=None) -> bool:
     return (now - dt).days >= PANTRY_STALE_AGE_DAYS
 
 
+# --- Phase 4C: low-stock --------------------------------------------------
+
+# An item is "low" when it has a TRACKED quantity at or below this
+# value, in whatever unit the user picked. Untracked items (quantity
+# is None) deliberately don't participate — the user opts into low-
+# stock tracking by entering a quantity. Threshold is a constant for
+# now; a future per-item override would slot in here cleanly.
+PANTRY_LOW_STOCK_THRESHOLD = 1.0
+
+
+def _is_pantry_item_low(item) -> bool:
+    """Return True if a PantryItem qualifies for the 'Low' badge.
+
+    Rule (Phase 4C, see AskQuestion answer on 2026-06-30):
+        quantity is not None AND quantity <= PANTRY_LOW_STOCK_THRESHOLD
+
+    Items with `quantity is None` (untracked staples like "soy sauce"
+    with no qty entered) NEVER show Low — they don't participate in
+    the badge or the filter chip. The user opts into low-stock
+    tracking by entering a quantity. None inputs (item missing) are
+    defensively False so a template misuse can't 500.
+    """
+    if item is None:
+        return False
+    qty = item.quantity
+    if qty is None:
+        return False
+    return qty <= PANTRY_LOW_STOCK_THRESHOLD
+
+
 # --- Phase 4A: pantry sort ------------------------------------------------
 
 # Order matters — drives the visual order of the pill row.
@@ -1888,6 +1928,33 @@ def _current_pantry_sort_from_request() -> str:
         return PANTRY_SORT_DEFAULT
 
 
+def _normalize_pantry_filter(raw: "str | None") -> str:
+    """Coerce a query-string filter key to a supported value. Today only
+    `low` is recognized; anything else (including missing) maps to ""
+    meaning "no filter active". Defensive against URL tampering and
+    future-filter-rollback scenarios.
+    """
+    cleaned = (raw or "").strip().lower()
+    return "low" if cleaned == "low" else ""
+
+
+def _current_pantry_filter_from_request() -> str:
+    """Phase 4C mirror of `_current_pantry_sort_from_request`. Reads
+    the active filter (`?filter=low`) from the htmx `HX-Current-URL`
+    header so add/delete swaps preserve the user's filter selection.
+    Anything malformed or missing falls back to "" (no filter).
+    """
+    current_url = request.headers.get("HX-Current-URL", "")
+    if not current_url:
+        return ""
+    try:
+        parsed = urlsplit(current_url)
+        params = dict(parse_qsl(parsed.query))
+        return _normalize_pantry_filter(params.get("filter"))
+    except (ValueError, TypeError):
+        return ""
+
+
 def _apply_pantry_sort(query, sort_key: str):
     """Apply the ORDER BY for `sort_key` to a PantryItem query, after
     clearing whatever default order_by the dynamic relationship attached.
@@ -1920,6 +1987,54 @@ def _apply_pantry_sort(query, sort_key: str):
     return query.order_by(
         PantryItem.added_at.desc(), PantryItem.id.desc(),
     )
+
+
+def _fetch_pantry_items_for_render(
+    *, query: str = "", sort_key: str = PANTRY_SORT_DEFAULT,
+    filter_key: str = "",
+):
+    """Single source of truth for "what items get rendered in the
+    pantry list" given the current query string, sort, and filter.
+
+    Pre-4C this filter chain was duplicated across three call sites
+    (pantry_list GET, pantry_add htmx swap, pantry_item_delete htmx
+    swap). Centralizing lets the add/delete paths get the new
+    low-stock filter for free instead of growing the duplication.
+
+    Caller is responsible for normalizing sort_key + filter_key.
+    """
+    items_q = current_user.household.pantry_items
+    if query:
+        items_q = items_q.filter(PantryItem.name.ilike(f"%{query}%"))
+    if filter_key == "low":
+        # See _is_pantry_item_low for the rule. Untracked items
+        # (quantity IS NULL) are deliberately excluded from low-stock
+        # tracking — the user opts in by entering a quantity.
+        items_q = items_q.filter(
+            PantryItem.quantity.isnot(None),
+            PantryItem.quantity <= PANTRY_LOW_STOCK_THRESHOLD,
+        )
+    items_q = _apply_pantry_sort(items_q, sort_key)
+    return items_q.all()
+
+
+def _count_low_pantry_items(*, query: str = "") -> int:
+    """How many pantry items would match the Low filter right now,
+    respecting the current search box? Drives the "Low (N)" chip
+    label. The chip itself is hidden in the template when this
+    returns 0 (zero noise on a healthy pantry).
+
+    Scoping the count to the current search keeps the chip and the
+    filter result in sync — tapping "Low (3)" yields exactly 3 rows,
+    not "3 in the household but only 1 matches my current search."
+    """
+    items_q = current_user.household.pantry_items
+    if query:
+        items_q = items_q.filter(PantryItem.name.ilike(f"%{query}%"))
+    return items_q.filter(
+        PantryItem.quantity.isnot(None),
+        PantryItem.quantity <= PANTRY_LOW_STOCK_THRESHOLD,
+    ).count()
 
 
 def _get_pantry_item_or_404(item_id: int) -> PantryItem:
