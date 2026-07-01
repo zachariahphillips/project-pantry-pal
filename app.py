@@ -309,11 +309,13 @@ def _register_routes(app: Flask) -> None:
         # "Low (3)" + tap → exactly 3 results, no surprises.
         low_count = _count_low_pantry_items(query=query)
 
+        density = _get_pantry_density()
+
         if request.headers.get("HX-Request"):
             return render_template(
                 "_pantry_list.html", items=items, query=query,
                 sort_key=sort_key, filter_key=filter_key,
-                low_count=low_count,
+                low_count=low_count, density=density,
                 pantry_sort_options=PANTRY_SORT_OPTIONS,
             )
 
@@ -325,7 +327,7 @@ def _register_routes(app: Flask) -> None:
         return render_template(
             "pantry.html", items=items, form=form, query=query,
             sort_key=sort_key, filter_key=filter_key,
-            low_count=low_count,
+            low_count=low_count, density=density,
             pantry_sort_options=PANTRY_SORT_OPTIONS,
             household=current_user.household,
             invites=_active_invites_for(current_user.household),
@@ -364,6 +366,7 @@ def _register_routes(app: Flask) -> None:
                     "_pantry_list.html", items=items, query="",
                     sort_key=sort_key, filter_key=filter_key,
                     low_count=_count_low_pantry_items(),
+                    density=_get_pantry_density(),
                     pantry_sort_options=PANTRY_SORT_OPTIONS,
                 )
             return redirect(url_for("pantry_list"))
@@ -383,7 +386,13 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def pantry_item_get(item_id: int):
         item = _get_pantry_item_or_404(item_id)
-        return render_template("_pantry_item.html", item=item)
+        # Phase 4D: pass density so the single-item re-render (used by
+        # the Cancel-edit and post-save swaps) matches the current
+        # list layout instead of falling back to Roomy.
+        return render_template(
+            "_pantry_item.html", item=item,
+            density=_get_pantry_density(),
+        )
 
     @app.route("/pantry/<int:item_id>/edit", methods=["GET"])
     @login_required
@@ -403,7 +412,10 @@ def _register_routes(app: Flask) -> None:
             item.unit = _clean_optional(form.unit.data)
             item.notes = _clean_optional(form.notes.data)
             db.session.commit()
-            return render_template("_pantry_item.html", item=item)
+            return render_template(
+                "_pantry_item.html", item=item,
+                density=_get_pantry_density(),
+            )
         return render_template("_pantry_item_edit.html", item=item, form=form), 422
 
     @app.route("/pantry/<int:item_id>", methods=["DELETE"])
@@ -422,6 +434,50 @@ def _register_routes(app: Flask) -> None:
             "_pantry_list.html", items=items, query="",
             sort_key=sort_key, filter_key=filter_key,
             low_count=_count_low_pantry_items(),
+            density=_get_pantry_density(),
+            pantry_sort_options=PANTRY_SORT_OPTIONS,
+        )
+
+    @app.route("/pantry/density", methods=["POST"])
+    @login_required
+    def pantry_density_toggle():
+        """Phase 4D: flip the user's pantry density preference and
+        re-render the list partial. Preference is stored in the Flask
+        session cookie — sticky across visits, no URL noise.
+
+        Preserves sort + filter + search from HX-Current-URL so the
+        toggle doesn't accidentally reset the user's other choices.
+        The response is a normal _pantry_list.html partial that htmx
+        swaps in place.
+        """
+        raw = (request.form.get("density") or "").strip().lower()
+        if raw not in PANTRY_DENSITY_OPTIONS:
+            raw = PANTRY_DENSITY_DEFAULT
+        session[PANTRY_DENSITY_SESSION_KEY] = raw
+
+        # Recover query context from HX-Current-URL so the swap is a
+        # faithful re-render of what the user was looking at, just in
+        # the new density. Sort + filter helpers already read from
+        # this header; query needs a bespoke read (no q= on this POST).
+        query = ""
+        current_url = request.headers.get("HX-Current-URL", "")
+        if current_url:
+            try:
+                parsed = urlsplit(current_url)
+                params = dict(parse_qsl(parsed.query))
+                query = (params.get("q") or "").strip()
+            except (ValueError, TypeError):
+                query = ""
+        sort_key = _current_pantry_sort_from_request()
+        filter_key = _current_pantry_filter_from_request()
+        items = _fetch_pantry_items_for_render(
+            query=query, sort_key=sort_key, filter_key=filter_key,
+        )
+        return render_template(
+            "_pantry_list.html", items=items, query=query,
+            sort_key=sort_key, filter_key=filter_key,
+            low_count=_count_low_pantry_items(query=query),
+            density=raw,
             pantry_sort_options=PANTRY_SORT_OPTIONS,
         )
 
@@ -1886,6 +1942,27 @@ PANTRY_SORT_OPTIONS: "dict[str, str]" = {
     "name": "A\u2013Z",  # en-dash so it reads "A–Z"
 }
 PANTRY_SORT_DEFAULT = "newest"
+
+
+# --- Phase 4D: pantry density --------------------------------------------
+
+# Two-value preference — "roomy" is the pre-4D three-line card layout;
+# "compact" collapses the qty/notes/timestamp into a single metadata line
+# and tightens the card padding. Stored in the Flask session (cookie)
+# because it's a personal preference, not something the user shares/
+# bookmarks. Session cookie is 4KB total — one string here is trivial.
+PANTRY_DENSITY_OPTIONS = {"roomy", "compact"}
+PANTRY_DENSITY_DEFAULT = "roomy"
+PANTRY_DENSITY_SESSION_KEY = "pantry_density"
+
+
+def _get_pantry_density() -> str:
+    """Read the user's chosen pantry density from the Flask session.
+    Defaults to 'roomy' (the pre-4D layout). Anything unrecognized (a
+    stale or tampered session value from a future rename) silently
+    falls back so we never render a broken layout."""
+    raw = session.get(PANTRY_DENSITY_SESSION_KEY, PANTRY_DENSITY_DEFAULT)
+    return raw if raw in PANTRY_DENSITY_OPTIONS else PANTRY_DENSITY_DEFAULT
 
 
 def _normalize_pantry_sort(raw: "str | None") -> str:

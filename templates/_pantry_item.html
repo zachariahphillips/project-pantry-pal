@@ -1,46 +1,71 @@
+{% set qty = item.display_quantity() %}
+{% set _is_low = item | is_low_stock %}
+{% set _is_stale = item.added_at | is_stale_age %}
+{% set _other_added = item.added_by and item.added_by.id != current_user.id %}
+{# Phase 4D: density is a user preference stored in session. `roomy`
+   is the pre-4D three-line layout; `compact` collapses everything
+   below the name into a single truncated metadata line and tightens
+   the card padding. Both layouts preserve the same content and touch
+   targets — the only info that gets clipped in compact is long notes
+   that overflow the single line (via `truncate`). #}
 <div id="pantry-item-{{ item.id }}"
-     class="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+     class="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white shadow-sm {% if density == 'compact' %}p-2{% else %}p-3{% endif %}">
   <div class="min-w-0 flex-1">
     <p class="truncate text-sm font-medium text-stone-900">{{ item.name }}</p>
-    {% set qty = item.display_quantity() %}
-    {% set _is_low = item | is_low_stock %}
-    {# Phase 4C: inline "Low" pill on the qty line whenever the item
-       qualifies (quantity is set AND ≤ PANTRY_LOW_STOCK_THRESHOLD).
-       Placed right next to the qty because the badge IS modifying
-       the quantity — reads as "1 cup, which is Low". Untracked
-       items (qty is None) can't be low, so this pill never appears
-       without a visible quantity to anchor it. #}
-    {% if qty or item.notes %}
-      <p class="mt-0.5 text-xs text-stone-500">
-        {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
-        {% if _is_low -%}
+
+    {% if density == "compact" %}
+      {# Compact: one truncated meta line combining qty · Low · notes
+         · attribution · time. The stale-age color treatment applies to
+         the attribution+time span only (not the qty/notes text), same
+         semantics as Roomy — just packed onto one line. `truncate`
+         forces single-line-with-ellipsis; long notes get clipped and
+         the user can flip back to Roomy for the full string. #}
+      <p class="mt-0.5 truncate text-xs text-stone-500">
+        {%- if qty -%}
+          <span class="font-medium text-stone-600">{{ qty }}</span>
+        {%- endif -%}
+        {%- if _is_low -%}
           <span class="ml-1 inline-flex items-center rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">Low</span>
+        {%- endif -%}
+        {%- if item.notes -%}
+          {%- if qty or _is_low %} · {% endif -%}
+          {{ item.notes }}
+        {%- endif -%}
+        <span class="{% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
+          {%- if qty or item.notes %} · {% endif -%}
+          {% if _other_added -%}
+            added by {{ item.added_by.name }} ·
+          {%- else -%}
+            added
+          {%- endif %}
+          <time datetime="{{ item.added_at.isoformat() }}Z">{{ item.added_at | relative_time }}</time>
+        </span>
+      </p>
+    {% else %}
+      {# Roomy: the existing two-paragraph layout — qty/Low/notes on
+         one line, provenance + time on the next. #}
+      {% if qty or item.notes %}
+        <p class="mt-0.5 text-xs text-stone-500">
+          {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
+          {% if _is_low -%}
+            <span class="ml-1 inline-flex items-center rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">Low</span>
+          {%- endif %}
+          {% if qty and item.notes %} · {% endif %}
+          {% if item.notes %}{{ item.notes }}{% endif %}
+        </p>
+      {% endif %}
+      {# Phase 2A/4B: provenance + relative-time stamp on one line.
+         Stale items (Phase 4B) flip the whole line from text-stone-400
+         to text-amber-600. #}
+      <p class="mt-1 text-[11px] {% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
+        {% if _other_added -%}
+          added by {{ item.added_by.name }} ·
+        {%- else -%}
+          added
         {%- endif %}
-        {% if qty and item.notes %} · {% endif %}
-        {% if item.notes %}{{ item.notes }}{% endif %}
+        <time datetime="{{ item.added_at.isoformat() }}Z">{{ item.added_at | relative_time }}</time>
       </p>
     {% endif %}
-    {# Phase 2A/4B: provenance + relative-time stamp on one line.
-       Always shows a timestamp ("added 2d ago") so the user has temporal
-       context on every row. When someone ELSE added the item, the
-       attribution layers in front: "added by Alice · 2d ago" — keeps
-       the existing "added by X" wording for solo-vs-shared parity and
-       so the test asserting on that string stays green.
-
-       Stale-age treatment (Phase 4B): the whole line flips from
-       text-stone-400 to text-amber-600 once an item is older than
-       PANTRY_STALE_AGE_DAYS (14 days). It's a soft nudge — the line
-       stays the same size and position, just shifts hue. No new
-       elements, no layout shift, no per-card icon to track. #}
-    {% set _is_stale = item.added_at | is_stale_age %}
-    <p class="mt-1 text-[11px] {% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
-      {% if item.added_by and item.added_by.id != current_user.id -%}
-        added by {{ item.added_by.name }} ·
-      {%- else -%}
-        added
-      {%- endif %}
-      <time datetime="{{ item.added_at.isoformat() }}Z">{{ item.added_at | relative_time }}</time>
-    </p>
   </div>
   <div class="flex flex-shrink-0 items-center gap-1">
     <button type="button"
