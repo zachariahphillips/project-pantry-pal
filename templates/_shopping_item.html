@@ -1,49 +1,82 @@
-<div id="shopping-item-{{ item.id }}"
-     class="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm {% if item.checked %}opacity-60{% endif %}">
-  <label class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg hover:bg-stone-100"
-         aria-label="Toggle '{{ item.name }}' checked off">
-    <input type="checkbox"
-           {% if item.checked %}checked{% endif %}
-           hx-post="{{ url_for('shopping_item_toggle', item_id=item.id) }}"
-           hx-target="#shopping-list"
-           hx-swap="outerHTML"
-           class="h-5 w-5 cursor-pointer rounded border-stone-400 text-green-600 focus:ring-2 focus:ring-green-300" />
-  </label>
+{# Phase 3E: swipe-to-delete wrapper.
 
-  <div class="min-w-0 flex-1">
-    <p class="truncate text-sm font-medium text-stone-900 {% if item.checked %}line-through decoration-stone-500{% endif %}">
-      {{ item.name }}
-    </p>
-    {% set qty = item.display_quantity() %}
-    {% if qty or item.notes %}
-      <p class="mt-0.5 text-xs text-stone-500 {% if item.checked %}line-through decoration-stone-400{% endif %}">
-        {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
-        {% if qty and item.notes %} · {% endif %}
-        {% if item.notes %}{{ item.notes }}{% endif %}
-      </p>
-    {% endif %}
-    {# Phase 2A provenance stamp — hidden when current_user added it. #}
-    {% if item.added_by and item.added_by.id != current_user.id %}
-      <p class="mt-1 text-[11px] text-stone-400">added by {{ item.added_by.name }}</p>
-    {% endif %}
+   The outer div keeps its stable id so backward-compat tests (which
+   locate items by `id="shopping-item-N"`) still work. Underneath it
+   we render two stacked layers:
+
+     1. A red "Delete" affordance layer (absolute, aria-hidden) that
+        sits BEHIND the content. It's fully opaque all the time —
+        the reveal is done purely by the content sliding to the left,
+        so no opacity animation is needed.
+
+     2. A `data-swipe-content` layer that holds the actual row UI
+        (checkbox / name / actions). This is the element the swipe
+        JS translates. It carries `data-delete-url` so the JS can
+        fire the DELETE request without needing to introspect
+        buttons.
+
+   The visible Delete button INSIDE `data-swipe-content` stays
+   present — swipe is an accelerator, not a replacement. That
+   preserves keyboard/screen-reader access and gives new users a
+   discoverable path.
+#}
+<div id="shopping-item-{{ item.id }}"
+     class="relative overflow-hidden rounded-2xl shadow-sm"
+     data-swipe-row>
+  <div class="pointer-events-none absolute inset-0 flex items-center justify-end bg-red-600 pl-6 pr-6"
+       aria-hidden="true"
+       data-swipe-affordance>
+    <span class="text-sm font-semibold uppercase tracking-wide text-white">Delete</span>
   </div>
 
-  <div class="flex flex-shrink-0 items-center gap-1">
-    <button type="button"
-            hx-get="{{ url_for('shopping_item_edit', item_id=item.id) }}"
-            hx-target="#shopping-item-{{ item.id }}"
-            hx-swap="outerHTML"
-            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
-      Edit
-    </button>
-    {# Phase 3J: hx-confirm removed. Delete fires an undo-able toast
-       on the swapped list, same pattern as Clear checked. #}
-    <button type="button"
-            hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
-            hx-target="#shopping-list"
-            hx-swap="outerHTML"
-            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
-      Delete
-    </button>
+  <div class="relative flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 {% if item.checked %}opacity-60{% endif %}"
+       data-swipe-content
+       data-delete-url="{{ url_for('shopping_item_delete', item_id=item.id) }}">
+    <label class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg hover:bg-stone-100"
+           aria-label="Toggle '{{ item.name }}' checked off">
+      <input type="checkbox"
+             {% if item.checked %}checked{% endif %}
+             hx-post="{{ url_for('shopping_item_toggle', item_id=item.id) }}"
+             hx-target="#shopping-list"
+             hx-swap="outerHTML"
+             class="h-5 w-5 cursor-pointer rounded border-stone-400 text-green-600 focus:ring-2 focus:ring-green-300" />
+    </label>
+
+    <div class="min-w-0 flex-1">
+      <p class="truncate text-sm font-medium text-stone-900 {% if item.checked %}line-through decoration-stone-500{% endif %}">
+        {{ item.name }}
+      </p>
+      {% set qty = item.display_quantity() %}
+      {% if qty or item.notes %}
+        <p class="mt-0.5 text-xs text-stone-500 {% if item.checked %}line-through decoration-stone-400{% endif %}">
+          {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
+          {% if qty and item.notes %} · {% endif %}
+          {% if item.notes %}{{ item.notes }}{% endif %}
+        </p>
+      {% endif %}
+      {# Phase 2A provenance stamp — hidden when current_user added it. #}
+      {% if item.added_by and item.added_by.id != current_user.id %}
+        <p class="mt-1 text-[11px] text-stone-400">added by {{ item.added_by.name }}</p>
+      {% endif %}
+    </div>
+
+    <div class="flex flex-shrink-0 items-center gap-1">
+      <button type="button"
+              hx-get="{{ url_for('shopping_item_edit', item_id=item.id) }}"
+              hx-target="#shopping-item-{{ item.id }}"
+              hx-swap="outerHTML"
+              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
+        Edit
+      </button>
+      {# Phase 3J: hx-confirm removed. Delete fires an undo-able toast
+         on the swapped list, same pattern as Clear checked. #}
+      <button type="button"
+              hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
+              hx-target="#shopping-list"
+              hx-swap="outerHTML"
+              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
+        Delete
+      </button>
+    </div>
   </div>
 </div>

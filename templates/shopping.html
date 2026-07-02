@@ -133,4 +133,136 @@
 
   {% include "_shopping_list.html" %}
 </section>
+
+{# ---------------------------------------------------------------------
+   Phase 3E — swipe-to-delete on shopping rows.
+
+   Uses vanilla touch events with delegated listeners on `document.body`
+   so htmx-swapped rows work without rebinding. Swipe rules:
+     • Only left swipes count. Right/up/down are ignored.
+     • First ~8px of movement decides whether the touch is a swipe or
+       a page scroll — if vertical wins, we bail entirely so the user's
+       scroll gesture works normally.
+     • Past ~100px of leftward travel, releasing commits a DELETE via
+       htmx.ajax against the same endpoint the visible Delete button
+       uses (which fires the existing Phase 3C undo toast).
+     • Anything below the threshold snaps back with a 180ms animation.
+
+   The visible Delete button stays present so keyboard/screen-reader
+   users retain full access. Swipe is an additive accelerator, not a
+   replacement.
+
+   Kept as an IIFE inside shopping.html for now. If we ever extend
+   swipe to other surfaces (pantry, meals) we should promote this to
+   base.html and generalize the delete-url selector into a config
+   attribute on the container.
+   --------------------------------------------------------------- #}
+<script>
+(function initShoppingSwipe() {
+  var SWIPE_THRESHOLD = 100;
+  var MAX_SWIPE = 180;
+  var SCROLL_LOCK_DELTA = 8;
+  var SNAP_DURATION_MS = 180;
+  var COMMIT_SLIDE_DURATION_MS = 180;
+
+  var active = null;
+
+  document.body.addEventListener('touchstart', onStart, { passive: true });
+  document.body.addEventListener('touchmove',  onMove,  { passive: false });
+  document.body.addEventListener('touchend',   onEnd,   { passive: true });
+  document.body.addEventListener('touchcancel', onCancel, { passive: true });
+
+  function onStart(e) {
+    if (e.touches.length !== 1) return;
+    // Never start a swipe when the user tapped a real control —
+    // let the checkbox / Edit / Delete / label handle it natively.
+    if (e.target.closest('button, input, label, a, form')) return;
+    var row = e.target.closest('[data-swipe-row]');
+    if (!row) return;
+    var content = row.querySelector('[data-swipe-content]');
+    if (!content) return;
+    var touch = e.touches[0];
+    active = {
+      row: row,
+      content: content,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      direction: null,
+      currentDx: 0,
+    };
+    content.style.transition = 'none';
+  }
+
+  function onMove(e) {
+    if (!active) return;
+    var touch = e.touches[0];
+    var dx = touch.clientX - active.startX;
+    var dy = touch.clientY - active.startY;
+
+    if (active.direction === null) {
+      // Wait until we've moved far enough to know intent.
+      if (Math.abs(dx) < SCROLL_LOCK_DELTA && Math.abs(dy) < SCROLL_LOCK_DELTA) return;
+      active.direction = Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'scroll';
+    }
+    if (active.direction === 'scroll') return;
+
+    // Confirmed swipe — take over so the page doesn't also scroll.
+    e.preventDefault();
+
+    // Only respond to leftward drags. Rightward is clamped at 0 so
+    // users can't drag the row off to the right.
+    var translation = Math.min(0, dx);
+    if (translation < -MAX_SWIPE) {
+      // Rubber-band past the max — visible but resistant.
+      translation = -MAX_SWIPE + (translation + MAX_SWIPE) * 0.25;
+    }
+    active.currentDx = translation;
+    active.content.style.transform = 'translateX(' + translation + 'px)';
+  }
+
+  function onEnd() {
+    if (!active) return;
+    var row = active.row;
+    var content = active.content;
+    var currentDx = active.currentDx;
+    var direction = active.direction;
+    active = null;
+
+    if (direction !== 'swipe') {
+      content.style.transform = '';
+      return;
+    }
+
+    if (currentDx <= -SWIPE_THRESHOLD) {
+      // Commit — slide the content fully off-screen, then fire the
+      // DELETE via htmx so the existing undo-toast wiring on the
+      // response (Phase 3C) picks up.
+      content.style.transition = 'transform ' + COMMIT_SLIDE_DURATION_MS + 'ms ease-out';
+      content.style.transform = 'translateX(-100%)';
+      var deleteUrl = content.getAttribute('data-delete-url');
+      window.setTimeout(function () {
+        if (!deleteUrl) return;
+        if (window.htmx && typeof window.htmx.ajax === 'function') {
+          window.htmx.ajax('DELETE', deleteUrl, {
+            target: '#shopping-list',
+            swap: 'outerHTML',
+          });
+        }
+      }, COMMIT_SLIDE_DURATION_MS);
+    } else {
+      // Snap back to origin.
+      content.style.transition = 'transform ' + SNAP_DURATION_MS + 'ms ease-out';
+      content.style.transform = 'translateX(0)';
+    }
+  }
+
+  function onCancel() {
+    if (!active) return;
+    var content = active.content;
+    active = null;
+    content.style.transition = 'transform ' + SNAP_DURATION_MS + 'ms ease-out';
+    content.style.transform = 'translateX(0)';
+  }
+})();
+</script>
 {% endblock %}
