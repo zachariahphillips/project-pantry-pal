@@ -503,7 +503,19 @@ class TestUserIsolation:
         bob = alice_and_bob["bob"]
         pantry = bob.get("/pantry").get_data(as_text=True)
         shop = bob.get("/shopping").get_data(as_text=True)
-        assert "Your pantry is empty" in pantry
+        # Phase 5A: brand-new households see the onboarding hero card
+        # ("Let's stock your pantry.") in place of the old low-key
+        # "Your pantry is empty" message. Either signal proves Bob's
+        # pantry is empty for our purposes — this test cares about
+        # household ISOLATION (Bob doesn't see Olive oil), not the
+        # exact empty-state copy.
+        assert (
+            "Your pantry is empty" in pantry
+            or "Let's stock your pantry" in pantry
+        ), (
+            "Bob should see SOME empty-pantry treatment. If both "
+            "strings are missing, the empty-state UI regressed."
+        )
         assert "Olive oil" not in pantry
         assert "Nothing on your shopping list" in shop
         assert "Tortillas" not in shop

@@ -12,7 +12,20 @@
     </p>
   </div>
 
-  {# ---------- AI meal planner (Phase 3A, promoted above the fold in 3E) ---------- #}
+  {# Phase 5A: onboarding gates. `is_empty_pantry` fires the hero card
+     around the add-item form; `onboarding_active` gates the AI meal
+     planner. Both derive from `pantry_item_count`, the household-wide
+     count computed in pantry_list() (unscoped by search/filter). #}
+  {% set is_empty_pantry = pantry_item_count == 0 %}
+  {% set onboarding_active = pantry_item_count < onboarding_threshold %}
+
+  {# ---------- AI meal planner (Phase 3A, promoted above the fold in 3E) ----------
+     Phase 5A: gated below the onboarding_threshold. Below the gate we
+     keep the heading + cost pill visible (so users know the feature
+     exists and how many uses they'll have) and replace the input +
+     chips with a small progress panel showing dots + a copy prompt.
+     Chips are hidden to avoid confused "why won't this do anything"
+     taps — they reappear along with the input once unlocked. #}
   <section aria-labelledby="meal-plan-heading">
     <div class="flex items-baseline justify-between gap-2">
       <h2 id="meal-plan-heading" class="text-base font-semibold text-stone-900">
@@ -27,78 +40,114 @@
             aria-live="polite"></span>
     </div>
     <p class="mt-0.5 text-xs text-stone-500">
-      Tell the AI what you want to make. It'll check your pantry and tell you what to buy.
+      {% if onboarding_active %}
+        Add a few items first — the AI plans meals using what you have.
+      {% else %}
+        Tell the AI what you want to make. It'll check your pantry and tell you what to buy.
+      {% endif %}
     </p>
 
-    {# Phase 3D: prompt chips. Tap to prefill the input below — does NOT
-       auto-submit, so the user can tweak before pressing Ask AI. The
-       chip's data-prompt-chip is the verbatim text we drop into the
-       prompt field; the inner <span> is the short button label. We
-       keep the label and the prompt separate so we can show "Quick
-       (< 30 min)" but actually send "A quick meal, under 30 minutes"
-       (which steers the model better). #}
-    {% set chip_class = "inline-flex items-center rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-700 hover:border-green-600 hover:bg-green-50 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-300" %}
-    {% set chips = [
-      ("Tonight's dinner", "Tonight's dinner"),
-      ("Quick (< 30 min)", "A quick meal, under 30 minutes"),
-      ("Vegetarian", "A vegetarian meal"),
-      ("Comfort food", "Something comforting"),
-      ("Use what we have", "Use mostly what we already have in the pantry"),
-    ] %}
-    <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Quick prompts">
-      {% for label, prompt in chips %}
-        <button type="button"
-                data-prompt-chip="{{ prompt }}"
-                class="{{ chip_class }}">{{ label }}</button>
-      {% endfor %}
-    </div>
-
-    <form hx-post="{{ url_for('meal_plan_create') }}"
-          hx-target="#meal-plan-result"
-          hx-swap="innerHTML"
-          hx-indicator="#meal-plan-spinner"
-          hx-on::after-request="if (event.detail.successful) this.reset();"
-          class="mt-3 flex gap-2">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-      <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
-      <input id="meal-plan-prompt"
-             type="text"
-             name="prompt"
-             maxlength="240"
-             required
-             autocomplete="off"
-             placeholder='e.g. "pasta carbonara"'
-             class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-      <button type="submit"
-              class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">
-        Ask AI
-      </button>
-    </form>
-
-    {# htmx-indicator class is auto-toggled by hx-indicator above.
-       Card-shaped skeleton (Phase 3B): the page doesn't reflow when
-       the real card lands because the placeholder takes the same
-       footprint. Pulse-animated bars hint "this is loading", and the
-       small "Thinking… 2-5s" label sets the expected wait time. #}
-    <div id="meal-plan-spinner"
-         class="htmx-indicator mt-3"
-         role="status"
-         aria-live="polite">
-      <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <div class="border-b border-stone-100 px-4 py-3">
-          <div class="h-5 w-1/2 animate-pulse rounded bg-stone-200"></div>
-          <div class="mt-2 h-3 w-3/4 animate-pulse rounded bg-stone-100"></div>
+    {% if onboarding_active %}
+      {# Gated: progress panel replaces chips + form. Dot count matches
+         the threshold so a future tuning of the threshold flows through
+         the copy AND the visual automatically. #}
+      {% set _remaining = onboarding_threshold - pantry_item_count %}
+      <div id="meal-plan-onboarding-gate"
+           class="mt-3 flex items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-3"
+           role="status"
+           aria-live="polite">
+        <div class="flex items-center gap-1" aria-label="Pantry progress">
+          {% for i in range(onboarding_threshold) %}
+            <span class="h-2.5 w-2.5 rounded-full {% if i < pantry_item_count %}bg-green-600{% else %}bg-stone-300{% endif %}"
+                  aria-hidden="true"></span>
+          {% endfor %}
         </div>
-        <div class="space-y-2 px-4 py-3">
-          <div class="h-4 w-full animate-pulse rounded bg-stone-100"></div>
-          <div class="h-4 w-5/6 animate-pulse rounded bg-stone-100"></div>
-          <div class="h-4 w-3/5 animate-pulse rounded bg-stone-100"></div>
-        </div>
-        <p class="border-t border-stone-100 bg-stone-50 px-4 py-2 text-xs text-stone-400">
-          Thinking… (2–5 seconds)
+        <p class="flex-1 text-xs text-stone-600">
+          Add <span class="font-semibold text-stone-900">{{ _remaining }}</span>
+          more {{ 'item' if _remaining == 1 else 'items' }} to unlock the AI planner.
         </p>
       </div>
-    </div>
+    {% else %}
+      {# Unlocked: full planner UI. #}
+      {# Phase 3D: prompt chips. Tap to prefill the input below — does NOT
+         auto-submit, so the user can tweak before pressing Ask AI. The
+         chip's data-prompt-chip is the verbatim text we drop into the
+         prompt field; the inner <span> is the short button label. We
+         keep the label and the prompt separate so we can show "Quick
+         (< 30 min)" but actually send "A quick meal, under 30 minutes"
+         (which steers the model better). #}
+      {% set chip_class = "inline-flex items-center rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-medium text-stone-700 hover:border-green-600 hover:bg-green-50 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-300" %}
+      {% set chips = [
+        ("Tonight's dinner", "Tonight's dinner"),
+        ("Quick (< 30 min)", "A quick meal, under 30 minutes"),
+        ("Vegetarian", "A vegetarian meal"),
+        ("Comfort food", "Something comforting"),
+        ("Use what we have", "Use mostly what we already have in the pantry"),
+      ] %}
+      <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Quick prompts">
+        {% for label, prompt in chips %}
+          <button type="button"
+                  data-prompt-chip="{{ prompt }}"
+                  class="{{ chip_class }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+
+      <form hx-post="{{ url_for('meal_plan_create') }}"
+            hx-target="#meal-plan-result"
+            hx-swap="innerHTML"
+            hx-indicator="#meal-plan-spinner"
+            hx-on::after-request="if (event.detail.successful) this.reset();"
+            class="mt-3 flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
+        <input id="meal-plan-prompt"
+               type="text"
+               name="prompt"
+               maxlength="240"
+               required
+               autocomplete="off"
+               placeholder='e.g. "pasta carbonara"'
+               class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+        <button type="submit"
+                class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">
+          Ask AI
+        </button>
+      </form>
+    {% endif %}
+
+    {# Phase 5A: spinner only makes sense while the planner form exists
+       (it's the hx-indicator target). During onboarding the form is
+       replaced by the progress panel, so the spinner has nothing to
+       toggle and we omit it. The `latest_meal_plan` result slot is
+       kept regardless — it's history, and a user who dips below the
+       threshold via deletes shouldn't lose access to plans they
+       already generated. #}
+    {% if not onboarding_active %}
+      {# htmx-indicator class is auto-toggled by hx-indicator above.
+         Card-shaped skeleton (Phase 3B): the page doesn't reflow when
+         the real card lands because the placeholder takes the same
+         footprint. Pulse-animated bars hint "this is loading", and the
+         small "Thinking… 2-5s" label sets the expected wait time. #}
+      <div id="meal-plan-spinner"
+           class="htmx-indicator mt-3"
+           role="status"
+           aria-live="polite">
+        <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+          <div class="border-b border-stone-100 px-4 py-3">
+            <div class="h-5 w-1/2 animate-pulse rounded bg-stone-200"></div>
+            <div class="mt-2 h-3 w-3/4 animate-pulse rounded bg-stone-100"></div>
+          </div>
+          <div class="space-y-2 px-4 py-3">
+            <div class="h-4 w-full animate-pulse rounded bg-stone-100"></div>
+            <div class="h-4 w-5/6 animate-pulse rounded bg-stone-100"></div>
+            <div class="h-4 w-3/5 animate-pulse rounded bg-stone-100"></div>
+          </div>
+          <p class="border-t border-stone-100 bg-stone-50 px-4 py-2 text-xs text-stone-400">
+            Thinking… (2–5 seconds)
+          </p>
+        </div>
+      </div>
+    {% endif %}
 
     {# Server-rendered slot for the meal plan card.
        Phase 3E: when priming on GET /pantry we render with
@@ -131,13 +180,42 @@
   {% set field = "block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" %}
   {% set label = "mb-1 block text-xs font-medium text-stone-600" %}
 
+  {# Phase 5A: when the pantry is empty, the add-form doubles as the
+     first-run hero. Same form (fields, POST target, hx wiring — all
+     unchanged), just wrapped in a larger card with an icon/headline/
+     subcopy and a slightly bolder submit label. Once the household has
+     any item, the form snaps back to its compact "utility" appearance.
+     Test hook: the `id="pantry-add-hero"` attribute lets tests locate
+     the hero without asserting on class strings. #}
   <form method="post"
         action="{{ url_for('pantry_add') }}"
         hx-post="{{ url_for('pantry_add') }}"
         hx-target="#pantry-list"
         hx-swap="outerHTML"
         hx-on::after-request="if (event.detail.successful) this.reset();"
-        class="mt-8 mb-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+        {% if is_empty_pantry %}id="pantry-add-hero"{% endif %}
+        class="mt-8 mb-5 rounded-2xl border shadow-sm {% if is_empty_pantry %}border-green-200 bg-green-50/40 p-5{% else %}border-stone-200 bg-white p-4{% endif %}">
+    {% if is_empty_pantry %}
+      <div class="mb-4 flex flex-col items-center text-center">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-100">
+          {# Same pantry glyph the tab bar uses — visual continuity with
+             the "Pantry" nav so the first-run user's mental model
+             ("this is the pantry") is reinforced. #}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round"
+               class="h-6 w-6 text-green-700" aria-hidden="true">
+            <path d="M3 7h18v3H3zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4" />
+          </svg>
+        </div>
+        <h2 class="mt-3 text-base font-semibold text-stone-900">
+          Let's stock your pantry.
+        </h2>
+        <p class="mt-1 text-xs text-stone-500">
+          Add a few things you keep at home — canned goods, oils, produce.
+          PantryPal uses this to help you plan meals.
+        </p>
+      </div>
+    {% endif %}
     {{ form.hidden_tag() }}
 
     <div class="space-y-3">
@@ -165,7 +243,7 @@
 
     <button type="submit"
             class="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
-      Add to pantry
+      {% if is_empty_pantry %}Add your first item{% else %}Add to pantry{% endif %}
     </button>
   </form>
 

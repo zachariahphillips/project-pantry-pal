@@ -324,6 +324,13 @@ def _register_routes(app: Flask) -> None:
         # /pantry see their last AI suggestion. None on a fresh household
         # — the template handles that with an empty-state CTA.
         latest_meal_plan = current_user.household.meal_plans.first()
+        # Phase 5A: household-scoped total item count, unfiltered — used
+        # to decide (a) whether to show the empty-pantry onboarding hero
+        # and (b) whether to gate the AI meal planner behind the
+        # ONBOARDING_THRESHOLD. Deliberately NOT scoped by the current
+        # search/filter — a filtered-empty view (e.g. `?filter=low` with
+        # nothing low) is NOT an empty pantry, it's just an empty view.
+        pantry_item_count = current_user.household.pantry_items.count()
         return render_template(
             "pantry.html", items=items, form=form, query=query,
             sort_key=sort_key, filter_key=filter_key,
@@ -333,6 +340,8 @@ def _register_routes(app: Flask) -> None:
             invites=_active_invites_for(current_user.household),
             members=current_user.household.members.all(),
             latest_meal_plan=latest_meal_plan,
+            pantry_item_count=pantry_item_count,
+            onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
         )
 
     @app.route("/pantry", methods=["POST"])
@@ -352,6 +361,28 @@ def _register_routes(app: Flask) -> None:
             db.session.commit()
 
             if request.headers.get("HX-Request"):
+                # Phase 5A: onboarding-zone refresh. Any add while at
+                # or below the onboarding threshold changes something
+                # ABOVE the pantry-list slot (hero card visibility at
+                # 0→1, gate progress dots + "N more items" copy at
+                # every step, planner form appearing once we cross
+                # the threshold). A partial swap only updates the
+                # list, so those upstream widgets go stale.
+                #
+                # Rather than pipe hero/gate state into a growing
+                # partial, we force a full-page reload for any add
+                # while still in the onboarding zone. This costs us
+                # ≤3 full reloads per new household — cheap for the
+                # payoff of a live-feeling progress indicator. Once
+                # past the threshold, adds fall back to the fast
+                # partial-swap path.
+                new_count = current_user.household.pantry_items.count()
+                if new_count <= PANTRY_ONBOARDING_THRESHOLD:
+                    # Empty 204 body — HX-Refresh triggers a full
+                    # client-side reload, so the response payload is
+                    # discarded anyway.
+                    return "", 204, {"HX-Refresh": "true"}
+
                 # Re-render the whole list so the empty state disappears
                 # cleanly and ordering stays in sync with the DB.
                 # Phase 4A/4C: preserve the user's active sort AND filter
@@ -1954,6 +1985,17 @@ PANTRY_SORT_DEFAULT = "newest"
 PANTRY_DENSITY_OPTIONS = {"roomy", "compact"}
 PANTRY_DENSITY_DEFAULT = "roomy"
 PANTRY_DENSITY_SESSION_KEY = "pantry_density"
+
+
+# --- Phase 5A: onboarding ------------------------------------------------
+
+# How many pantry items a household needs before the AI meal planner
+# unlocks. Below this we replace the planner form with a small progress
+# panel — the AI is genuinely low-value with 0-2 items ("you need to
+# buy everything") so gating protects the first-run experience. The
+# constant is a Jinja context var (`onboarding_threshold`) so templates
+# don't hardcode the number.
+PANTRY_ONBOARDING_THRESHOLD = 3
 
 
 def _get_pantry_density() -> str:

@@ -159,8 +159,21 @@ class TestSortPreservation:
 
         Without `_current_pantry_sort_from_request` reading from
         `HX-Current-URL`, this regressed because the POST /pantry
-        request has no `?sort=` of its own to inspect."""
+        request has no `?sort=` of its own to inspect.
+
+        Phase 5A note: seed 3 filler items with a "zzzz" prefix so the
+        tested add is well past the onboarding threshold. Without this
+        primer the third add would cross the meal-planner-gate
+        boundary and return 204 HX-Refresh instead of the list
+        partial we want to inspect. The filler items are filtered
+        out of the order assertion so the tested subset (Apple,
+        Banana, Cherry) still reads clean."""
         sign_up(client, "alice@example.com", "Alice")
+        # Primer: get past the onboarding threshold before the tested
+        # behavior. Names use a "zzzz" prefix so they sort after every
+        # tested item, keeping the alphabetical assertion below tidy.
+        for name in ["zzzz-primer-1", "zzzz-primer-2", "zzzz-primer-3"]:
+            _add_pantry(client, name)
         for name in ["Banana", "Apple"]:
             _add_pantry(client, name)
             time.sleep(0.01)
@@ -183,6 +196,10 @@ class TestSortPreservation:
         )
         assert resp.status_code == 200
         order = _names_in_order_response(resp)
+        # Strip the primer items — they exist only to bump past the
+        # onboarding threshold, they're not part of what we're
+        # asserting about here.
+        order = [n for n in order if not n.startswith("zzzz-primer")]
         assert order == ["Apple", "Banana", "Cherry"], (
             f"Add must preserve A–Z sort across the swap; got {order}. "
             f"If it returns Newest order ['Cherry', 'Banana', 'Apple'], "
@@ -234,14 +251,22 @@ class TestSortPreservation:
         """If the htmx request somehow doesn't carry HX-Current-URL
         (a stripped proxy, an older htmx version), the swap must
         gracefully default to Newest rather than crash. Defensive
-        guarantee from `_current_pantry_sort_from_request`."""
+        guarantee from `_current_pantry_sort_from_request`.
+
+        Phase 5A note: primer past the onboarding threshold so the
+        tested add is a real partial swap (not a 204 HX-Refresh).
+        Primer names use a "zzzz" prefix so they sort AFTER the
+        tested items in Newest order and can be filtered out."""
         sign_up(client, "alice@example.com", "Alice")
+        for name in ["zzzz-primer-1", "zzzz-primer-2", "zzzz-primer-3"]:
+            _add_pantry(client, name)
         _add_pantry(client, "Apple")  # no HX-Current-URL via normal helper
         time.sleep(0.01)
         resp = _add_pantry(client, "Banana")
         # No HX-Current-URL header is sent by the conftest helper, so we
         # expect the response sorted Newest (the fallback) — Banana first.
         order = _names_in_order_response(resp)
+        order = [n for n in order if not n.startswith("zzzz-primer")]
         assert order == ["Banana", "Apple"]
 
 

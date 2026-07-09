@@ -109,6 +109,17 @@
 
   {% if items %}
     {% for item in items %}{% include "_pantry_item.html" %}{% endfor %}
+  {% elif is_empty_pantry|default(false) and not query and not filter_key %}
+    {# Phase 5A: parent page is already showing the onboarding hero
+       card (which contains a bigger version of this exact message
+       plus a scoped icon + headline + the add form itself). Skipping
+       the wrapper entirely instead of emptying its interior — an
+       empty dashed card floating on the page would be worse noise
+       than the redundant copy. On htmx swaps where the parent hero
+       context isn't in scope (add/delete/density partial responses),
+       `is_empty_pantry` falls back to false and the standard message
+       below shows — that's the "you just emptied your pantry via
+       delete" case, which deserves its own reminder. #}
   {% else %}
     <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
       {# Phase 4C: empty-state copy branches on (query, filter_key)

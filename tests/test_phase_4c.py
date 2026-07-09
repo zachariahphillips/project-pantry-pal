@@ -354,8 +354,19 @@ class TestFilterPreservation:
 
         The POST /pantry request has no `?filter=` of its own — the
         filter lives in HX-Current-URL only. Without
-        _current_pantry_filter_from_request, this regresses."""
+        _current_pantry_filter_from_request, this regresses.
+
+        Phase 5A note: seed non-low primer items past the onboarding
+        threshold so the tested add doesn't cross the meal-planner
+        gate boundary (which would return 204 HX-Refresh instead of
+        the filtered list partial we need to inspect). Primers use
+        high qty=99 so they're never in the low filter's output."""
         sign_up(client, "alice@example.com", "Alice")
+        # Primer: bump past the onboarding threshold with items that
+        # will never be caught by filter=low (qty >> 1).
+        _add_pantry(client, "Primer-A", qty="99")
+        _add_pantry(client, "Primer-B", qty="99")
+        _add_pantry(client, "Primer-C", qty="99")
         _add_pantry(client, "Eggs", qty="12")  # not low
         _add_pantry(client, "Bananas", qty="1")  # low
 
@@ -379,6 +390,9 @@ class TestFilterPreservation:
         assert "Eggs" not in names, (
             "Add must preserve filter=low across the swap — Eggs (qty=12) "
             "should NOT be in the filtered response."
+        )
+        assert "Primer-A" not in names and "Primer-B" not in names, (
+            "High-qty primer items must not sneak into the low filter"
         )
         assert set(names) == {"Bananas", "Milk"}, (
             f"Filter must retain across mutation; got {names}"
