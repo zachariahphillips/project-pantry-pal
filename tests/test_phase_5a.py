@@ -141,7 +141,15 @@ class TestBrandNewPantry:
             self, client):
         """The old dashed 'Your pantry is empty. Add your first item
         using the form above.' card is redundant when the hero card
-        is present. Suppress it entirely (both wrapper AND copy)."""
+        is present. The wrapper's copy must not double-signal the
+        empty state.
+
+        Phase 5B note: `border-dashed border-stone-300` now legitimately
+        appears on the page as part of the ghost-row preview (Phase 5B),
+        so we no longer assert its absence. What matters for THIS test
+        is the specific empty-state COPY ('Your pantry is empty.' +
+        'Add your first item using the form above.') — the ghost rows
+        don't carry that copy."""
         sign_up(client, "fresh@example.com", "Fresh")
         html = _pantry_body(client)
         assert "Your pantry is empty." not in html, (
@@ -149,12 +157,10 @@ class TestBrandNewPantry:
             "be suppressed when the hero is active. If this shows, "
             "we're double-signaling."
         )
-        # Also make sure we haven't left an empty dashed wrapper
-        # floating on the page. The distinctive class combo lives
-        # only on that empty-state card.
-        assert "border-dashed border-stone-300" not in html, (
-            "Empty dashed wrapper leaked onto the page — the fix "
-            "must skip the whole <div>, not just its interior copy."
+        assert "Add your first item using the form above." not in html, (
+            "The subcopy of the suppressed empty-state card leaked "
+            "onto the page. The whole <div> should be skipped, not "
+            "just its heading."
         )
 
     def test_gate_replaces_planner_form_on_empty_pantry(self, client):
@@ -409,32 +415,32 @@ class TestHeroDoesNotLeak:
         assert "Let's stock your pantry." not in partial
         assert 'id="pantry-add-hero"' not in partial
 
-    def test_deleting_all_items_shows_partial_empty_state_not_hero(
+    def test_deleting_all_items_returns_hx_refresh(
             self, client):
-        """When a user deletes their last item via htmx, the response
-        is a partial — no full page re-render, no hero. The partial's
-        own "Your pantry is empty" message should appear so the user
-        knows the list is now blank. On next page refresh the hero
-        will show, but during the htmx swap the partial message is
-        the right fit."""
+        """Phase 5B (closes B-001): deleting the last item now returns
+        204 + HX-Refresh, symmetric to `pantry_add`'s onboarding-zone
+        rule. The client's reload is what surfaces the hero + Phase 5B
+        ghost preview together — a partial-swap alone can't repaint
+        the hero because the hero lives ABOVE the pantry-list slot.
+
+        Pre-5B this test asserted the partial contained 'Your pantry is
+        empty' copy; that was documenting the B-001 bug as
+        intentional-for-now. Chunk B inverts the contract."""
         sign_up(client, "fresh@example.com", "Fresh")
         _add_pantry(client, "Milk")
-        # Find the id we just created
         html = _pantry_body(client)
         m = re.search(r'id="pantry-item-(\d+)"', html)
         assert m, "Newly added item should be visible"
         item_id = m.group(1)
-        # Delete via htmx
         resp = client.delete(f"/pantry/{item_id}", htmx=True)
-        partial = resp.get_data(as_text=True)
-        # No hero (partial context doesn't have is_empty_pantry set)
-        assert "Let's stock your pantry." not in partial
-        # But the small partial-level empty message is helpful here
-        assert "Your pantry is empty" in partial, (
-            "Deleting the last item via htmx should surface the "
-            "partial-level empty-state copy — users need SOME "
-            "signal that the delete succeeded and the list is now "
-            "empty."
+        assert resp.status_code == 204, (
+            f"Delete-to-empty must return 204 (no body needed — the "
+            f"client reloads the page). Got {resp.status_code}."
+        )
+        assert resp.headers.get("HX-Refresh") == "true", (
+            "Delete-to-empty must set HX-Refresh:true. If missing, "
+            "B-001 has regressed — the parent hero + ghost preview "
+            "will stay stale until manual refresh."
         )
 
 

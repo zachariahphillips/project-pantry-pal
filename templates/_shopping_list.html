@@ -115,14 +115,42 @@
       {% for item in _checked %}{% include "_shopping_item.html" %}{% endfor %}
     {% endif %}
   {% else %}
-    <div class="rounded-2xl border border-dashed border-stone-300 bg-white p-6 text-center">
+    {# Phase 5B: two-branch empty state.
+
+       Search-empty (query set) stays a plain "no matches" card — the
+       user has already seen real rows, they know the shape, and a
+       ghost preview here would feel like the app forgot they were
+       just typing. Copy tightens `font-medium` → `font-semibold` to
+       match the polish elsewhere.
+
+       True empty (no query) gets the meals-page treatment: bumper
+       icon (h-10 w-10 stone-300), heading + subcopy hierarchy, p-8
+       padding — visual parity with `meals.html`. Ghost-row preview
+       renders below the card so the user can see the row shape. #}
+    <div class="rounded-2xl border border-dashed border-stone-300 bg-white text-center {% if query %}p-6{% else %}p-8{% endif %}">
       {% if query %}
-        <p class="text-sm font-medium text-stone-700">No matches for "{{ query }}".</p>
+        <p class="text-sm font-semibold text-stone-900">No matches for "{{ query }}".</p>
         <p class="mt-1 text-xs text-stone-500">Try a shorter search or clear the box.</p>
       {% else %}
-        <p class="text-sm font-medium text-stone-700">Nothing on your shopping list.</p>
-        <p class="mt-1 text-xs text-stone-500">Add items above, or tap "+ Shop" on any pantry item.</p>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round"
+             class="mx-auto h-10 w-10 text-stone-300" aria-hidden="true">
+          {# Shopping-basket glyph — chosen over cart to sit better at
+             10x10 without visual noise from wheels/handle. #}
+          <path d="M5 8h14l-1.5 11a2 2 0 0 1-2 1.75h-9A2 2 0 0 1 6.5 19L5 8Z"/>
+          <path d="M9 8V6a3 3 0 1 1 6 0v2"/>
+          <path d="M9 12v4M15 12v4"/>
+        </svg>
+        <h2 class="mt-3 text-sm font-semibold text-stone-900">Nothing on your shopping list yet</h2>
+        <p class="mt-1 text-xs text-stone-500">
+          Add items above, or tap <span class="font-medium text-stone-700">+ Shop</span> on any pantry item.
+        </p>
       {% endif %}
     </div>
+    {% if not query %}
+      {% with ghost_context = "shopping" %}
+        {% include "_ghost_rows.html" %}
+      {% endwith %}
+    {% endif %}
   {% endif %}
 </div>

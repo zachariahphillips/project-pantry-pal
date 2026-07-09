@@ -129,9 +129,14 @@ class TestSharedHousehold:
         body = alice.get("/pantry").get_data(as_text=True)
         olive_id = id_for(body, "Olive oil", "pantry-item")
         resp = bob.delete(f"/pantry/{olive_id}")
-        assert resp.status_code == 200
-        # Bob's list is alice's list; the item is gone for both.
-        assert "Olive oil" not in alice.get("/pantry").get_data(as_text=True)
+        # Phase 5B / B-001: below-threshold deletes return 204+HX-Refresh
+        # instead of a 200 partial. This test asserts the auth model
+        # (Bob can act on Alice's item), not the response shape.
+        assert resp.status_code in (200, 204)
+        # Bob's list is alice's list; the item is gone for both. Check the
+        # item's DOM id rather than the name — "Olive oil" is one of the
+        # ghost-row sample names on the empty pantry (Phase 5B).
+        assert f'id="pantry-item-{olive_id}"' not in alice.get("/pantry").get_data(as_text=True)
 
     def test_bob_can_check_off_alices_shopping_item(self, shared):
         alice, bob = shared["alice"], shared["bob"]

@@ -65,7 +65,6 @@ own chunk's tests failing, which is a different failure mode than
 
 | ID | Sev | Discovered | Phase | Description | Repro / Workaround |
 |---|---|---|---|---|---|
-| B-001 | Low | 2026-07-09 | 5A | Deleting the last pantry item via htmx leaves the parent hero + gate stale until the user refreshes. Below-threshold **adds** correctly force an HX-Refresh; below-threshold **deletes** don't. | Refresh the page and the hero reappears. Test `test_deleting_all_items_shows_partial_empty_state_not_hero` (`tests/test_phase_5a.py`) documents the current partial-swap behavior as intentional-for-now. |
 | B-002 | Low | ~2026-06 | 3C | Anonymous POST to `/shopping/undo` returns **400 Bad Request** rather than **302 → /login**. CSRF middleware fires before `@login_required`, so unauthed POSTs are blocked by the wrong layer. Access is still correctly denied. | Test `test_anonymous_user_cannot_undo` in `tests/test_phase_3j.py` accepts 400 as a valid outcome. Real fix requires reordering middleware. |
 
 ## Recently closed
@@ -75,4 +74,4 @@ Older entries can be pruned; git history is the source of truth.
 
 | ID | Closed | Fix commit | Notes |
 |---|---|---|---|
-| — | — | — | — |
+| B-001 | 2026-07-09 | (Phase 5B / Chunk B) | Symmetrized onboarding-threshold behavior in `pantry_item_delete` — below-threshold deletes now return `204 + HX-Refresh: true`, matching what below-threshold adds already did. Hero + meal-planner gate reappear correctly on delete-to-empty without a manual refresh. Ripple test updates: `test_phase_5a` (renamed the partial-swap test to `test_deleting_all_items_returns_hx_refresh`); `test_phase_4a` + `test_phase_4c` primed past threshold to keep the sort/filter-preservation tests on the partial-swap path; `test_phase_2a` accepts `{200, 204}` on the shared-household delete since its contract is the auth model, not the response shape. |

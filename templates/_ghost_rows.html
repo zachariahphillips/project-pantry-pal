@@ -1,0 +1,58 @@
+{# Phase 5B (Theme 5 Chunk B) — Ghost-row previews.
+
+   Purpose: preview the shape of rows on an empty pantry / shopping list.
+   Rendered ONLY on the true empty state (no query, no filter). A blank
+   dashed card doesn't help a new user picture what the surface will
+   look like once it has content; two dimmed sample rows do.
+
+   Called with:
+     - `ghost_context`: "pantry" or "shopping" — chooses the row shape.
+       Pantry rows have no leading control; shopping rows include a
+       faux checkbox glyph.
+
+   Accessibility: the container is aria-hidden="true" so screen readers
+   skip the previews (they aren't real data). The upstream empty-state
+   card carries the semantic message ("Nothing on your shopping list
+   yet" / the pantry hero headline), which is what assistive tech reads.
+
+   Fresh-account gating is a UX call, not enforced here — the caller
+   suppresses this partial for search-empty states so a user who's
+   been using the app doesn't see sample rows pop back mid-session.
+#}
+<div class="mt-6" aria-hidden="true">
+  <div class="mb-2 flex items-center gap-3 px-1">
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+      Preview
+    </span>
+    <span class="h-px flex-1 bg-stone-200"></span>
+  </div>
+
+  {# Sample content is opinionated staples that a household would
+     recognize — so the user thinks "yes, that's a row I'd have"
+     rather than "what's this random example". #}
+  {% if ghost_context == "shopping" %}
+    {% set _samples = [("Milk", "1 gal"), ("Bread", "1 loaf")] %}
+  {% else %}
+    {% set _samples = [("Olive oil", "1 bottle"), ("Salt", "1 jar")] %}
+  {% endif %}
+
+  <div class="space-y-2">
+    {% for name, qty in _samples %}
+      <div class="flex items-center gap-3 rounded-2xl border border-dashed border-stone-300 bg-white/60 p-3 opacity-50">
+        {% if ghost_context == "shopping" %}
+          {# Faux checkbox glyph — same dimensions as the real
+             shopping row's toggle so the two visuals line up 1:1. #}
+          <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center">
+            <span class="h-5 w-5 rounded border border-stone-400 bg-white"></span>
+          </div>
+        {% endif %}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-medium text-stone-900">{{ name }}</p>
+          <p class="mt-0.5 text-xs text-stone-500">
+            <span class="font-medium text-stone-600">{{ qty }}</span>
+          </p>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>

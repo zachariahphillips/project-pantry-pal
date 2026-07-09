@@ -209,8 +209,19 @@ class TestSortPreservation:
 
     def test_delete_preserves_active_sort(self, client):
         """Same regression class as add — deleting must keep the
-        list sorted the user's way."""
+        list sorted the user's way.
+
+        Phase 5B note: primer past the onboarding threshold so the
+        tested delete stays on the partial-swap path (not the 204
+        HX-Refresh path fired when the resulting count is at or below
+        the threshold). Primer names use a 'zzzz' prefix so they sort
+        AFTER the tested items in A–Z order and can be filtered out
+        of the assertion cleanly."""
         sign_up(client, "alice@example.com", "Alice")
+        # Primer past PANTRY_ONBOARDING_THRESHOLD so the tested delete
+        # leaves > threshold items behind (partial-swap path).
+        for name in ["zzzz-primer-1", "zzzz-primer-2", "zzzz-primer-3"]:
+            _add_pantry(client, name)
         for name in ["Banana", "Apple", "Cherry"]:
             _add_pantry(client, name)
             time.sleep(0.01)
@@ -241,6 +252,8 @@ class TestSortPreservation:
         )
         assert resp.status_code == 200
         order = _names_in_order_response(resp)
+        # Filter out the primer items so the assertion reads clean.
+        order = [n for n in order if not n.startswith("zzzz-primer")]
         assert order == ["Apple", "Cherry"], (
             f"Delete must preserve A–Z sort across the swap; got {order}"
         )

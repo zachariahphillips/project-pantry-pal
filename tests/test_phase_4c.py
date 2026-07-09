@@ -399,7 +399,17 @@ class TestFilterPreservation:
         )
 
     def test_delete_preserves_active_filter(self, client):
+        """Phase 5B note: primer past the onboarding threshold so the
+        tested delete stays on the partial-swap path (not the 204
+        HX-Refresh path fired when the resulting count is at or below
+        the threshold). Primers use high qty so they never leak into
+        the filter=low output."""
         sign_up(client, "alice@example.com", "Alice")
+        # Primer past PANTRY_ONBOARDING_THRESHOLD so the tested delete
+        # leaves > threshold items behind (partial-swap path).
+        _add_pantry(client, "Primer-A", qty="99")
+        _add_pantry(client, "Primer-B", qty="99")
+        _add_pantry(client, "Primer-C", qty="99")
         _add_pantry(client, "Eggs", qty="12")
         _add_pantry(client, "Bananas", qty="1")
         _add_pantry(client, "Olive oil", qty="0.5")
@@ -430,8 +440,9 @@ class TestFilterPreservation:
             f"After deleting Bananas under filter=low, only Olive oil "
             f"(other low item) should remain. Got: {names}"
         )
-        # Eggs (qty=12) must not have leaked into the filtered view
+        # Eggs + high-qty primers must not leak into the filtered view
         assert "Eggs" not in names
+        assert "Primer-A" not in names and "Primer-B" not in names
 
 
 # ---------------------------------------------------------------------------

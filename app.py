@@ -455,6 +455,22 @@ def _register_routes(app: Flask) -> None:
         item = _get_pantry_item_or_404(item_id)
         db.session.delete(item)
         db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            # Phase 5B (closes B-001): symmetric onboarding-zone refresh.
+            # `pantry_add` already forces a full-page reload for any add
+            # while the count stays at or below the threshold, because
+            # the hero card + meal-planner gate + Phase 5B ghost rows
+            # all live ABOVE the pantry-list slot. Deletes that CROSS
+            # BACK INTO the onboarding zone need the same treatment:
+            # delete the 4th item and the gate must reappear; delete
+            # the last item and the hero + ghost rows must come back.
+            # Without this the parent widgets stay stale until manual
+            # refresh (previously logged as B-001, Low).
+            new_count = current_user.household.pantry_items.count()
+            if new_count <= PANTRY_ONBOARDING_THRESHOLD:
+                return "", 204, {"HX-Refresh": "true"}
+
         # Phase 4A/4C: preserve sort + filter across deletes.
         sort_key = _current_pantry_sort_from_request()
         filter_key = _current_pantry_filter_from_request()

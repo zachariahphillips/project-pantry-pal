@@ -256,11 +256,18 @@ class TestImHome:
         body = c.post(
             "/shopping/move-checked-to-pantry", htmx=True,
         ).get_data(as_text=True)
-        # Shopping list is now empty
-        assert "Milk" not in body
-        assert "Tortillas" not in body
+        # Shopping list is now empty — assert on the row IDs, not
+        # the item names. Phase 5B ghost-row previews on an empty
+        # shopping list intentionally include the strings "Milk" and
+        # "Bread" as sample content, so a naive `"Milk" not in body`
+        # would false-fail. The row IDs are the precise signal that
+        # the *real* shopping rows are gone.
+        assert f'id="shopping-item-{milk}"' not in body
+        assert f'id="shopping-item-{tort}"' not in body
         assert "Nothing on your shopping list" in body
-        # Pantry now has both items
+        # Pantry now has both items. Ghost-row previews only render
+        # on an EMPTY pantry (0 items) — since we just moved 2 items
+        # in, they're absent and plain string checks are safe again.
         pantry = c.get("/pantry").get_data(as_text=True)
         assert "Milk" in pantry
         assert "Tortillas" in pantry
@@ -500,14 +507,18 @@ class TestUserIsolation:
         }
 
     def test_bobs_pantry_and_shopping_are_empty(self, alice_and_bob):
-        bob = alice_and_bob["bob"]
+        bob, alice_pantry_id, alice_shop_id = (
+            alice_and_bob["bob"],
+            alice_and_bob["alice_pantry_id"],
+            alice_and_bob["alice_shop_id"],
+        )
         pantry = bob.get("/pantry").get_data(as_text=True)
         shop = bob.get("/shopping").get_data(as_text=True)
         # Phase 5A: brand-new households see the onboarding hero card
         # ("Let's stock your pantry.") in place of the old low-key
         # "Your pantry is empty" message. Either signal proves Bob's
         # pantry is empty for our purposes — this test cares about
-        # household ISOLATION (Bob doesn't see Olive oil), not the
+        # household ISOLATION (Bob doesn't see Alice's items), not the
         # exact empty-state copy.
         assert (
             "Your pantry is empty" in pantry
@@ -516,9 +527,21 @@ class TestUserIsolation:
             "Bob should see SOME empty-pantry treatment. If both "
             "strings are missing, the empty-state UI regressed."
         )
-        assert "Olive oil" not in pantry
+        # Phase 5B: assert on Alice's specific row ID, not the raw
+        # name string "Olive oil" — Bob's empty pantry now renders
+        # a ghost-row PREVIEW that intentionally samples "Olive oil"
+        # as an illustrative staple. A naive `"Olive oil" not in
+        # pantry` false-fires on that sample. The row ID is unique
+        # to Alice's real DB row, so it's the precise isolation signal.
+        assert f'id="pantry-item-{alice_pantry_id}"' not in pantry, (
+            "Bob's pantry response contains Alice's pantry row id — "
+            "household isolation broke."
+        )
         assert "Nothing on your shopping list" in shop
-        assert "Tortillas" not in shop
+        assert f'id="shopping-item-{alice_shop_id}"' not in shop, (
+            "Bob's shopping list response contains Alice's shopping "
+            "row id — household isolation broke."
+        )
 
     def test_bob_cannot_read_alices_shopping_edit_form(self, alice_and_bob):
         bob, aid = alice_and_bob["bob"], alice_and_bob["alice_shop_id"]
