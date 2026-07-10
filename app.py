@@ -485,6 +485,76 @@ def _register_routes(app: Flask) -> None:
             pantry_sort_options=PANTRY_SORT_OPTIONS,
         )
 
+    @app.route("/pantry/seed-starter", methods=["POST"])
+    @login_required
+    def pantry_seed_starter():
+        """Phase 5C: one-tap starter-pantry seed.
+
+        Inserts the canonical PANTRY_STARTER_STAPLES pack for a
+        brand-new household so the user can immediately try the AI
+        meal planner without typing 3+ items one-at-a-time (each of
+        which currently triggers a full HX-Refresh, per the Chunk A/B
+        onboarding-zone contract).
+
+        Guardrails:
+          - Only fires on a truly empty pantry. If the household
+            already has items, silently no-op and re-render the list
+            partial so the button becoming a spam vector is impossible
+            even from a tampered client. We prefer silent no-op over
+            400 because a race between two roommates (one seeds, the
+            other seeds a tick later) shouldn't paint a user-visible
+            error toast.
+          - Attribution: every seeded row is `added_by_user_id =
+            current_user.id`. A roommate coming in later sees "added
+            by Riah" attribution — accurate, they DID seed them.
+          - Crosses the onboarding threshold by design (6 > 3), so we
+            return 204 + HX-Refresh: true. The hero card, meal-planner
+            gate, and Phase 5B ghost rows all need to swap to their
+            unlocked-state equivalents; the same "full reload beats
+            piping every widget through the partial" logic as
+            pantry_add / pantry_item_delete inside the onboarding
+            zone applies here too.
+        """
+        household = current_user.household
+        # Deliberately re-count inside the transaction rather than
+        # trust a passed-in flag or the request URL — the client sees
+        # a stale count when it renders the CTA, and we don't want a
+        # user's tab that's been open all afternoon to be able to
+        # double-seed.
+        if household.pantry_items.count() > 0:
+            # Silent no-op. Fall through to the standard partial re-
+            # render so the DOM stays fresh (in case the pantry was
+            # concurrently added-to by a roommate).
+            if request.headers.get("HX-Request"):
+                sort_key = _current_pantry_sort_from_request()
+                filter_key = _current_pantry_filter_from_request()
+                items = _fetch_pantry_items_for_render(
+                    sort_key=sort_key, filter_key=filter_key,
+                )
+                return render_template(
+                    "_pantry_list.html", items=items, query="",
+                    sort_key=sort_key, filter_key=filter_key,
+                    low_count=_count_low_pantry_items(),
+                    density=_get_pantry_density(),
+                    pantry_sort_options=PANTRY_SORT_OPTIONS,
+                )
+            return redirect(url_for("pantry_list"))
+
+        for name, qty, unit in PANTRY_STARTER_STAPLES:
+            db.session.add(PantryItem(
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
+                name=name,
+                quantity=qty,
+                unit=unit,
+                notes=None,
+            ))
+        db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            return "", 204, {"HX-Refresh": "true"}
+        return redirect(url_for("pantry_list"))
+
     @app.route("/pantry/density", methods=["POST"])
     @login_required
     def pantry_density_toggle():
@@ -2012,6 +2082,47 @@ PANTRY_DENSITY_SESSION_KEY = "pantry_density"
 # constant is a Jinja context var (`onboarding_threshold`) so templates
 # don't hardcode the number.
 PANTRY_ONBOARDING_THRESHOLD = 3
+
+
+# --- Phase 5C: starter-pantry seed ---------------------------------------
+
+# One-tap escape from the cold-start problem: typing 3+ items one at a
+# time (each add triggers a full HX-Refresh while in the onboarding zone)
+# is a lot of friction before a fresh user gets to try the killer AI
+# planner feature. `POST /pantry/seed-starter` inserts this canonical
+# 6-item pack — universally recognized cooking staples that give the
+# planner enough material to reason about — and immediately crosses
+# the onboarding threshold.
+#
+# Composition rationale:
+#   - oil + two seasonings + starch + two aromatics = the ingredient
+#     backbone of almost any home cook's kitchen
+#   - "Olive oil" and "Salt" match the pantry ghost-row previews from
+#     Chunk B, so tapping "Start with staples" makes the previews real
+#     (a small but deliberate design continuity)
+#   - "container" staples (bottle/jar/head/bag) intentionally seed with
+#     qty=None (untracked). Reasoning: (a) a fresh starter pantry is a
+#     rough approximation, not exact inventory — you don't literally
+#     have "1 bottle" of olive oil the moment you tap Seed; (b) per
+#     Phase 4C, untracked items are explicitly excluded from the
+#     low-stock rule. If we seeded them at qty=1.0 (the natural read
+#     of "1 bottle"), every row would trip the rule (`qty ≤ 1.0`) and
+#     the fresh household would land on a pantry with "Low (5)" —
+#     a terrible first impression. qty=None sidesteps that entirely.
+#   - Countable staples (Yellow onion) keep a real number so the user
+#     can experience Edit + the qty display. "2 onions" is honest and
+#     also comfortably above the low threshold.
+#
+# Tuple shape (name, qty, unit) — notes are always None for staples,
+# the description is the name itself.
+PANTRY_STARTER_STAPLES = (
+    ("Olive oil", None, "bottle"),
+    ("Salt", None, "jar"),
+    ("Black pepper", None, "jar"),
+    ("Rice", None, "bag"),
+    ("Yellow onion", 2.0, None),
+    ("Garlic", None, "head"),
+)
 
 
 def _get_pantry_density() -> str:
