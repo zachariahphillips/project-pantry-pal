@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import unit_combobox %}
+{% from "_macros.html" import unit_combobox, nudge_banner %}
 
 {% block title %}Pantry · PantryPal{% endblock %}
 
@@ -92,6 +92,19 @@
         {% endfor %}
       </div>
 
+      {# Phase 5D nudge #1: the planner has JUST unlocked (pantry cleared
+         the gate) but the household has never made a plan. One-shot
+         signpost pointing at the input right below. Auto-retires as
+         soon as `meal_plans_count` flips to 1. Sits between the chips
+         and the form so it doesn't create a "tip → tip → form" stack;
+         chips are visual affordances and read as ambient, whereas the
+         nudge reads as an active instruction anchored to the input. #}
+      {% if meal_plans_count == 0 %}
+        {% call nudge_banner(test_id="nudge-planner") %}
+          Nice — your pantry's stocked. Ask the AI for a meal idea below.
+        {% endcall %}
+      {% endif %}
+
       <form hx-post="{{ url_for('meal_plan_create') }}"
             hx-target="#meal-plan-result"
             hx-swap="innerHTML"
@@ -147,6 +160,21 @@
           </p>
         </div>
       </div>
+    {% endif %}
+
+    {# Phase 5D nudge #2: household has at least one meal plan (so
+       there's a card to point at, either the fresh POST swap-in or
+       the teaser priming from GET /pantry) but shopping is empty —
+       user hasn't discovered the +Shop affordance yet. Placed OUTSIDE
+       #meal-plan-result so an htmx swap-in from POST /meal-plan
+       (target=#meal-plan-result, innerHTML) doesn't clobber the nudge.
+       Auto-retires when `shopping_items_count` flips to > 0 on the
+       next page load. Ephemeral during-visit adds don't clear it —
+       the visit is the teach-moment; the reload is the retirement. #}
+    {% if latest_meal_plan and shopping_items_count == 0 %}
+      {% call nudge_banner(test_id="nudge-plan-shop") %}
+        Tap <strong class="font-semibold">+ Shop</strong> next to any ingredient below to add it to your shopping list.
+      {% endcall %}
     {% endif %}
 
     {# Server-rendered slot for the meal plan card.

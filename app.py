@@ -331,6 +331,22 @@ def _register_routes(app: Flask) -> None:
         # search/filter — a filtered-empty view (e.g. `?filter=low` with
         # nothing low) is NOT an empty pantry, it's just an empty view.
         pantry_item_count = current_user.household.pantry_items.count()
+        # Phase 5D: two more household-scoped counts feed the empty-state
+        # nudges rendered on this page. Both are `.count()` on a dynamic
+        # relationship — a single SELECT COUNT(*) each; cheaper than
+        # loading the rows just to check for existence, and we already
+        # do the same for `pantry_item_count` two lines up.
+        #   meal_plans_count == 0 AND pantry_item_count >= threshold
+        #     → the "planner just unlocked" nudge inside the planner
+        #       section fires.
+        #   shopping_items_count == 0 AND latest_meal_plan is not None
+        #     → the "tap + Shop below" nudge above the meal-plan slot
+        #       fires.
+        # Both auto-retire when the count crosses back to > 0 on the
+        # next page load. See templates/pantry.html for the actual
+        # gating and _macros.html:nudge_banner for the render.
+        meal_plans_count = current_user.household.meal_plans.count()
+        shopping_items_count = current_user.household.shopping_items.count()
         return render_template(
             "pantry.html", items=items, form=form, query=query,
             sort_key=sort_key, filter_key=filter_key,
@@ -342,6 +358,8 @@ def _register_routes(app: Flask) -> None:
             latest_meal_plan=latest_meal_plan,
             pantry_item_count=pantry_item_count,
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
+            meal_plans_count=meal_plans_count,
+            shopping_items_count=shopping_items_count,
         )
 
     @app.route("/pantry", methods=["POST"])

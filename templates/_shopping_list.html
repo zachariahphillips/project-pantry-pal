@@ -1,4 +1,22 @@
 <div id="shopping-list" class="space-y-2">
+  {# Phase 5D nudge #3: shopping list has items but the user hasn't
+     checked anything off yet — they haven't discovered the two-way
+     flow (check as you shop → "I'm home" moves the checked items into
+     the pantry). Only fires when there's ≥1 item AND checked_count ==
+     0; auto-retires the moment they check the first box (which is
+     also the moment the "N checked off" action bar appears just below).
+
+     Placed BEFORE the "Add again" suggestion chips so it reads as the
+     top-of-list callout on an empty-checked state. The partial is
+     re-rendered by every state-changing shopping route, so appear/
+     disappear happens naturally on every relevant action. #}
+  {% if items and checked_count == 0 %}
+    {% from "_macros.html" import nudge_banner %}
+    {% call nudge_banner(test_id="nudge-crossoff") %}
+      Tap the checkbox as you shop. When you're home, tap <strong class="font-semibold">I'm home →</strong> to move items into your pantry.
+    {% endcall %}
+  {% endif %}
+
   {# Phase 3I: "Add again" smart-recall chips.
      Top-N most-frequently-added shopping names for this household,
      ranked by all-time add count from the ShoppingNameFrequency

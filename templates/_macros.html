@@ -22,6 +22,46 @@
                  or 'field_error' when validation fails)
 #}
 
+{#
+  nudge_banner(test_id=None)
+    Phase 5D: small "teach the next affordance" card used across the app
+    on three specific empty states — the planner just unlocked (no plans
+    yet), a meal plan exists (no shopping yet), and shopping has items
+    with none checked. Every call site is pure-derived from data, so the
+    banner appears exactly when the teach-moment is live and disappears
+    the moment the user takes the taught action. Deliberately no manual
+    dismiss X — dismissing an empty-state signpost doesn't make sense;
+    it comes back when the same empty state comes back.
+
+    Uses Jinja's caller() pattern so the copy lives at the callsite (much
+    more readable than a `body=` string arg that stringifies HTML).
+
+  Arguments:
+    test_id  — optional DOM id (e.g. "nudge-planner"). Tests target the
+               id to avoid brittle string matching on copy that might
+               drift with wording tweaks.
+#}
+{% macro nudge_banner(test_id=None) %}
+<div {% if test_id %}id="{{ test_id }}"{% endif %}
+     data-nudge="{{ test_id or 'generic' }}"
+     class="mt-3 flex items-start gap-2 rounded-xl border border-green-200 bg-green-50/70 px-3 py-2.5"
+     role="status">
+  {# Small spark/sun glyph — deliberately different from the pantry
+     tote, shopping basket, and meal fork icons the app already uses,
+     so the nudge reads as "hey, quick tip" and not as another
+     surface's badge. #}
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"
+       stroke-linecap="round" stroke-linejoin="round"
+       class="mt-0.5 h-4 w-4 flex-shrink-0 text-green-700" aria-hidden="true">
+    <path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.6 4.6l2.1 2.1M13.3 13.3l2.1 2.1M4.6 15.4l2.1-2.1M13.3 6.7l2.1-2.1"/>
+  </svg>
+  <p class="text-xs leading-relaxed text-stone-700">
+    {{ caller() }}
+  </p>
+</div>
+{% endmacro %}
+
+
 {% macro unit_combobox(field, css_class) %}
 <div class="relative" data-unit-combobox-wrapper>
   {# The input keeps all of its WTForms attrs (id, name, value, etc.).
