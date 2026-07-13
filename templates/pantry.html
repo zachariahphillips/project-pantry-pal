@@ -393,4 +393,23 @@
     });
   })();
 </script>
+
+{# Phase 6A: pending toast injected on the /pantry render that follows
+   an HX-Refresh-triggering pantry delete or undo. The server pops
+   the session flag inside pantry_list() so this render is the sole
+   consumer — a subsequent manual refresh finds an empty flag and
+   emits nothing. The event name (pantry:deleted / pantry:undone) is
+   the same one shopping's delete/undo routes emit via HX-Trigger,
+   so the same handlers in base.html render the toast — this template
+   just re-emits the CustomEvent that HX-Trigger would have emitted on
+   a live response, wrapped in a DOMContentLoaded gate. #}
+{% if pending_toast %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var payload = {{ pending_toast|tojson }};
+    var evt = payload.event;
+    document.dispatchEvent(new CustomEvent(evt, { detail: payload }));
+  });
+</script>
+{% endif %}
 {% endblock %}

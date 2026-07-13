@@ -56,6 +56,14 @@
       if (action && action.url) {
         toastAction.textContent = action.label || 'Undo';
         toastAction.dataset.url = action.url;
+        // Phase 6A: the Undo click handler used to hard-code target
+        // '#shopping-list', which was fine when shopping owned the
+        // only destructive-with-undo route. Now that pantry deletes
+        // have undo too, the destructive route tells us WHICH list
+        // container it wants swapped by attaching data-target here.
+        // Defaults preserve the pre-6A behavior for shopping callers
+        // that don't pass a target.
+        toastAction.dataset.target = action.target || '#shopping-list';
         toastAction.classList.remove('hidden');
         // Pointer-events on the WHOLE toast so the button can be tapped;
         // text remains a no-op target so it doesn't intercept stray taps
@@ -65,6 +73,7 @@
       } else {
         toastAction.classList.add('hidden');
         toastAction.removeAttribute('data-url');
+        toastAction.removeAttribute('data-target');
         toast.classList.add('pointer-events-none');
         toast.classList.remove('pointer-events-auto');
       }
@@ -78,27 +87,31 @@
         toast.classList.add('opacity-0');
         toastAction.classList.add('hidden');
         toastAction.removeAttribute('data-url');
+        toastAction.removeAttribute('data-target');
         toast.classList.add('pointer-events-none');
         toast.classList.remove('pointer-events-auto');
       }, duration);
     }
     // Undo button click handler. We wire ONE listener up front and read
-    // the live url off the data attr — saves re-binding on every toast.
-    // htmx.ajax is used directly so CSRF is auto-attached via the
-    // configRequest listener above; the response re-swaps #shopping-list
-    // identically to the destructive route that opened the toast.
+    // the live url + target off data attrs — saves re-binding on every
+    // toast. htmx.ajax is used directly so CSRF is auto-attached via
+    // the configRequest listener above.
     document.addEventListener('DOMContentLoaded', () => {
       const action = document.getElementById('toast-action');
       if (!action) return;
       action.addEventListener('click', () => {
         const url = action.dataset.url;
         if (!url) return;
+        // Phase 6A: target defaults to '#shopping-list' for the
+        // pre-existing shopping callers; pantry sets '#pantry-list'
+        // when it fires its own toast.
+        const target = action.dataset.target || '#shopping-list';
         if (window.htmx) {
           window.htmx.ajax('POST', url, {
-            target: '#shopping-list', swap: 'outerHTML',
+            target: target, swap: 'outerHTML',
           });
         }
-        // Hide immediately — the success toast (`shopping:undone`) will
+        // Hide immediately — the success toast (`*:undone`) will
         // re-open it with confirmation text, OR the no-op case just
         // leaves the bar empty.
         const toast = document.getElementById('toast');
@@ -109,6 +122,7 @@
         }
         action.classList.add('hidden');
         action.removeAttribute('data-url');
+        action.removeAttribute('data-target');
         clearTimeout(window.__toastTimer);
       });
     });
@@ -154,6 +168,25 @@
     // (no action) — there's no "undo the undo" by design; users redo by
     // tapping Delete / Clear again.
     document.addEventListener('shopping:undone', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Restored 1 item' : `Restored ${n} items`);
+    });
+    // Phase 6A: pantry delete + undo — same shape as shopping:deleted
+    // and shopping:undone above, but the Undo CTA points at the pantry
+    // undo endpoint and targets '#pantry-list' for the swap. On the
+    // onboarding-zone-crossing delete path the toast is dispatched by
+    // a page-load-time script in pantry.html (the pending-toast block
+    // gated on the `pending_toast` template var) using the same event
+    // name, so this handler covers both invocation paths uniformly.
+    document.addEventListener('pantry:deleted', (e) => {
+      const name = (e.detail && e.detail.name) || 'item';
+      const undoUrl = (e.detail && e.detail.undoUrl) || null;
+      showToast(
+        `Deleted "${name}"`,
+        undoUrl ? { label: 'Undo', url: undoUrl, target: '#pantry-list' } : null,
+      );
+    });
+    document.addEventListener('pantry:undone', (e) => {
       const n = (e.detail && e.detail.count) || 0;
       showToast(n === 1 ? 'Restored 1 item' : `Restored ${n} items`);
     });

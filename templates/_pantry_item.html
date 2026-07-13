@@ -90,11 +90,18 @@
             class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
       Edit
     </button>
+    {# Phase 6A: hx-confirm removed — the 5-second Undo toast is the
+       safety net now. Same rationale as Phase 3J for the shopping
+       delete: on mobile the "double-friction confirm + tap" pattern
+       is worse UX than "one tap + a generous grace period to undo."
+       Also has a real correctness bite: browser confirm() blocks the
+       JS event loop, so a paused-on-confirm user could see the 5s
+       toast timer expire before they can even see the toast — the
+       exact hole we're plugging. #}
     <button type="button"
             hx-delete="{{ url_for('pantry_item_delete', item_id=item.id) }}"
             hx-target="#pantry-list"
             hx-swap="outerHTML"
-            hx-confirm="Delete &quot;{{ item.name }}&quot; from your pantry?"
             class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
       Delete
     </button>

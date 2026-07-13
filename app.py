@@ -347,6 +347,14 @@ def _register_routes(app: Flask) -> None:
         # gating and _macros.html:nudge_banner for the render.
         meal_plans_count = current_user.household.meal_plans.count()
         shopping_items_count = current_user.household.shopping_items.count()
+        # Phase 6A: pop the pending toast (if any) so this render is the
+        # single consumer. If the user hits refresh again the flag is
+        # already gone and no ghost toast reappears. Popping outside
+        # the render call keeps the template dumb — it just conditionally
+        # emits one inline showToast() call.
+        pending_toast = session.pop(
+            PANTRY_UNDO_PENDING_TOAST_SESSION_KEY, None
+        )
         return render_template(
             "pantry.html", items=items, form=form, query=query,
             sort_key=sort_key, filter_key=filter_key,
@@ -360,6 +368,7 @@ def _register_routes(app: Flask) -> None:
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
             meal_plans_count=meal_plans_count,
             shopping_items_count=shopping_items_count,
+            pending_toast=pending_toast,
         )
 
     @app.route("/pantry", methods=["POST"])
@@ -471,6 +480,19 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def pantry_item_delete(item_id: int):
         item = _get_pantry_item_or_404(item_id)
+
+        # Phase 6A: capture snapshot BEFORE delete so lazy attrs are
+        # still readable. Store display name for the toast too — we
+        # can't reach `item.name` after the commit below flushes.
+        item_snapshot = [item]
+        item_name = item.name
+        stored = _store_pantry_undo_snapshot(
+            item_snapshot, current_user.household_id,
+        )
+        # Toast text caps the name at 40 chars so a 120-char item can't
+        # blow past the toast's max-width on mobile.
+        toast_name = (item_name or "item")[:40]
+
         db.session.delete(item)
         db.session.commit()
 
@@ -485,8 +507,23 @@ def _register_routes(app: Flask) -> None:
             # the last item and the hero + ghost rows must come back.
             # Without this the parent widgets stay stale until manual
             # refresh (previously logged as B-001, Low).
+            #
+            # Phase 6A: HX-Refresh reloads the page, which discards any
+            # toast we'd fire on this response. So we stash a pending-
+            # toast flag in the session; the /pantry GET pops it and
+            # injects a one-shot showToast(...) script. That lets the
+            # undo CTA appear even on this onboarding-zone-crossing
+            # path — the whole point of adding undo is to plug the
+            # "accidentally deleted my last olive oil" gap for users
+            # who are still in the low-item state.
             new_count = current_user.household.pantry_items.count()
             if new_count <= PANTRY_ONBOARDING_THRESHOLD:
+                if stored:
+                    session[PANTRY_UNDO_PENDING_TOAST_SESSION_KEY] = {
+                        "event": "pantry:deleted",
+                        "name": toast_name,
+                        "undoUrl": url_for("pantry_undo"),
+                    }
                 return "", 204, {"HX-Refresh": "true"}
 
         # Phase 4A/4C: preserve sort + filter across deletes.
@@ -495,13 +532,110 @@ def _register_routes(app: Flask) -> None:
         items = _fetch_pantry_items_for_render(
             sort_key=sort_key, filter_key=filter_key,
         )
-        return render_template(
+        body = render_template(
             "_pantry_list.html", items=items, query="",
             sort_key=sort_key, filter_key=filter_key,
             low_count=_count_low_pantry_items(),
             density=_get_pantry_density(),
             pantry_sort_options=PANTRY_SORT_OPTIONS,
         )
+        # Phase 6A: partial-swap path. Fire the toast client-side via
+        # HX-Trigger, same pattern as `shopping_item_delete`. Text-only
+        # toast if the snapshot couldn't be stored (rare — single-item
+        # pantry deletes never exceed the cookie cap; defensive branch
+        # is here for symmetry with the shopping route).
+        if request.headers.get("HX-Request"):
+            trigger_payload = {
+                "pantry:deleted": {
+                    "name": toast_name,
+                    "undoUrl": (
+                        url_for("pantry_undo") if stored else None
+                    ),
+                }
+            }
+            return body, 200, {"HX-Trigger": json.dumps(trigger_payload)}
+        return body
+
+    @app.route("/pantry/undo", methods=["POST"])
+    @login_required
+    def pantry_undo():
+        """Phase 6A: restore the pantry item captured in the most-recent
+        pantry-delete snapshot. Idempotent on the empty case — a missing
+        snapshot (already restored, session expired, no destructive
+        action taken) returns a no-op re-render of #pantry-list without
+        firing a "Restored 0" toast (would just be noise for what looks
+        to the user like a dead button).
+
+        Household-scoped: `_restore_pantry_snapshot` refuses to restore
+        if the snapshot's household_id doesn't match the caller's.
+
+        Mirrors `shopping_undo`. The one meaningful divergence is the
+        onboarding-zone-crossing case: if restoring the item takes the
+        household FROM ≤threshold TO >threshold, the hero card / gate /
+        ghost rows above #pantry-list all need to disappear — and a
+        partial swap can only refresh the list itself. So we fall
+        back to HX-Refresh in that case (mirror of the delete-route
+        crossing behavior above), stashing a pending confirmation toast
+        so the "Restored N items" feedback survives the reload.
+        """
+        snap = session.pop(PANTRY_UNDO_SESSION_KEY, None)
+        restored = 0
+        if snap is not None:
+            restored = _restore_pantry_snapshot(
+                snap, current_user.household_id,
+            )
+            db.session.commit()
+
+        if restored == 0:
+            # No-op path: session was empty or the snapshot was for a
+            # different household. Render current state so the client
+            # DOM is consistent, but don't fire a toast.
+            sort_key = _current_pantry_sort_from_request()
+            filter_key = _current_pantry_filter_from_request()
+            items = _fetch_pantry_items_for_render(
+                sort_key=sort_key, filter_key=filter_key,
+            )
+            return render_template(
+                "_pantry_list.html", items=items, query="",
+                sort_key=sort_key, filter_key=filter_key,
+                low_count=_count_low_pantry_items(),
+                density=_get_pantry_density(),
+                pantry_sort_options=PANTRY_SORT_OPTIONS,
+            )
+
+        # Successful restore. Check whether we just crossed BACK OUT of
+        # the onboarding zone (count went from ≤threshold to >threshold
+        # in the same request). If so, hero/gate/ghost rows above the
+        # list need to disappear — force a full reload and stash a
+        # pending confirmation toast for the reloaded page.
+        new_count = current_user.household.pantry_items.count()
+        crossed_out = new_count > PANTRY_ONBOARDING_THRESHOLD and (
+            new_count - restored <= PANTRY_ONBOARDING_THRESHOLD
+        )
+        if crossed_out:
+            session[PANTRY_UNDO_PENDING_TOAST_SESSION_KEY] = {
+                "event": "pantry:undone",
+                "count": restored,
+            }
+            return "", 204, {"HX-Refresh": "true"}
+
+        sort_key = _current_pantry_sort_from_request()
+        filter_key = _current_pantry_filter_from_request()
+        items = _fetch_pantry_items_for_render(
+            sort_key=sort_key, filter_key=filter_key,
+        )
+        body = render_template(
+            "_pantry_list.html", items=items, query="",
+            sort_key=sort_key, filter_key=filter_key,
+            low_count=_count_low_pantry_items(),
+            density=_get_pantry_density(),
+            pantry_sort_options=PANTRY_SORT_OPTIONS,
+        )
+        return body, 200, {
+            "HX-Trigger": json.dumps({
+                "pantry:undone": {"count": restored}
+            })
+        }
 
     @app.route("/pantry/seed-starter", methods=["POST"])
     @login_required
@@ -1341,11 +1475,29 @@ def _ensure_shopping_checked_at_column() -> None:
 
 
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
+# --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
 # Session key holding the snapshot of the most recent destructive shopping
 # action. One slot — last-action-wins. New destructive actions overwrite,
 # successful undo + page reload both clear it.
 SHOPPING_UNDO_SESSION_KEY = "shopping_undo"
+
+# Phase 6A: pantry-delete undo. Same one-slot-last-action-wins semantics
+# as the shopping key above, on its own slot so a shopping Undo and a
+# pantry Undo can coexist across the two tabs. (User deletes a shopping
+# item, navigates to /pantry, deletes a pantry item — both Undo actions
+# should still work when they navigate back to the respective list.)
+PANTRY_UNDO_SESSION_KEY = "pantry_undo"
+
+# Phase 6A: on the onboarding-zone-crossing delete path, `pantry_item_delete`
+# returns 204 + HX-Refresh (per the B-001 fix in Chunk 5B). HX-Refresh
+# forces a full-page reload, which discards any client-side toast we
+# might fire on the delete response. So we stash a "fire this toast on
+# the next /pantry render" flag in the session; the pantry_list route
+# pops it and injects a one-shot showToast(...) script into pantry.html.
+# Same mechanism handles the symmetric case in the pantry_undo route
+# when restoring an item crosses BACK OUT of the onboarding zone.
+PANTRY_UNDO_PENDING_TOAST_SESSION_KEY = "pantry_undo_pending_toast"
 
 # Cap on how many items can be captured into a single undo snapshot.
 # Flask's default SecureCookieSession lives in a signed cookie with a
@@ -1445,6 +1597,85 @@ def _restore_shopping_snapshot(snapshot: dict, household_id: int) -> int:
                 item.added_at = datetime.fromisoformat(entry["added_at"])
             except (ValueError, TypeError):
                 pass  # let SQLAlchemy default fire
+        db.session.add(item)
+        restored += 1
+    return restored
+
+
+# --- Phase 6A: snapshot + restore for pantry-delete undo -----------------
+
+def _snapshot_pantry_items(items) -> "list[dict]":
+    """Serialize PantryItem rows into plain dicts safe to put in a
+    Flask signed-cookie session. Mirrors `_snapshot_shopping_items`
+    minus the shopping-only fields (`checked`, `checked_at`).
+
+    Preserves `added_at` so a restored row appears in its original
+    sort position rather than jumping to "just now"; and preserves
+    `added_by_user_id` so undo doesn't rewrite provenance to credit
+    whoever tapped Undo.
+
+    Caller MUST read attributes BEFORE calling `db.session.delete()` —
+    once flushed, lazy attribute access dies.
+    """
+    return [{
+        "name": i.name,
+        "quantity": i.quantity,
+        "unit": i.unit,
+        "notes": i.notes,
+        "added_at": i.added_at.isoformat() if i.added_at else None,
+        "added_by_user_id": i.added_by_user_id,
+    } for i in items]
+
+
+def _store_pantry_undo_snapshot(items, household_id: int) -> bool:
+    """Stash a pantry-delete snapshot in the session. Returns True iff
+    stored (≤ UNDO_SNAPSHOT_MAX_ITEMS — the same cap shopping uses).
+
+    Single-item pantry deletes never hit the cap, but the helper is
+    written generically so a future bulk-delete pantry action can
+    reuse it. On over-cap or empty input we pop the prior snapshot
+    so a stale Undo CTA can't survive a subsequent un-undoable action.
+    """
+    snap = _snapshot_pantry_items(items)
+    if not snap or len(snap) > UNDO_SNAPSHOT_MAX_ITEMS:
+        session.pop(PANTRY_UNDO_SESSION_KEY, None)
+        return False
+    session[PANTRY_UNDO_SESSION_KEY] = {
+        "action": "delete_one",
+        "items": snap,
+        "household_id": household_id,
+    }
+    return True
+
+
+def _restore_pantry_snapshot(snapshot: dict, household_id: int) -> int:
+    """Recreate PantryItem rows from a session snapshot. Returns count
+    restored. Refuses restoration if the snapshot's household_id
+    doesn't match the caller's — defense in depth against a forged
+    session cookie or a user whose household changed between delete
+    and undo.
+    """
+    if snapshot.get("household_id") != household_id:
+        return 0
+    restored = 0
+    for entry in snapshot.get("items", []):
+        item = PantryItem(
+            household_id=household_id,
+            added_by_user_id=entry.get("added_by_user_id"),
+            name=(entry.get("name") or "")[:120],
+            quantity=entry.get("quantity"),
+            unit=entry.get("unit"),
+            notes=entry.get("notes"),
+        )
+        # Preserve original added_at so the restored row lands in its
+        # original sort position (e.g. "Oldest" sort). If parsing
+        # fails on a corrupt session, let SQLAlchemy default fire —
+        # better partial restore than no restore.
+        if entry.get("added_at"):
+            try:
+                item.added_at = datetime.fromisoformat(entry["added_at"])
+            except (ValueError, TypeError):
+                pass
         db.session.add(item)
         restored += 1
     return restored
