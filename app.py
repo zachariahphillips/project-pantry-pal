@@ -48,6 +48,8 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from sqlalchemy import func
+
 from extensions import csrf, db, login_manager
 from forms import (
     UNIT_SUGGESTIONS, LoginForm, PantryItemForm, ShoppingItemForm, SignupForm,
@@ -376,6 +378,40 @@ def _register_routes(app: Flask) -> None:
     def pantry_add():
         form = PantryItemForm()
         if form.validate_on_submit():
+            # Phase 6B: duplicate detection. If the household already
+            # has a pantry item with the same name (case-insensitive,
+            # trimmed), surface a confirm card instead of blindly
+            # creating a second row. Bypassed by `?force_duplicate=1`
+            # (the Add-as-separate-row button on the confirm card
+            # posts with this flag).
+            #
+            # We only run the check on HX-Requests to keep non-htmx
+            # form submissions (rare — legacy fallback path) simple.
+            # A non-htmx dupe just creates the row; the user can
+            # dedupe manually if it matters to them.
+            force = request.args.get("force_duplicate") == "1"
+            if request.headers.get("HX-Request") and not force:
+                existing = _find_pantry_duplicate(
+                    current_user.household_id, form.name.data,
+                )
+                if existing is not None:
+                    # HX-Detour signals the client-side form reset
+                    # handler to skip resetting the input on this
+                    # response — the user's pending data lives in
+                    # the confirm card's hidden inputs, but if they
+                    # tap Cancel we want their still-typed values in
+                    # the form (so they can tweak the name and re-
+                    # submit without re-typing quantity/unit/notes).
+                    partial = render_template(
+                        "_pantry_dupe_confirm.html",
+                        existing=existing, pending_form=form,
+                    )
+                    return partial, 200, {
+                        "HX-Retarget": "#pantry-dupe-confirm-slot",
+                        "HX-Reswap": "innerHTML",
+                        "HX-Detour": "dupe-confirm",
+                    }
+
             item = PantryItem(
                 added_by_user_id=current_user.id,
                 household_id=current_user.household_id,
@@ -420,13 +456,28 @@ def _register_routes(app: Flask) -> None:
                 items = _fetch_pantry_items_for_render(
                     sort_key=sort_key, filter_key=filter_key,
                 )
-                return render_template(
+                list_html = render_template(
                     "_pantry_list.html", items=items, query="",
                     sort_key=sort_key, filter_key=filter_key,
                     low_count=_count_low_pantry_items(),
                     density=_get_pantry_density(),
                     pantry_sort_options=PANTRY_SORT_OPTIONS,
                 )
+                # Phase 6B: any successful add via the partial-swap path
+                # also OOB-clears the duplicate-confirm slot. On the
+                # Add-as-separate-row branch (force_duplicate=1), the
+                # confirm card is currently occupying the slot; the
+                # user's decision resolves the confirmation, so the
+                # card should vanish along with the row landing in
+                # the list. On the regular no-dupe add, the slot is
+                # already empty and this OOB is a harmless no-op.
+                # (The HX-Refresh path above doesn't need this — a
+                # full reload leaves the slot rendered empty.)
+                dupe_oob = (
+                    '<div id="pantry-dupe-confirm-slot" '
+                    'hx-swap-oob="innerHTML"></div>'
+                )
+                return list_html + dupe_oob
             return redirect(url_for("pantry_list"))
 
         if request.headers.get("HX-Request"):
@@ -439,6 +490,68 @@ def _register_routes(app: Flask) -> None:
             }
         flash("Couldn't add that item — check the fields and try again.", "error")
         return redirect(url_for("pantry_list"))
+
+    @app.route("/pantry/merge/<int:existing_id>", methods=["POST"])
+    @login_required
+    def pantry_merge(existing_id: int):
+        """Phase 6B: fold a pending add's fields into an existing pantry
+        row. Called by the "Update existing" button on the duplicate-
+        confirm card. The form body carries the pending name/qty/unit/
+        notes (server ignores name — the target row's identity is fixed
+        by <existing_id> — but the field is required by the reused
+        PantryItemForm validator).
+
+        Household-scoped: the target must belong to the caller's
+        household (else 404). This is the same defense pantry-item
+        edit/delete already applies via `_get_pantry_item_or_404`.
+        """
+        existing = _get_pantry_item_or_404(existing_id)
+        form = PantryItemForm()
+        if not form.validate_on_submit():
+            # Should never happen from the confirm card since it re-
+            # posts fields we already accepted. If it does (tampered
+            # client, or a stale card after a session invalidation),
+            # fail gracefully by rendering the errors partial so the
+            # user isn't stuck on a broken card.
+            body = render_template("_pantry_form_errors.html", form=form)
+            return body, 422, {
+                "HX-Retarget": "#add-form-errors",
+                "HX-Reswap": "innerHTML",
+            }
+
+        _merge_pending_into_pantry_item(existing, form)
+        db.session.commit()
+
+        sort_key = _current_pantry_sort_from_request()
+        filter_key = _current_pantry_filter_from_request()
+        items = _fetch_pantry_items_for_render(
+            sort_key=sort_key, filter_key=filter_key,
+        )
+        list_html = render_template(
+            "_pantry_list.html", items=items, query="",
+            sort_key=sort_key, filter_key=filter_key,
+            low_count=_count_low_pantry_items(),
+            density=_get_pantry_density(),
+            pantry_sort_options=PANTRY_SORT_OPTIONS,
+        )
+        # OOB-clear the confirm slot so the card disappears in the
+        # same swap that updates the list. Merge NEVER crosses the
+        # onboarding threshold (no new row created), so we don't
+        # need the HX-Refresh path here — partial swap is always
+        # correct.
+        dupe_oob = (
+            '<div id="pantry-dupe-confirm-slot" '
+            'hx-swap-oob="innerHTML"></div>'
+        )
+        # Toast text — cap the name at 40 chars for the same reason
+        # the delete/undo toasts do (mobile layout).
+        toast_name = (existing.name or "item")[:40]
+        trigger_payload = {
+            "pantry:merged": {"name": toast_name}
+        }
+        return list_html + dupe_oob, 200, {
+            "HX-Trigger": json.dumps(trigger_payload)
+        }
 
     @app.route("/pantry/<int:item_id>", methods=["GET"])
     @login_required
@@ -1679,6 +1792,110 @@ def _restore_pantry_snapshot(snapshot: dict, household_id: int) -> int:
         db.session.add(item)
         restored += 1
     return restored
+
+
+# --- Phase 6B: duplicate detection + merge for pantry adds ---------------
+
+def _find_pantry_duplicate(household_id: int, raw_name: str) -> "PantryItem | None":
+    """Return the most-recently-added pantry item in the household whose
+    name matches `raw_name` after normalization (strip + case-fold), or
+    None if there's no match.
+
+    Match rule:
+      - Whitespace-trimmed
+      - Case-insensitive
+
+    Multiple existing rows matching the name are legal (from prior
+    "Add as separate row" decisions). When we surface the confirm-
+    or-add-anyway prompt, we anchor on the most-recent one — that's
+    the row the user is mentally referring to when they type the
+    name again ("the milk," not "one of the several milks").
+    """
+    normalized = (raw_name or "").strip().lower()
+    if not normalized:
+        return None
+    return PantryItem.query.filter(
+        PantryItem.household_id == household_id,
+        func.lower(func.trim(PantryItem.name)) == normalized,
+    ).order_by(PantryItem.added_at.desc()).first()
+
+
+def _merge_pending_into_pantry_item(
+    existing: "PantryItem", pending_form: "PantryItemForm",
+) -> "PantryItem":
+    """Fold a pending add's fields into an existing pantry row.
+
+    Semantics (documented so future contributors don't re-argue them
+    every time a bug report lands):
+
+    Quantity
+      - Sum. `None + None → None`. `None + 2 → 2`. `2 + None → 2`.
+      - Rationale: user mental model of "adding more" is additive.
+        Silently dropping the pending qty because existing was
+        blank, or vice-versa, would be surprising.
+
+    Unit
+      - Existing unit wins if non-empty. Pending unit is ignored
+        UNLESS existing is empty, in which case pending fills it
+        in. Unit-conflict case (both non-empty and different) is
+        preserved into notes so the user doesn't silently lose
+        the pending unit context — see below.
+
+    Notes
+      - Concatenate with a bullet separator " \u2022 " when both are
+        non-empty and different. If they're identical, don't
+        duplicate. If either is empty, take the non-empty one.
+      - If pending unit was different from existing unit, prepend
+        a "was <qty> <unit>" note so the merge doesn't silently
+        lose the fact that the user typed 500 ml when we merged
+        into a "1 gallon" existing row.
+
+    Timestamps + provenance
+      - `added_at` unchanged (merge augments an existing add, not a
+        new event).
+      - `added_by_user_id` unchanged (crediting the merger would
+        rewrite history — the roommate who originally added Milk
+        still gets credit).
+    """
+    pending_qty = pending_form.quantity.data
+    pending_unit = _clean_optional(pending_form.unit.data)
+    pending_notes = _clean_optional(pending_form.notes.data)
+
+    # Quantity: sum with None-aware arithmetic.
+    if pending_qty is not None:
+        existing.quantity = (existing.quantity or 0) + pending_qty
+
+    unit_conflict_note = None
+    if pending_unit:
+        if not existing.unit:
+            existing.unit = pending_unit
+        elif existing.unit.strip().lower() != pending_unit.strip().lower():
+            # Different unit → preserve into notes so the user can
+            # see what they typed. Existing unit wins on the row
+            # itself; the pending unit context migrates into notes.
+            unit_conflict_note = (
+                f"was {pending_qty:g} {pending_unit}"
+                if pending_qty is not None
+                else f"was tagged {pending_unit}"
+            )
+
+    # Notes: concatenate with bullet separator. Unit-conflict note is
+    # prepended so it reads left-to-right chronologically.
+    incoming_notes_parts = []
+    if unit_conflict_note:
+        incoming_notes_parts.append(unit_conflict_note)
+    if pending_notes:
+        incoming_notes_parts.append(pending_notes)
+    incoming_notes = " \u2022 ".join(incoming_notes_parts)
+
+    if incoming_notes:
+        if not existing.notes:
+            existing.notes = incoming_notes
+        elif existing.notes.strip() != incoming_notes.strip():
+            existing.notes = f"{existing.notes} \u2022 {incoming_notes}"
+        # else: identical → skip duplicating
+
+    return existing
 
 
 def _bump_shopping_name_frequency(household_id: int, raw_name: str) -> None:

@@ -215,12 +215,20 @@
      any item, the form snaps back to its compact "utility" appearance.
      Test hook: the `id="pantry-add-hero"` attribute lets tests locate
      the hero without asserting on class strings. #}
+  {# Phase 6B: the hx-on::after-request auto-reset used to fire on ANY
+     2xx response. That breaks the duplicate-confirm flow — a dupe
+     response is a 200 but the user hasn't committed to anything yet,
+     and blowing away their typed values before they've picked
+     Cancel/Merge/Add-anyway leaves them re-typing. So we suppress
+     the reset when the server sets `HX-Detour: dupe-confirm` on the
+     response. All other 200s (regular add, force-duplicate add,
+     merge — anything that actually mutated the DB) still reset. #}
   <form method="post"
         action="{{ url_for('pantry_add') }}"
         hx-post="{{ url_for('pantry_add') }}"
         hx-target="#pantry-list"
         hx-swap="outerHTML"
-        hx-on::after-request="if (event.detail.successful) this.reset();"
+        hx-on::after-request="if (event.detail.successful && !event.detail.xhr.getResponseHeader('HX-Detour')) this.reset();"
         {% if is_empty_pantry %}id="pantry-add-hero"{% endif %}
         class="mt-8 mb-5 rounded-2xl border shadow-sm {% if is_empty_pantry %}border-green-200 bg-green-50/40 p-5{% else %}border-stone-200 bg-white p-4{% endif %}">
     {% if is_empty_pantry %}
@@ -274,6 +282,21 @@
       {% if is_empty_pantry %}Add your first item{% else %}Add to pantry{% endif %}
     </button>
   </form>
+
+  {# Phase 6B: slot for the duplicate-add confirmation card. Empty on
+     every load; `pantry_add` populates it (via HX-Retarget) when the
+     user submits a name that matches an existing pantry row. The
+     merge / add-anyway responses OOB-clear this slot in the same
+     swap that updates #pantry-list below, so tapping either button
+     lands the DOM in a clean post-decision state without a second
+     round-trip. Cancel button removes the card client-side.
+
+     Anchored right below the add form so the user's decision
+     surface stays where their eyes are — placing it further down
+     (below search + list) risks the confirm going off-screen after
+     a submit, especially on tall pantry lists where the form is
+     already scrolled above the fold. #}
+  <div id="pantry-dupe-confirm-slot"></div>
 
   {# Phase 5C: starter-pantry seed. Only shown on a true empty pantry
      (the same gate the hero itself uses). Lives OUTSIDE the add form

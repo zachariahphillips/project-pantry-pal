@@ -142,33 +142,36 @@ class TestNonCrossingDelete:
         sign_up(client, "alice@example.com", "Alice")
         hid = _household_id_for(app, "alice@example.com")
         _seed_past_threshold(client)
+        # NB (Phase 6B): use "Sesame oil" not "Olive oil" — the starter
+        # seed pack now contains lowercase "olive oil", which the
+        # Phase 6B dupe detector matches case-insensitively. Adding
+        # "Olive oil" here would surface the confirm-card partial
+        # instead of creating a row, and this test asserts on the
+        # created-then-deleted-then-restored lifecycle. Sesame is not
+        # in the seed pack so the add path stays as it was pre-6B.
         _add_pantry(
-            client, "Olive oil", qty="1", unit="bottle", notes="extra virgin",
+            client, "Sesame oil", qty="1", unit="bottle", notes="toasted",
         )
         ids = _pantry_ids(client.get("/pantry").get_data(as_text=True))
         client.delete(f"/pantry/{ids[0]}")
-        assert _pantry_row_count(app, hid) == 6  # seed pack, oil gone
+        assert _pantry_row_count(app, hid) == 6  # seed pack, sesame gone
 
         client.post("/pantry/undo", htmx=True)
         assert _pantry_row_count(app, hid) == 7
         with app.app_context():
             from models import PantryItem
-            restored = PantryItem.query.filter_by(
-                household_id=hid, name="Olive oil",
-            ).order_by(PantryItem.added_at.desc()).first()
-            # There are two Olive oils now — one from the seed, one
-            # restored from delete — but the restored one specifically
-            # is our "extra virgin" candidate.
             oils = PantryItem.query.filter_by(
-                household_id=hid, name="Olive oil",
+                household_id=hid, name="Sesame oil",
             ).all()
-            evoo = next((o for o in oils if o.notes == "extra virgin"), None)
-            assert evoo is not None, (
+            restored = next(
+                (o for o in oils if o.notes == "toasted"), None,
+            )
+            assert restored is not None, (
                 "Undo must restore the row with all its fields, "
                 "including notes."
             )
-            assert evoo.quantity == 1
-            assert evoo.unit == "bottle"
+            assert restored.quantity == 1
+            assert restored.unit == "bottle"
 
     def test_undo_response_fires_pantry_undone(self, client, app):
         sign_up(client, "alice@example.com", "Alice")

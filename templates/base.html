@@ -190,6 +190,19 @@
       const n = (e.detail && e.detail.count) || 0;
       showToast(n === 1 ? 'Restored 1 item' : `Restored ${n} items`);
     });
+    // Phase 6B: pantry-merge confirmation toast. Fires when the user
+    // resolves a duplicate-add prompt with "Update existing" — the
+    // pantry_merge route folds the pending qty/notes into the target
+    // row and emits this event. Text-only (no Undo) — merge doesn't
+    // fit the safety-net toast pattern the way delete does, since
+    // the "harm" is a mixed row rather than a lost row; users can
+    // manually edit the row if they want to revert. If a real user
+    // complains about unmergeable merges, an Undo variant would be
+    // additive here.
+    document.addEventListener('pantry:merged', (e) => {
+      const name = (e.detail && e.detail.name) || 'item';
+      showToast(`Updated "${name}"`);
+    });
 
     // ---------------------------------------------------------------
     // Unit combobox (replaces the native <datalist>, which renders as

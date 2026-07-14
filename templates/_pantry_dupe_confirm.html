@@ -1,0 +1,133 @@
+{#
+  Phase 6B: pantry duplicate-add confirmation card.
+
+  Rendered by `pantry_add` when a POST /pantry name matches an
+  existing pantry item in the household (case-insensitive, trimmed).
+  The pending values live in this card's hidden inputs; the three
+  buttons resolve the ambiguity:
+
+    - Update existing (+2 gallon)
+        → POST /pantry/merge/<existing.id>. Merges quantities +
+          notes into the existing row. Card clears via OOB.
+
+    - Add as separate row
+        → POST /pantry?force_duplicate=1. Skips the dupe check,
+          creates a second row. Card clears via OOB in the same
+          swap that updates the list.
+
+    - Cancel
+        → Pure client-side. Removes the card from the DOM. The
+          user's typed values remain in the add form (server sends
+          HX-Detour so the form's auto-reset was suppressed on the
+          dupe response), so they can tweak the name and re-submit
+          without re-typing quantity/unit/notes.
+
+  Context:
+    existing       — the PantryItem we matched against (household-
+                     scoped). Displayed as reassurance ("here's the
+                     row we mean").
+    pending_form   — the validated PantryItemForm with the user's
+                     pending data. Rendered as hidden inputs so the
+                     merge/add-anyway POSTs carry it forward.
+#}
+<div id="dupe-confirm-card"
+     data-testid="pantry-dupe-confirm"
+     class="mt-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm">
+  <div class="flex items-start gap-3">
+    {# Warning-ish glyph, distinct from the pantry tote / meal fork
+       icons the rest of the app uses so this card reads as "check
+       this decision" not "another surface." Amber-toned to match
+       the low-stock badge convention already in the app. #}
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round"
+         class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden="true">
+      <path d="M10 2.5L2 17h16L10 2.5z" />
+      <path d="M10 8v4" />
+      <path d="M10 15h.01" />
+    </svg>
+    <div class="min-w-0 flex-1">
+      <h3 class="text-sm font-semibold text-stone-900">
+        You already have <span class="font-semibold">{{ existing.name }}</span>.
+      </h3>
+      <p class="mt-1 text-xs text-stone-600">
+        Current row:
+        <span class="font-medium text-stone-800">
+          {% set qty_display = existing.display_quantity() %}
+          {% if qty_display %}{{ qty_display }}{% else %}no quantity set{% endif %}
+        </span>
+        {% if existing.notes %}
+          · <span class="italic text-stone-500">{{ existing.notes }}</span>
+        {% endif %}
+      </p>
+      <p class="mt-3 text-xs text-stone-500">
+        What do you want to do?
+      </p>
+    </div>
+  </div>
+
+  {# Buttons row. Two POST-driven, one purely client-side.
+     Hidden inputs carry the pending payload; both htmx-driven
+     buttons re-post them to their respective endpoints. The
+     CSRF token is injected via the meta tag + htmx configRequest
+     hook in base.html, so we don't need a form wrapper. #}
+  <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+    {# Composed labels: show the pending delta if we have a
+       quantity so the user knows exactly what will change.
+       "+2 gallon" is much clearer than "Combine". #}
+    {% set pending_qty = pending_form.quantity.data %}
+    {% set pending_unit = pending_form.unit.data %}
+    {% set delta = "" %}
+    {% if pending_qty is not none %}
+      {% if pending_unit and pending_unit|trim %}
+        {% set delta = "+" ~ ("%g"|format(pending_qty)) ~ " " ~ pending_unit %}
+      {% else %}
+        {% set delta = "+" ~ ("%g"|format(pending_qty)) %}
+      {% endif %}
+    {% endif %}
+
+    <button type="button"
+            hx-post="{{ url_for('pantry_merge', existing_id=existing.id) }}"
+            hx-target="#pantry-list"
+            hx-swap="outerHTML"
+            hx-include="#dupe-confirm-card [data-pending]"
+            data-testid="dupe-confirm-merge"
+            class="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">
+      Update existing{% if delta %} ({{ delta }}){% endif %}
+    </button>
+    <button type="button"
+            hx-post="{{ url_for('pantry_add') }}?force_duplicate=1"
+            hx-target="#pantry-list"
+            hx-swap="outerHTML"
+            hx-include="#dupe-confirm-card [data-pending]"
+            data-testid="dupe-confirm-add-anyway"
+            class="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-300">
+      Add as separate row
+    </button>
+    <button type="button"
+            data-testid="dupe-confirm-cancel"
+            hx-on:click="this.closest('#dupe-confirm-card').remove()"
+            class="inline-flex h-11 items-center justify-center rounded-xl px-3 text-xs font-medium text-stone-500 hover:text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-300 sm:h-11 sm:px-4 sm:text-sm">
+      Cancel
+    </button>
+  </div>
+
+  {# Pending payload — carried on merge / add-anyway via hx-include.
+     `data-pending` selector on the wrapper is what hx-include picks
+     up (see the two buttons above). We DELIBERATELY use hidden
+     inputs (name="name" etc.) rather than a nested <form> because
+     nesting a form inside the outer add form (which this card lives
+     next to) would produce two forms with confusable submit
+     semantics; hidden inputs + hx-include is the htmx-idiomatic
+     way to POST a specific subset of data. #}
+  <div data-pending class="hidden">
+    {# Include the CSRF token so hx-include picks it up in addition
+       to base.html's configRequest hook — belt-and-suspenders since
+       hx-include replaces (not merges with) the default post body.  #}
+    {{ pending_form.hidden_tag() }}
+    <input type="hidden" name="name" value="{{ pending_form.name.data }}">
+    <input type="hidden" name="quantity"
+           value="{% if pending_form.quantity.data is not none %}{{ pending_form.quantity.data }}{% endif %}">
+    <input type="hidden" name="unit" value="{{ pending_form.unit.data or '' }}">
+    <input type="hidden" name="notes" value="{{ pending_form.notes.data or '' }}">
+  </div>
+</div>
