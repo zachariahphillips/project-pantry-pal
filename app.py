@@ -1097,10 +1097,38 @@ def _register_routes(app: Flask) -> None:
         Household-scoped: `_restore_shopping_snapshot` refuses to
         restore if the snapshot's household_id doesn't match. Defense
         in depth against a forged session.
+
+        Phase 6C: also reverses the pantry side of an "I'm home" move.
+        If the snapshot carries `created_pantry_ids`, those PantryItem
+        rows are deleted (household-scoped filter — a tampered ID
+        can't reach into another household's data). The delete is
+        tolerant of already-missing rows: if the user manually deleted
+        one of the just-moved pantry rows in the 5s undo window, we
+        silently skip it rather than erroring out. Both sides commit
+        together in one transaction.
         """
         snap = session.pop(SHOPPING_UNDO_SESSION_KEY, None)
         restored = 0
         if snap is not None:
+            # Phase 6C: if this was an im_home snapshot, unwind the
+            # pantry side FIRST. Order matters only for the atomicity
+            # story — a single commit at the end wraps both sides —
+            # but deleting first keeps the mental model "walk backward
+            # through the move: undo the deletes (shopping restore),
+            # undo the adds (pantry delete)."
+            created_ids = snap.get("created_pantry_ids") or []
+            if created_ids:
+                # Household-scoped filter is the security boundary here:
+                # if the session cookie were forged with foreign pantry
+                # IDs, this query would still return zero rows because
+                # the household_id doesn't match. Belt-and-suspenders
+                # alongside the `_restore_shopping_snapshot` check.
+                to_delete = PantryItem.query.filter(
+                    PantryItem.id.in_(created_ids),
+                    PantryItem.household_id == current_user.household_id,
+                ).all()
+                for row in to_delete:
+                    db.session.delete(row)
             restored = _restore_shopping_snapshot(
                 snap, current_user.household_id,
             )
@@ -1147,10 +1175,62 @@ def _register_routes(app: Flask) -> None:
         considered. A user in household A cannot touch household B's
         shopping items even by guessing IDs (the filter is on
         household_id, not on item IDs).
+
+        Phase 6C: undoable. The pre-move state of the checked shopping
+        items is snapshotted into SHOPPING_UNDO_SESSION_KEY along with
+        the freshly-created pantry row IDs, so `shopping_undo` can
+        reverse both sides of the move — delete those pantry rows and
+        recreate the shopping items (with `checked=True` preserved so
+        the user lands in the same spot they were in). The undo lives
+        on the shopping page (that's where the toast is), so this
+        stashes into the SHOPPING slot — last-action-wins with delete /
+        clear undo, which matches user intuition ("Undo undoes the LAST
+        thing I did on this page").
         """
         checked = current_user.household.shopping_items.filter_by(
             checked=True,
         ).all()
+        moved = len(checked)
+
+        if moved == 0:
+            # Defensive: button shouldn't be tappable with 0 checked
+            # (the action bar is gated behind {% if checked_count > 0 %})
+            # but a curl POST could still hit this. No-op, no toast,
+            # no session touch — preserves any existing shopping undo
+            # snapshot from an earlier delete/clear the user might
+            # still want to reverse.
+            items = current_user.household.shopping_items.all()
+            suggestions = _top_shopping_suggestions(current_user.household)
+            return render_template(
+                "_shopping_list.html", items=items, query="",
+                checked_count=0, suggestions=suggestions,
+            )
+
+        # Snapshot BEFORE any DB mutation. `_snapshot_shopping_items`
+        # captures full row state (name/qty/unit/notes/checked/timestamps/
+        # added_by_user_id) — importantly INCLUDING `checked=True`, so
+        # the undo restores the exact pre-move state (items already in
+        # the cart) rather than re-adding them as un-checked. Also
+        # importantly BEFORE `db.session.delete()` — lazy attribute
+        # access dies once SQLAlchemy has flushed the delete.
+        stored = _store_undo_snapshot(
+            "im_home", checked, current_user.household_id,
+        )
+        # Cap-hit case: `_store_undo_snapshot` returned False AND popped
+        # any prior snapshot. We keep going with the move (the user's
+        # ability to do the action is more important than the ability
+        # to undo it), but the toast will render text-only. Realistic
+        # grocery trips don't hit 25+ items; the cap exists so a
+        # pathological cart doesn't blow the 4KB signed-cookie budget.
+
+        # Create the pantry rows and capture their IDs for the undo
+        # snapshot. `db.session.flush()` populates auto-increment PKs
+        # without committing so we can read them BEFORE the commit
+        # below. This is critical: if we deferred capturing IDs until
+        # after commit, we'd have to re-query by name+household+timestamp
+        # which is racy across two roommates hitting "I'm home"
+        # simultaneously (rare but possible with shared households).
+        new_pantry_rows = []
         for s in checked:
             new_pantry = PantryItem(
                 added_by_user_id=current_user.id,
@@ -1161,9 +1241,33 @@ def _register_routes(app: Flask) -> None:
                 notes=s.notes,
             )
             db.session.add(new_pantry)
+            new_pantry_rows.append(new_pantry)
+        # Flush to populate PKs on the new pantry rows without committing.
+        # The shopping deletes below are still in the same transaction,
+        # so a rollback would still take everything down atomically.
+        db.session.flush()
+        created_pantry_ids = [r.id for r in new_pantry_rows]
+
+        for s in checked:
             db.session.delete(s)
+
+        # Store the pantry IDs alongside the shopping snapshot so undo
+        # can delete them. Overwriting the session slot we just wrote
+        # above (with `_store_undo_snapshot`) rather than mutating —
+        # this way the schema is explicit in one place. Only bother if
+        # the snapshot was actually stored (i.e. under the cap); an
+        # over-cap move ships the action without an undo path anyway,
+        # so no point tracking the created IDs.
+        if stored:
+            session[SHOPPING_UNDO_SESSION_KEY]["created_pantry_ids"] = (
+                created_pantry_ids
+            )
+            # Mark the session as modified so Flask knows to re-sign
+            # the cookie — nested-dict mutations are invisible to the
+            # SecureCookieSession's dirty-tracking otherwise.
+            session.modified = True
+
         db.session.commit()
-        moved = len(checked)
 
         items = current_user.household.shopping_items.all()
         suggestions = _top_shopping_suggestions(current_user.household)
@@ -1171,16 +1275,19 @@ def _register_routes(app: Flask) -> None:
             "_shopping_list.html", items=items, query="",
             checked_count=0, suggestions=suggestions,
         )
-        if moved > 0:
-            return body, 200, {
-                "HX-Trigger": json.dumps({
-                    "shopping:moved-to-pantry": {"count": moved}
-                })
-            }
-        # Defensive: button shouldn't be tappable with 0 checked
-        # (the action bar is gated behind {% if checked_count > 0 %})
-        # but a curl POST could still hit this. No-op, no toast.
-        return body
+        return body, 200, {
+            "HX-Trigger": json.dumps({
+                "shopping:moved-to-pantry": {
+                    "count": moved,
+                    # `null` on cap-hit tells the toast listener to
+                    # render text-only (no Undo button). Realistic
+                    # grocery trips never hit this.
+                    "undoUrl": (
+                        url_for("shopping_undo") if stored else None
+                    ),
+                }
+            })
+        }
 
     # ---- Phase 2B: invite/join ---------------------------------------
 

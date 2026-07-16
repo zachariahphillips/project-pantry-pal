@@ -138,9 +138,19 @@
     });
     // Phase 3F: "I'm home" toast — confirms how many shopping items
     // just moved into the pantry as new rows.
+    // Phase 6C: same shape as shopping:cleared-checked — ships with
+    // an Undo CTA when the payload includes `undoUrl` (grocery run
+    // fit the ≤25-item snapshot cap). On over-cap moves the toast
+    // renders text-only rather than shipping a truncated undo. The
+    // Undo POSTs to /shopping/undo which unwinds BOTH sides of the
+    // move (deletes the created pantry rows AND restores the checked
+    // shopping items). Target defaults to '#shopping-list' since
+    // we're firing from the shopping page.
     document.addEventListener('shopping:moved-to-pantry', (e) => {
       const n = (e.detail && e.detail.count) || 0;
-      showToast(n === 1 ? 'Moved 1 item to pantry' : `Moved ${n} items to pantry`);
+      const undoUrl = (e.detail && e.detail.undoUrl) || null;
+      const text = n === 1 ? 'Moved 1 item to pantry' : `Moved ${n} items to pantry`;
+      showToast(text, undoUrl ? { label: 'Undo', url: undoUrl } : null);
     });
     // Phase 3F + 3J: "Clear checked" toast. Now ships with an Undo
     // CTA when the payload includes an `undoUrl` (bulk under the
