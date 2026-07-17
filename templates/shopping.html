@@ -30,13 +30,24 @@
      its default (so a one-off qty edit doesn't sticky for the next
      item), and refocus the name input (keyboard stays up on mobile).
   #}
+  {# Phase 6D: the hx-on::after-request auto-reset used to fire on ANY
+     2xx response. That breaks the duplicate-confirm flow — a dupe
+     response is a 200 but the user hasn't committed to anything yet,
+     and blowing away their typed values before they've picked
+     Cancel/Merge/Add-anyway leaves them re-typing. So we suppress
+     the reset (and details-collapse + focus-move) when the server
+     sets `HX-Detour: dupe-confirm` on the response. All other 200s
+     (regular add, force-duplicate add, merge — anything that
+     actually mutated the DB) still reset. Mirrors the pantry.html
+     add-form's 6B guard. #}
   <form method="post"
         action="{{ url_for('shopping_add') }}"
         hx-post="{{ url_for('shopping_add') }}"
         hx-target="#shopping-list"
         hx-swap="outerHTML"
         hx-on::after-request="
-          if (event.detail.successful) {
+          if (event.detail.successful
+              && !event.detail.xhr.getResponseHeader('HX-Detour')) {
             this.reset();
             const det = this.querySelector('details');
             if (det) det.open = false;
@@ -115,6 +126,18 @@
       </div>
     </details>
   </form>
+
+  {# Phase 6D: duplicate-add confirmation slot. Populated via HX-Retarget
+     by the shopping_add response when it detects a duplicate; cleared
+     via OOB swap by shopping_add (force_duplicate=1 branch),
+     shopping_merge, and the Cancel button's client-side removal.
+     Placed IMMEDIATELY after the add form so the card renders in
+     visual continuity with the input the user just submitted —
+     dropping it further down (below search / list) risks the
+     confirmation going off-screen after a submit, especially on
+     tall shopping lists where the form is already scrolled above
+     the fold. Mirrors the pantry twin's placement. #}
+  <div id="shopping-dupe-confirm-slot"></div>
 
   <div class="mb-3">
     <label for="search" class="sr-only">Search shopping list</label>

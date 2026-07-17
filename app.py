@@ -916,6 +916,46 @@ def _register_routes(app: Flask) -> None:
     def shopping_add():
         form = ShoppingItemForm()
         if form.validate_on_submit():
+            # Phase 6D: duplicate detection. If the household already
+            # has a shopping item with the same name (case-insensitive,
+            # trimmed), surface a confirm card instead of blindly
+            # creating a second row. Bypassed by `?force_duplicate=1`
+            # (the Add-as-separate-row button on the confirm card
+            # posts with this flag).
+            #
+            # Only runs on HX-Requests — non-htmx form submissions
+            # (rare legacy fallback) fall through to the original
+            # "always add" behavior. Users can dedupe manually on
+            # that path if it matters.
+            #
+            # Only runs on POST /shopping — the other four ShoppingItem
+            # creation paths deliberately preserve "two taps = two
+            # rows" (pantry_item_to_shopping / meal_plan_add / bulk
+            # +Shop All / undo restore). See _find_shopping_duplicate
+            # docstring for the full list.
+            force = request.args.get("force_duplicate") == "1"
+            if request.headers.get("HX-Request") and not force:
+                existing = _find_shopping_duplicate(
+                    current_user.household_id, form.name.data,
+                )
+                if existing is not None:
+                    # HX-Detour signals shopping.html's after-request
+                    # form-reset handler to skip resetting on this
+                    # response — the user's pending data is captured
+                    # in the confirm card's hidden inputs, but if
+                    # they tap Cancel we want their still-typed values
+                    # in the add form so they can tweak the name and
+                    # re-submit without re-typing qty/unit/notes.
+                    partial = render_template(
+                        "_shopping_dupe_confirm.html",
+                        existing=existing, pending_form=form,
+                    )
+                    return partial, 200, {
+                        "HX-Retarget": "#shopping-dupe-confirm-slot",
+                        "HX-Reswap": "innerHTML",
+                        "HX-Detour": "dupe-confirm",
+                    }
+
             name = form.name.data.strip()
             item = ShoppingItem(
                 added_by_user_id=current_user.id,
@@ -933,10 +973,25 @@ def _register_routes(app: Flask) -> None:
                 items = current_user.household.shopping_items.all()
                 checked_count = sum(1 for i in items if i.checked)
                 suggestions = _top_shopping_suggestions(current_user.household)
-                return render_template(
+                list_html = render_template(
                     "_shopping_list.html", items=items, query="",
                     checked_count=checked_count, suggestions=suggestions,
                 )
+                # Phase 6D: any successful add via the partial-swap
+                # path also OOB-clears the duplicate-confirm slot.
+                # On the Add-as-separate-row branch (force_duplicate=1)
+                # the confirm card currently occupies the slot; the
+                # user's decision resolves the confirmation, so the
+                # card should vanish along with the row landing in
+                # the list. On the regular no-dupe add, the slot is
+                # already empty and this OOB is a harmless no-op.
+                # (Non-htmx redirect path below hard-reloads /shopping
+                # so the slot renders empty naturally.)
+                dupe_oob = (
+                    '<div id="shopping-dupe-confirm-slot" '
+                    'hx-swap-oob="innerHTML"></div>'
+                )
+                return list_html + dupe_oob
             return redirect(url_for("shopping_list"))
 
         if request.headers.get("HX-Request"):
@@ -947,6 +1002,65 @@ def _register_routes(app: Flask) -> None:
             }
         flash("Couldn't add that item — check the fields and try again.", "error")
         return redirect(url_for("shopping_list"))
+
+    @app.route("/shopping/merge/<int:existing_id>", methods=["POST"])
+    @login_required
+    def shopping_merge(existing_id: int):
+        """Phase 6D: fold a pending add's fields into an existing
+        shopping row. Called by the "Update existing" button on the
+        duplicate-confirm card. Form body carries the pending name/
+        qty/unit/notes; the server ignores name (target row's identity
+        is fixed by <existing_id>) but the field is still required by
+        the reused ShoppingItemForm validator.
+
+        Household-scoped: the target must belong to the caller's
+        household (else 404). Mirrors `pantry_merge`.
+
+        Does NOT touch `checked` / `checked_at` — see
+        `_merge_pending_into_shopping_item` for rationale.
+
+        Does NOT call `_bump_shopping_name_frequency` — merging isn't
+        a new "add" event; it's a consolidation of the pending add
+        into an existing row. Bumping would double-count a single
+        mental gesture. (The original row's add already bumped when
+        it was created.)
+        """
+        existing = _get_shopping_item_or_404(existing_id)
+        form = ShoppingItemForm()
+        if not form.validate_on_submit():
+            # Should never fire from the confirm card since it re-
+            # posts already-validated fields, but degrade gracefully
+            # if it does (tampered client, stale card after session
+            # invalidation) so the user isn't stuck on a broken card.
+            body = render_template("_shopping_form_errors.html", form=form)
+            return body, 422, {
+                "HX-Retarget": "#shopping-add-form-errors",
+                "HX-Reswap": "innerHTML",
+            }
+
+        _merge_pending_into_shopping_item(existing, form)
+        db.session.commit()
+
+        items = current_user.household.shopping_items.all()
+        checked_count = sum(1 for i in items if i.checked)
+        suggestions = _top_shopping_suggestions(current_user.household)
+        list_html = render_template(
+            "_shopping_list.html", items=items, query="",
+            checked_count=checked_count, suggestions=suggestions,
+        )
+        # OOB-clear the confirm slot so the card disappears in the
+        # same swap that updates the list.
+        dupe_oob = (
+            '<div id="shopping-dupe-confirm-slot" '
+            'hx-swap-oob="innerHTML"></div>'
+        )
+        toast_name = (existing.name or "item")[:40]
+        trigger_payload = {
+            "shopping:merged": {"name": toast_name}
+        }
+        return list_html + dupe_oob, 200, {
+            "HX-Trigger": json.dumps(trigger_payload)
+        }
 
     @app.route("/shopping/<int:item_id>", methods=["GET"])
     @login_required
@@ -2001,6 +2115,117 @@ def _merge_pending_into_pantry_item(
         elif existing.notes.strip() != incoming_notes.strip():
             existing.notes = f"{existing.notes} \u2022 {incoming_notes}"
         # else: identical → skip duplicating
+
+    return existing
+
+
+# --- Phase 6D: duplicate detection + merge for shopping adds -------------
+
+def _find_shopping_duplicate(
+    household_id: int, raw_name: str,
+) -> "ShoppingItem | None":
+    """Return the most-recently-added shopping item in the household
+    whose name matches `raw_name` after normalization (strip + case-
+    fold), or None if there's no match.
+
+    Match rule: whitespace-trimmed, case-insensitive. Exact mirror of
+    `_find_pantry_duplicate`.
+
+    Multiple existing rows matching the name are legal (from prior
+    "Add as separate row" decisions, or from `pantry_item_to_shopping`
+    / meal-plan bulk adds which deliberately preserve the codebase's
+    "two taps = two rows" contract). When we surface the confirm-or-
+    add-anyway prompt, we anchor on the most-recent one — the row the
+    user is mentally referring to when they type the name again.
+
+    We do NOT filter by `checked` state here — the confirm card
+    exposes the target's state visually so the user can decide
+    whether "Update existing" or "Add as separate row" better fits
+    their intent (see `_merge_pending_into_shopping_item` docstring
+    for why we deliberately DON'T mutate `checked` on merge).
+    """
+    normalized = (raw_name or "").strip().lower()
+    if not normalized:
+        return None
+    return ShoppingItem.query.filter(
+        ShoppingItem.household_id == household_id,
+        func.lower(func.trim(ShoppingItem.name)) == normalized,
+    ).order_by(ShoppingItem.added_at.desc()).first()
+
+
+def _merge_pending_into_shopping_item(
+    existing: "ShoppingItem", pending_form: "ShoppingItemForm",
+) -> "ShoppingItem":
+    """Fold a pending add's fields into an existing shopping row.
+
+    Semantics — deliberately mirror `_merge_pending_into_pantry_item`
+    where the field maps 1:1, plus a documented decision on the
+    shopping-only `checked` + `checked_at` fields:
+
+    Quantity
+      - Sum. Same None-aware arithmetic as pantry merge.
+
+    Unit
+      - Existing unit wins if non-empty. Pending unit fills in a
+        blank existing unit. Conflict case preserves the pending
+        unit context into notes.
+
+    Notes
+      - Concatenate with " \u2022 " separator. Skip if identical.
+      - Prepend unit-conflict "was <qty> <unit>" note if applicable.
+
+    Timestamps + provenance
+      - `added_at` / `added_by_user_id` unchanged — merge augments
+        an existing add event, doesn't rewrite history to credit the
+        merger.
+
+    Checked state (NEW vs pantry)
+      - `checked` + `checked_at` UNCHANGED.
+      - If the target was already crossed off (in the cart), the
+        merged row stays crossed off. Rationale: the ambiguous case
+        is "user already checked Milk off, then types 'Milk' again"
+        — could mean "I need more" (un-check) OR "accidental re-add"
+        (keep checked). We resolve by doing nothing: if the user
+        actually wanted a fresh un-checked entry, "Add as separate
+        row" gives them exactly that; if they just wanted to bump
+        the quantity, the +qty lands on the existing row. Least
+        invasive; iterable if it proves wrong.
+      - Practical consequence: a checked target with qty=1 that
+        merges +1 becomes a checked target with qty=2. When the
+        user taps "I'm home", both quantities move to pantry as one
+        row with qty=2. Matches user intent for the "I need more"
+        case; for the "accidental re-add" case, no harm done.
+    """
+    pending_qty = pending_form.quantity.data
+    pending_unit = _clean_optional(pending_form.unit.data)
+    pending_notes = _clean_optional(pending_form.notes.data)
+
+    if pending_qty is not None:
+        existing.quantity = (existing.quantity or 0) + pending_qty
+
+    unit_conflict_note = None
+    if pending_unit:
+        if not existing.unit:
+            existing.unit = pending_unit
+        elif existing.unit.strip().lower() != pending_unit.strip().lower():
+            unit_conflict_note = (
+                f"was {pending_qty:g} {pending_unit}"
+                if pending_qty is not None
+                else f"was tagged {pending_unit}"
+            )
+
+    incoming_notes_parts = []
+    if unit_conflict_note:
+        incoming_notes_parts.append(unit_conflict_note)
+    if pending_notes:
+        incoming_notes_parts.append(pending_notes)
+    incoming_notes = " \u2022 ".join(incoming_notes_parts)
+
+    if incoming_notes:
+        if not existing.notes:
+            existing.notes = incoming_notes
+        elif existing.notes.strip() != incoming_notes.strip():
+            existing.notes = f"{existing.notes} \u2022 {incoming_notes}"
 
     return existing
 

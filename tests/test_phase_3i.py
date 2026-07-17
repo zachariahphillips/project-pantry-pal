@@ -38,8 +38,22 @@ def _add_shopping(c: Client, name: str, qty: str = "", unit: str = "",
                   notes: str = ""):
     """POST a shopping item via the same form path the browser uses.
     Returns the response. Helpful when a test cares about the response
-    body (e.g. asserting the re-rendered list contains a chip)."""
-    return c.post("/shopping", htmx=True, data={
+    body (e.g. asserting the re-rendered list contains a chip).
+
+    Uses `?force_duplicate=1` so that repeated calls with the same
+    name always create a new row + bump the frequency counter. Phase
+    6D introduced duplicate detection that intercepts POST /shopping
+    with a confirm card when the name matches an existing row —
+    without the force flag, the 2nd+ call to `_add_shopping("Milk")`
+    would return a partial-swap dupe response and never actually add
+    the row (breaking every 'N adds → count=N' assertion in this
+    suite). Semantically, force_duplicate mirrors what a user hitting
+    the 'Add as separate row' button on the confirm card would do —
+    'I really do want another entry for this name' — which is what
+    these frequency-counter tests are simulating. New-name adds are
+    unaffected: force_duplicate short-circuits the dupe check but
+    the fresh-add path still runs when there's no existing match."""
+    return c.post("/shopping?force_duplicate=1", htmx=True, data={
         "name": name, "quantity": qty, "unit": unit, "notes": notes,
         "submit": "Add",
     })

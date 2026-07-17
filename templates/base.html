@@ -213,6 +213,18 @@
       const name = (e.detail && e.detail.name) || 'item';
       showToast(`Updated "${name}"`);
     });
+    // Phase 6D: shopping-merge confirmation toast. Same shape as
+    // pantry:merged — fires when the user resolves a shopping
+    // duplicate-add prompt with "Update existing". Text-only (no
+    // Undo) — merge doesn't fit the safety-net toast pattern the
+    // way delete does; the "harm" is a mixed row rather than a
+    // lost row, and users can manually edit the row if they want
+    // to revert. If a real user complains about unmergeable
+    // shopping merges, an Undo variant would be additive here.
+    document.addEventListener('shopping:merged', (e) => {
+      const name = (e.detail && e.detail.name) || 'item';
+      showToast(`Updated "${name}"`);
+    });
 
     // ---------------------------------------------------------------
     // Unit combobox (replaces the native <datalist>, which renders as
