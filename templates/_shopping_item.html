@@ -29,7 +29,16 @@
     <span class="text-sm font-semibold uppercase tracking-wide text-white">Delete</span>
   </div>
 
-  <div class="relative flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 {% if item.checked %}opacity-60{% endif %}"
+  {# Phase 6E (bug fix, plan §0.1): the checked-off dim used to be
+     `opacity-60` on THIS wrapper. Bad: opacity applies to the entire
+     stacking context including `bg-white`, so the red affordance
+     layer above bled through at 40% and checked rows rendered as
+     pink blocks with "Delete" visible behind them. Moved to
+     `[&>*]:opacity-60` so ONLY the direct children (checkbox label,
+     content column, actions column) dim — the row's white background
+     stays 100% opaque and fully occludes the affordance at rest.
+     Same visual "dim" effect for the user, no red-leak. #}
+  <div class="relative flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 {% if item.checked %}[&>*]:opacity-60{% endif %}"
        data-swipe-content
        data-delete-url="{{ url_for('shopping_item_delete', item_id=item.id) }}">
     <label class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg hover:bg-stone-100"
