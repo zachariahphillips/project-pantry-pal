@@ -39,9 +39,17 @@
             class="hidden text-[11px] font-medium tabular-nums text-stone-500"
             aria-live="polite"></span>
     </div>
+    {# Phase 6F (plan §1.1): pre-6F the onboarding branch of this
+       subcopy said "Add a few items first — the AI plans meals using
+       what you have." That instruction is already carried BELOW by
+       the dot-progress panel ("Add N more items to unlock the AI
+       planner."). Two adjacent blocks giving the same instruction
+       made the fold feel repetitive and pushed the pantry hero card
+       further down. Shortened to a state descriptor so the panel
+       below owns the action verb. #}
     <p class="mt-0.5 text-xs text-stone-500">
       {% if onboarding_active %}
-        Add a few items first — the AI plans meals using what you have.
+        Locked until your pantry has a few items.
       {% else %}
         Tell the AI what you want to make. It'll check your pantry and tell you what to buy.
       {% endif %}

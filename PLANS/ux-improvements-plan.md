@@ -73,27 +73,38 @@ red affordance layer at rest. One-class swap, no JS, no z-index churn.
 
 ## 1. Empty-state polish — P1
 
-### 1.1 De-duplicate the empty-pantry copy
+### 1.1 De-duplicate the empty-pantry copy — ✅ shipped 2026-07-22 (Phase 6F)
 
-Where: `templates/pantry.html`
-Size: **XS**
+Where: `templates/pantry.html` (planner subcopy line)
+Size: **XS** — copy-only, one branch of one `{% if %}`.
 
-**What's wrong:** On the empty pantry, three separate blocks say almost the
-same thing:
+**What was wrong:** On the empty pantry, two adjacent blocks in the
+`Plan a meal` section said the same thing:
 
-1. `Your pantry` subheading — "What you've got at home — and what to cook
-   with it."
-2. `Plan a meal` subcopy — "Add a few items first — the AI plans meals using
-   what you have."
-3. Hero card — "Let's stock your pantry. Add a few things you keep at home…"
+- H2 subcopy: *"Add a few items first — the AI plans meals using what you have."*
+- Dot progress panel: *"Add N more items to unlock the AI planner."*
 
-That's a lot of "add a few things" for one screen. The hero already does
-this job — the H1 subcopy + planner subcopy can be shorter (or absent on
-empty state) so the hero card owns the mental model.
+Two "Add … items" instructions stacked one on top of the other, pushing
+the hero card further down the fold. The H1 subheading ("What you've
+got at home — and what to cook with it.") + hero card
+("Let's stock your pantry.") remain untouched — they do different jobs
+than the section-level subcopy, so they don't fold into this dedup.
 
-**Recommendation:** shorten the planner subcopy on the empty pantry to
-something like "Locked until your pantry has a few items." — the dot-
-progress panel below already says what to do.
+**Fix:** shortened the planner subcopy on the empty state to
+*"Locked until your pantry has a few items."* — a state descriptor,
+letting the dot panel below own the action verb. The un-locked branch's
+copy is unchanged.
+
+**Test coverage:** `tests/test_phase_6f.py` (7 tests). Guards:
+- new locked-state subcopy is present on empty pantry
+- old redundant string is retired
+- dot-panel instruction is preserved (redundancy was the bug — absence
+  would be a bigger bug)
+- un-locked branch still swaps to the AI-prompt subcopy
+- both boundary states around the onboarding threshold render correctly
+
+**Compare:** `/tmp/audit_02_pantry_empty.png` (before) →
+`/tmp/6f_empty_pantry.png` (after).
 
 ### 1.2 Hide search + household-share cards until the pantry has any item
 
@@ -443,8 +454,8 @@ Defer until you feel it personally. Not a v1 priority.
 If you asked "what next, in order?" — this is what I'd pull off the shelf:
 
 1. ~~**§0.1** — Fix the checked-off shopping row's red-leak bleed. Bug. XS.~~ ✅ shipped 2026-07-20
-2. **§1.1 + §1.2** — Empty-pantry polish (redundant copy + hide search &
-   household on empty). Combine into one commit; XS + XS = still small.
+2. ~~**§1.1** — Empty-pantry planner subcopy dedup.~~ ✅ shipped 2026-07-22
+   / **§1.2** still open — hide search + household cards on empty pantry.
 3. **§3.1 + §3.3** — Button `active:` state + longer Undo toast (7s).
    Both XS, both universally felt, one commit.
 
