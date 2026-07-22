@@ -336,38 +336,59 @@
   {% endif %}
 
   {# ---------- Search + list ---------- #}
-  <div class="mb-3">
-    <label for="search" class="sr-only">Search pantry</label>
-    {# Phase 4A/4C: hx-vals reads the active sort + filter from
-       window.location at request time, so each keystroke-driven
-       search preserves both pills the user picked. Reading from the
-       URL (vs a hidden form input) is what lets the search input
-       stay OUTSIDE the re-rendered partial — no focus-loss / cursor-
-       position issues from re-rendering it on every swap. The URL
-       is kept in sync via the sort + filter pills' hx-push-url=true.
+  {# Phase 6G (plan §1.2): the search input hides on an empty pantry.
+     Nothing to search means the field is pure chrome noise, and it
+     wedges between the hero card and the (empty) list where the eye
+     is trying to travel from "Add your first item" to the seed
+     button. Snaps back into place the moment `pantry_item_count > 0`
+     (same gate the hero card retires on). #}
+  {% if not is_empty_pantry %}
+    <div class="mb-3">
+      <label for="search" class="sr-only">Search pantry</label>
+      {# Phase 4A/4C: hx-vals reads the active sort + filter from
+         window.location at request time, so each keystroke-driven
+         search preserves both pills the user picked. Reading from the
+         URL (vs a hidden form input) is what lets the search input
+         stay OUTSIDE the re-rendered partial — no focus-loss / cursor-
+         position issues from re-rendering it on every swap. The URL
+         is kept in sync via the sort + filter pills' hx-push-url=true.
 
-       Filter values: "" (no filter) or "low". Reading the raw
-       value with no fallback intentionally — null becomes the JS
-       value `null` and htmx omits null params, which is what we
-       want when no filter is active. #}
-    <input id="search"
-           type="search"
-           name="q"
-           value="{{ query }}"
-           placeholder="Search pantry"
-           autocomplete="off"
-           hx-get="{{ url_for('pantry_list') }}"
-           hx-vals='js:{sort: new URLSearchParams(window.location.search).get("sort") || "newest", filter: new URLSearchParams(window.location.search).get("filter")}'
-           hx-trigger="keyup changed delay:250ms, search"
-           hx-target="#pantry-list"
-           hx-swap="outerHTML"
-           class="block w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-  </div>
+         Filter values: "" (no filter) or "low". Reading the raw
+         value with no fallback intentionally — null becomes the JS
+         value `null` and htmx omits null params, which is what we
+         want when no filter is active. #}
+      <input id="search"
+             type="search"
+             name="q"
+             value="{{ query }}"
+             placeholder="Search pantry"
+             autocomplete="off"
+             hx-get="{{ url_for('pantry_list') }}"
+             hx-vals='js:{sort: new URLSearchParams(window.location.search).get("sort") || "newest", filter: new URLSearchParams(window.location.search).get("filter")}'
+             hx-trigger="keyup changed delay:250ms, search"
+             hx-target="#pantry-list"
+             hx-swap="outerHTML"
+             class="block w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+    </div>
+  {% endif %}
 
   {% include "_pantry_list.html" %}
 
-  {# ---------- Household share card (Phase 2B) ---------- #}
-  {% include "_household_share.html" %}
+  {# ---------- Household share card (Phase 2B) ----------
+     Phase 6G (plan §1.2): defer the invite/roster card until the
+     household has SOMETHING to share. Three ways in:
+       - `pantry_item_count > 0` — the pantry itself is worth sharing
+       - `members|length > 1` — a roommate has already joined; the
+         card is the roster/name UI, not just an invite widget
+       - `invites` truthy — the user already minted an invite that's
+         still pending, and this card is the only surface to see,
+         copy, or revoke it. Hiding would strand the invite.
+     On a first-visit solo user with 0 items and 0 invites the card
+     is pure invite-a-roommate distraction from the hero card above
+     — Phase 2B's original render, but at the wrong moment. #}
+  {% if pantry_item_count > 0 or members|length > 1 or invites %}
+    {% include "_household_share.html" %}
+  {% endif %}
 </section>
 
 {# ---------- Phase 3D: meal-planner chips + cost pill ---------- #}

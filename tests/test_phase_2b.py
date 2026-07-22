@@ -54,7 +54,26 @@ def mint_invite_for(app, user_email: str) -> str:
 
 class TestShareCard:
     def test_pantry_renders_household_share_card(self, client: Client):
+        """The share card renders on /pantry with correct solo-user
+        content (household name + "Just you for now" copy, no Revoke
+        button because no invite has been minted).
+
+        Phase 6G note: as of the plan §1.2 empty-state cleanup, the
+        share card is gated behind `pantry_item_count > 0 or a
+        roommate/invite`. This test's original scenario (fresh
+        signup, GET /pantry) now hides the card by design — see
+        `tests/test_phase_6g.py::TestSharedCardEmptyStateGate` for
+        the gate coverage. So we add one pantry item first, which
+        preserves this test's actual intent (render correctness for
+        a solo user) without fighting the new gate."""
         sign_up(client, "alice@example.com", "Alice")
+        # Phase 6G: unlock the household-share gate. One item is
+        # enough for `pantry_item_count > 0`.
+        client.post(
+            "/pantry",
+            data={"name": "Olive oil", "submit": "Add"},
+            htmx=True,
+        )
         body = _body(client.get("/pantry"))
         assert "household-share" in body
         assert "Alice's home" in body

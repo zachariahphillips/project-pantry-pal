@@ -106,20 +106,38 @@ copy is unchanged.
 **Compare:** `/tmp/audit_02_pantry_empty.png` (before) →
 `/tmp/6f_empty_pantry.png` (after).
 
-### 1.2 Hide search + household-share cards until the pantry has any item
+### 1.2 Hide search + household-share cards until the pantry has any item — ✅ shipped 2026-07-22 (Phase 6G)
 
 Where: `templates/pantry.html` (search input + `_household_share.html` include)
-Size: **XS**
+Size: **XS** — two `{% if %}` wrappers on adjacent blocks.
 
-**What's wrong:** On a completely empty pantry we still render the
-`Search pantry` box (nothing to search) and the `Alice's home` household
-share card. Roommate-invite before you've added a single item is unusual —
-the card feels like a distraction from the hero's job.
+**What was wrong:** On a completely empty pantry we still rendered the
+`Search pantry` box (nothing to search) and the household share card
+("Just you for now — invite a roommate"). Both wedged between the hero
+card and the seed button, competing with the primary "add your first item"
+job.
 
-**Recommendation:** Wrap both in `{% if not is_empty_pantry %}` (search) and
-`{% if pantry_item_count > 0 or has_roommate %}` (household card). Show
-household share only when there's shared-pantry substance, OR the household
-already has a co-op relationship.
+**Fix:**
+- Search input wrapped in `{% if not is_empty_pantry %}`. Snaps back the
+  moment `pantry_item_count > 0`.
+- Household card wrapped in `{% if pantry_item_count > 0 or members|length > 1 or invites %}`.
+  The plan originally suggested `has_roommate`, but the correct gate
+  is broader — a **pending invite** must also keep the card visible,
+  because the card is the ONLY surface to see, copy, or revoke it.
+  Hiding it while an invite is live would strand the invite. Three ways in:
+  - pantry has items → co-op has substance
+  - members > 1 → roommate already joined; card is the roster
+  - invites truthy → an invite is pending; card is the manage surface
+
+**Test coverage:** `tests/test_phase_6g.py` (10 tests). Guards fresh-solo
+hides both, first item unlocks both, symmetric hide on last-item delete,
+pending-invite-keeps-card-but-not-search, and joined-roommate-keeps-card.
+Plus one update to `test_phase_2b.py::test_pantry_renders_household_share_card`
+which asserted the pre-6G behavior — the test's intent (render correctness
+for a solo user) is preserved by adding one pantry item first.
+
+**Compare:** `/tmp/audit_02_pantry_empty.png` (before) →
+`/tmp/6g_empty_pantry.png` + `/tmp/6g_empty_pantry_scrolled.png` (after).
 
 ### 1.3 Shopping empty-state hero (mirror the pantry pattern)
 
@@ -455,8 +473,8 @@ If you asked "what next, in order?" — this is what I'd pull off the shelf:
 
 1. ~~**§0.1** — Fix the checked-off shopping row's red-leak bleed. Bug. XS.~~ ✅ shipped 2026-07-20
 2. ~~**§1.1** — Empty-pantry planner subcopy dedup.~~ ✅ shipped 2026-07-22
-   / **§1.2** still open — hide search + household cards on empty pantry.
-3. **§3.1 + §3.3** — Button `active:` state + longer Undo toast (7s).
+3. ~~**§1.2** — Hide search + household cards on empty pantry.~~ ✅ shipped 2026-07-22
+4. **§3.1 + §3.3** — Button `active:` state + longer Undo toast (7s).
    Both XS, both universally felt, one commit.
 
 After those three the "next natural chunk" I'd reach for is one of:
