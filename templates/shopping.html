@@ -71,7 +71,8 @@
       ) }}
       <button type="submit"
               aria-label="Add to shopping list"
-              class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2">
+              hx-disabled-elt="this"
+              class="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-offset-2 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
         <svg viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor"
              stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
              aria-hidden="true">

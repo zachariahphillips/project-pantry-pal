@@ -26,7 +26,7 @@
         Nothing to do — your pantry is the household pantry.
       </p>
       <a href="{{ url_for('pantry_list') }}"
-         class="mt-5 inline-flex h-11 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">
+         class="mt-5 inline-flex h-11 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800">
         Open pantry
       </a>
     </div>
@@ -50,7 +50,7 @@
       <form method="post" class="mt-5 space-y-3">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <button type="submit"
-                class="inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300">
+                class="inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
           Join "{{ household.name }}"
         </button>
         <a href="{{ url_for('pantry_list') }}"
@@ -74,7 +74,7 @@
 
       <div class="mt-5 space-y-2">
         <a href="{{ url_for('signup', invite=invite.token) }}"
-           class="inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-green-700">
+           class="inline-flex h-11 w-full items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800">
           Create account &amp; join
         </a>
         <a href="{{ url_for('login', invite=invite.token) }}"

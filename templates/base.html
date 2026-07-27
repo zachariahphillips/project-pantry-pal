@@ -44,7 +44,7 @@
     // {label, url} as the 2nd arg to render e.g. "Cleared 3 items · Undo"
     // where the action POSTs to `url` and re-swaps the shopping list.
     //   - text-only: 1.8s, decorative-only (pointer-events-none)
-    //   - with action: 5s, tappable, Phase 3J undo for destructive
+    //   - with action: 7s, tappable, Phase 3J undo for destructive
     //     shopping actions
     function showToast(text, action) {
       const toast = document.getElementById('toast');
@@ -79,10 +79,10 @@
       }
       toast.classList.remove('opacity-0');
       clearTimeout(window.__toastTimer);
-      // Action-bearing toasts hang around for 5s so the user has a
+      // Action-bearing toasts hang around for 7s so the user has a
       // realistic window to spot + tap Undo before it vanishes; pure
       // info toasts stay at 1.8s.
-      const duration = (action && action.url) ? 5000 : 1800;
+      const duration = (action && action.url) ? 7000 : 1800;
       window.__toastTimer = setTimeout(() => {
         toast.classList.add('opacity-0');
         toastAction.classList.add('hidden');
