@@ -78,12 +78,16 @@
         Edit
       </button>
       {# Phase 3J: hx-confirm removed. Delete fires an undo-able toast
-         on the swapped list, same pattern as Clear checked. #}
+         on the swapped list, same pattern as Clear checked.
+         Phase 6L (UX plan §2.2): visible Delete is neutral at rest
+         and turns red only on hover/focus. The swipe affordance layer
+         behind the row stays red because it only appears during an
+         explicit delete gesture. #}
       <button type="button"
               hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
               hx-target="#shopping-list"
               hx-swap="outerHTML"
-              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300">
+              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
         Delete
       </button>
     </div>
