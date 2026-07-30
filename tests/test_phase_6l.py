@@ -39,7 +39,8 @@ def _add_shopping(c: Client, name: str = "Milk"):
 def _delete_button_tag(html: str, surface: str) -> str:
     """Extract the visible row Delete button for pantry/shopping rows."""
     match = re.search(
-        rf'(<button[^>]*hx-delete="/{surface}/\d+"[^>]*>)\s*Delete',
+        rf'(<button(?=[^>]*hx-delete="/{surface}/\d+")'
+        rf'(?=[^>]*aria-label="Delete [^"]+")[^>]*>)',
         html,
         re.DOTALL,
     )

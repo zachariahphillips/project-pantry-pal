@@ -525,23 +525,23 @@ class TestUIWiring:
         (see `test_delete_button_no_longer_has_hx_confirm` in
         test_phase_3j.py). Real correctness bite too: the browser's
         native confirm() blocks the JS event loop while the modal is
-        open, so a paused-on-confirm user could see the 5s toast
+        open, so a paused-on-confirm user could see the 7s toast
         timer expire before they can even see the toast — exactly
         the safety-net gap this chunk plugs."""
         sign_up(client, "alice@example.com", "Alice")
         _add_pantry(client, "Milk")
         html = client.get("/pantry").get_data(as_text=True)
 
-        del_match = re.search(
-            r'hx-delete="/pantry/\d+"[^>]*>\s*Delete',
+        button_match = re.search(
+            r'(<button(?=[^>]*hx-delete="/pantry/\d+")'
+            r'(?=[^>]*aria-label="Delete [^"]+")[^>]*>)',
             html, re.DOTALL,
         )
-        assert del_match, "Delete button should still exist"
-        button_block_start = html.rfind('<button', 0, del_match.start())
-        button_block = html[button_block_start:del_match.end()]
+        assert button_match, "Delete button should still exist"
+        button_block = button_match.group(1)
         assert "hx-confirm" not in button_block, (
             "Pantry Delete button should no longer have hx-confirm "
-            "(Phase 6A) — the 5-second Undo toast is the safety net."
+            "(Phase 6A) — the 7-second Undo toast is the safety net."
         )
 
     def test_pantry_deleted_handler_in_base(self, client, app):

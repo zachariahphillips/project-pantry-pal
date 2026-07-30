@@ -67,28 +67,44 @@
       </p>
     {% endif %}
   </div>
+  {# Phase 6M (UX plan §2.1): row actions are icon-only so longer
+     item names keep more horizontal space on mobile. Accessible names
+     stay explicit via aria-label or sr-only text. #}
   <div class="flex flex-shrink-0 items-center gap-1">
     <button type="button"
-            aria-label="Add {{ item.name }} to shopping list"
             hx-post="{{ url_for('pantry_item_to_shopping', item_id=item.id) }}"
             hx-swap="none"
             hx-on::after-request="
               if (event.detail.successful) {
                 const lbl = this.querySelector('.shop-label');
+                const original = lbl.textContent;
                 lbl.textContent = 'Added';
                 this.disabled = true;
                 clearTimeout(this.__t);
-                this.__t = setTimeout(() => { lbl.textContent = '+ Shop'; this.disabled = false; }, 1500);
+                this.__t = setTimeout(() => { lbl.textContent = original; this.disabled = false; }, 1500);
               }"
-            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:opacity-60">
-      <span class="shop-label">+ Shop</span>
+            class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:opacity-60">
+      <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M5 8h10l-1 8H6L5 8Z"/>
+        <path d="M8 8V6a2 2 0 1 1 4 0v2"/>
+        <path d="M10 11v4M8 13h4"/>
+      </svg>
+      <span class="sr-only shop-label">+ Shop: add {{ item.name }} to shopping list</span>
     </button>
     <button type="button"
+            aria-label="Edit {{ item.name }}"
             hx-get="{{ url_for('pantry_item_edit', item_id=item.id) }}"
             hx-target="#pantry-item-{{ item.id }}"
             hx-swap="outerHTML"
-            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
-      Edit
+            class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
+      <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M4 14.5V16h1.5L14.5 7 13 5.5 4 14.5Z"/>
+        <path d="M12 6.5 13.5 8"/>
+      </svg>
     </button>
     {# Phase 6A: hx-confirm removed — the 7-second Undo toast is the
        safety net now. Same rationale as Phase 3J for the shopping
@@ -102,11 +118,19 @@
        rare destructive action doesn't dominate every row. It turns
        red on hover/focus, when the user has shown intent. #}
     <button type="button"
+            aria-label="Delete {{ item.name }}"
             hx-delete="{{ url_for('pantry_item_delete', item_id=item.id) }}"
             hx-target="#pantry-list"
             hx-swap="outerHTML"
-            class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
-      Delete
+            class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
+      <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M4 6h12"/>
+        <path d="M8 6V4h4v2"/>
+        <path d="m6 6 .7 10h6.6L14 6"/>
+        <path d="M9 9v4M11 9v4"/>
+      </svg>
     </button>
   </div>
 </div>

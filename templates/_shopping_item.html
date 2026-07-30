@@ -15,7 +15,7 @@
         fire the DELETE request without needing to introspect
         buttons.
 
-   The visible Delete button INSIDE `data-swipe-content` stays
+   The visible Delete control INSIDE `data-swipe-content` stays
    present — swipe is an accelerator, not a replacement. That
    preserves keyboard/screen-reader access and gives new users a
    discoverable path.
@@ -69,13 +69,22 @@
       {% endif %}
     </div>
 
+    {# Phase 6M (UX plan §2.1): row actions are icon-only so longer
+       shopping names keep more horizontal space on mobile. Accessible
+       names stay explicit via aria-label. #}
     <div class="flex flex-shrink-0 items-center gap-1">
       <button type="button"
+              aria-label="Edit {{ item.name }}"
               hx-get="{{ url_for('shopping_item_edit', item_id=item.id) }}"
               hx-target="#shopping-item-{{ item.id }}"
               hx-swap="outerHTML"
-              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
-        Edit
+              class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
+        <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M4 14.5V16h1.5L14.5 7 13 5.5 4 14.5Z"/>
+          <path d="M12 6.5 13.5 8"/>
+        </svg>
       </button>
       {# Phase 3J: hx-confirm removed. Delete fires an undo-able toast
          on the swapped list, same pattern as Clear checked.
@@ -84,11 +93,19 @@
          behind the row stays red because it only appears during an
          explicit delete gesture. #}
       <button type="button"
+              aria-label="Delete {{ item.name }}"
               hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
               hx-target="#shopping-list"
               hx-swap="outerHTML"
-              class="inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
-        Delete
+              class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
+        <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M4 6h12"/>
+          <path d="M8 6V4h4v2"/>
+          <path d="m6 6 .7 10h6.6L14 6"/>
+          <path d="M9 9v4M11 9v4"/>
+        </svg>
       </button>
     </div>
   </div>
