@@ -1615,7 +1615,15 @@ def _register_routes(app: Flask) -> None:
         years. Phase 3C+ can add a `before=<date>` query param.
         """
         plans = current_user.household.meal_plans.all()
-        return render_template("meals.html", plans=plans)
+        # Phase 6N: the empty-state CTA should not promise "Plan a meal"
+        # while the pantry-side planner is still locked behind onboarding.
+        pantry_item_count = current_user.household.pantry_items.count()
+        return render_template(
+            "meals.html",
+            plans=plans,
+            pantry_item_count=pantry_item_count,
+            onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
+        )
 
     @app.route(
         "/meal-plan/<int:plan_id>/need-all-to-shopping", methods=["POST"]
