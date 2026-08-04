@@ -34,9 +34,11 @@
       {# Phase 3D: cost pill. Populated client-side from GET /cost on
          page load and after every successful POST /meal-plan. Stays
          hidden if /cost fails so a broken endpoint can't break the UI.
-         Color shifts amber at ≤3 remaining, red at 0. #}
+         Color shifts amber at ≤3 remaining, red at 0.
+         Phase 6P (UX plan §2.3): make the quota read as a real
+         budget indicator with a subtle bordered pill treatment. #}
       <span id="meal-plan-cost-pill"
-            class="hidden text-[11px] font-medium tabular-nums text-stone-500"
+            class="hidden whitespace-nowrap rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-xs font-medium tabular-nums text-stone-500"
             aria-live="polite"></span>
     </div>
     {# Phase 6F (plan §1.1): pre-6F the onboarding branch of this
