@@ -81,12 +81,13 @@
          wraps to two lines, the toggle drops onto its own line at the
          left, which is fine). aria-pressed reflects the current
          state so screen readers get the same on/off signal as the
-         visual dark-fill treatment. #}
+         visual dark-fill treatment.
+         Phase 6R: label this as "Density" instead of opaque "View". #}
       {% set _compact = (density == "compact") %}
       <div class="ml-auto flex flex-wrap items-center gap-1.5"
            aria-label="Pantry density">
         <span class="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
-          View
+          Density
         </span>
         <button type="button"
                 hx-post="{{ url_for('pantry_density_toggle') }}"
