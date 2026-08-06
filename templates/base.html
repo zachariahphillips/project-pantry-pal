@@ -126,6 +126,18 @@
         clearTimeout(window.__toastTimer);
       });
     });
+    // Phase 6S: server-rendered success/info flashes are useful on first
+    // paint but should not squat above the fold. Error flashes stay until
+    // navigation because they may carry actionable validation/account info.
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-flash-auto-dismiss="true"]').forEach((flash) => {
+        window.setTimeout(() => {
+          flash.classList.add('opacity-0');
+          flash.setAttribute('aria-hidden', 'true');
+          window.setTimeout(() => flash.remove(), 300);
+        }, 4000);
+      });
+    });
 
     document.addEventListener('shopping:added', () => {
       showToast('Added to shopping list');
@@ -397,15 +409,21 @@
   <main class="mx-auto max-w-md px-5 py-6 sm:py-10 {% if current_user.is_authenticated %}pb-28{% endif %}">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="mb-5 space-y-2">
+        <div id="flash-messages" class="mb-5 space-y-2">
           {% for category, message in messages %}
+            {% set is_error = category in ['error', 'danger'] %}
             {% set bg = {
               'success': 'bg-green-50 border-green-200 text-green-900',
               'error':   'bg-red-50 border-red-200 text-red-900',
+              'danger':  'bg-red-50 border-red-200 text-red-900',
               'info':    'bg-stone-50 border-stone-200 text-stone-800',
               'warning': 'bg-amber-50 border-amber-200 text-amber-900',
             }.get(category, 'bg-stone-50 border-stone-200 text-stone-800') %}
-            <div class="rounded-xl border px-4 py-3 text-sm {{ bg }}" role="status">
+            <div class="rounded-xl border px-4 py-3 text-sm transition-opacity duration-300 ease-out {{ bg }}"
+                 role="{{ 'alert' if is_error else 'status' }}"
+                 data-flash-message
+                 data-flash-category="{{ category }}"
+                 {% if not is_error %}data-flash-auto-dismiss="true"{% endif %}>
               {{ message }}
             </div>
           {% endfor %}
