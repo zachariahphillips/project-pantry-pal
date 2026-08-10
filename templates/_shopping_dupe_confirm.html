@@ -6,7 +6,7 @@
   The pending values live in this card's hidden inputs; the three
   buttons resolve the ambiguity:
 
-    - Update existing (+2 gallon)
+    - Update existing (+2 gal)
         → POST /shopping/merge/<existing.id>. Merges quantities +
           notes into the existing row. Card clears via OOB.
 
@@ -21,6 +21,10 @@
           HX-Detour so shopping.html's after-request handler
           suppressed the auto-reset), so they can tweak the name
           and re-submit without re-typing quantity/unit/notes.
+
+  Phase 6T: the visible delta keeps clear measurement units ("+2 gal")
+  but suppresses ambiguous grocery/container units ("+2 head" → "+2").
+  The hidden pending payload still carries the raw unit for merge/add.
 
   Shopping-specific detail vs the pantry twin (_pantry_dupe_confirm.html):
   we surface the existing row's `checked` state as a subtle badge so
@@ -85,9 +89,24 @@
   <div class="mt-4 flex flex-col gap-2 sm:flex-row">
     {% set pending_qty = pending_form.quantity.data %}
     {% set pending_unit = pending_form.unit.data %}
+    {% set delta_unit_allowlist = [
+      'gal', 'gallon', 'gallons',
+      'oz', 'ounce', 'ounces',
+      'lb', 'lbs', 'pound', 'pounds',
+      'g', 'gram', 'grams',
+      'kg', 'kilogram', 'kilograms',
+      'ml', 'milliliter', 'milliliters',
+      'l', 'liter', 'liters',
+      'tsp', 'teaspoon', 'teaspoons',
+      'tbsp', 'tablespoon', 'tablespoons',
+      'cup', 'cups',
+      'pint', 'pints',
+      'qt', 'quart', 'quarts',
+    ] %}
     {% set delta = "" %}
     {% if pending_qty is not none %}
-      {% if pending_unit and pending_unit|trim %}
+      {% set normalized_unit = (pending_unit or "")|trim|lower %}
+      {% if normalized_unit in delta_unit_allowlist %}
         {% set delta = "+" ~ ("%g"|format(pending_qty)) ~ " " ~ pending_unit %}
       {% else %}
         {% set delta = "+" ~ ("%g"|format(pending_qty)) %}
