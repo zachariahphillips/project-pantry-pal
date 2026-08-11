@@ -898,17 +898,22 @@ def _register_routes(app: Flask) -> None:
         # all-time add frequency. Excludes names currently on the
         # list so the chips stay forward-looking, not duplicative.
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(
+            items, checked_count,
+        )
 
         if request.headers.get("HX-Request"):
             return render_template(
                 "_shopping_list.html", items=items, query=query,
                 checked_count=checked_count, suggestions=suggestions,
+                show_shopping_helper=show_shopping_helper,
             )
 
         form = ShoppingItemForm()
         return render_template(
             "shopping.html", items=items, form=form, query=query,
             checked_count=checked_count, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
 
     @app.route("/shopping", methods=["POST"])
@@ -973,9 +978,13 @@ def _register_routes(app: Flask) -> None:
                 items = current_user.household.shopping_items.all()
                 checked_count = sum(1 for i in items if i.checked)
                 suggestions = _top_shopping_suggestions(current_user.household)
+                show_shopping_helper = _should_show_shopping_helper(
+                    items, checked_count,
+                )
                 list_html = render_template(
                     "_shopping_list.html", items=items, query="",
                     checked_count=checked_count, suggestions=suggestions,
+                    show_shopping_helper=show_shopping_helper,
                 )
                 # Phase 6D: any successful add via the partial-swap
                 # path also OOB-clears the duplicate-confirm slot.
@@ -1044,9 +1053,13 @@ def _register_routes(app: Flask) -> None:
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(
+            items, checked_count,
+        )
         list_html = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=checked_count, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
         # OOB-clear the confirm slot so the card disappears in the
         # same swap that updates the list.
@@ -1113,9 +1126,13 @@ def _register_routes(app: Flask) -> None:
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(
+            items, checked_count,
+        )
         body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=checked_count, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
         # Cap display name in the toast so a 120-char item doesn't blow
         # past the toast's max-width on mobile.
@@ -1145,9 +1162,13 @@ def _register_routes(app: Flask) -> None:
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(
+            items, checked_count,
+        )
         return render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=checked_count, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
 
     @app.route("/shopping/clear-checked", methods=["POST"])
@@ -1175,9 +1196,11 @@ def _register_routes(app: Flask) -> None:
         db.session.commit()
         items = current_user.household.shopping_items.all()
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(items, 0)
         body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=0, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
         # Only fire when something was actually deleted so a stale
         # double-tap (e.g. via curl) doesn't show "Cleared 0 items".
@@ -1250,9 +1273,13 @@ def _register_routes(app: Flask) -> None:
         items = current_user.household.shopping_items.all()
         checked_count = sum(1 for i in items if i.checked)
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(
+            items, checked_count,
+        )
         body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=checked_count, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
         if restored > 0:
             return body, 200, {
@@ -1315,9 +1342,11 @@ def _register_routes(app: Flask) -> None:
             # still want to reverse.
             items = current_user.household.shopping_items.all()
             suggestions = _top_shopping_suggestions(current_user.household)
+            show_shopping_helper = _should_show_shopping_helper(items, 0)
             return render_template(
                 "_shopping_list.html", items=items, query="",
                 checked_count=0, suggestions=suggestions,
+                show_shopping_helper=show_shopping_helper,
             )
 
         # Snapshot BEFORE any DB mutation. `_snapshot_shopping_items`
@@ -1385,9 +1414,11 @@ def _register_routes(app: Flask) -> None:
 
         items = current_user.household.shopping_items.all()
         suggestions = _top_shopping_suggestions(current_user.household)
+        show_shopping_helper = _should_show_shopping_helper(items, 0)
         body = render_template(
             "_shopping_list.html", items=items, query="",
             checked_count=0, suggestions=suggestions,
+            show_shopping_helper=show_shopping_helper,
         )
         return body, 200, {
             "HX-Trigger": json.dumps({
@@ -1841,6 +1872,11 @@ PANTRY_UNDO_SESSION_KEY = "pantry_undo"
 # when restoring an item crosses BACK OUT of the onboarding zone.
 PANTRY_UNDO_PENDING_TOAST_SESSION_KEY = "pantry_undo_pending_toast"
 
+# Phase 6U: the shopping checkbox/"I'm home" helper is first-run guidance,
+# not permanent chrome. Store it in the session so a fresh browser/session
+# can still get the hint once without making repeat visits carry the strip.
+SHOPPING_HELPER_SEEN_SESSION_KEY = "shopping_helper_seen"
+
 # Cap on how many items can be captured into a single undo snapshot.
 # Flask's default SecureCookieSession lives in a signed cookie with a
 # ~4KB browser limit; ~250 bytes/item leaves comfortable headroom at 25.
@@ -1895,6 +1931,21 @@ def _store_undo_snapshot(action: str, items, household_id: int) -> bool:
         "items": snap,
         "household_id": household_id,
     }
+    return True
+
+
+def _should_show_shopping_helper(items, checked_count: int) -> bool:
+    """Return True once per session for the shopping checkbox helper.
+
+    The helper only makes sense when there is at least one shopping item
+    and none are checked. Once that teach-moment has been rendered, set a
+    session flag so future renders don't keep repeating the same copy.
+    """
+    if not items or checked_count != 0:
+        return False
+    if session.get(SHOPPING_HELPER_SEEN_SESSION_KEY):
+        return False
+    session[SHOPPING_HELPER_SEEN_SESSION_KEY] = True
     return True
 
 

@@ -19,12 +19,14 @@ banners via the shared `nudge_banner()` macro:
   3. #nudge-crossoff   — shopping has ≥1 item, none of them checked.
                          Fires at the top of `#shopping-list`, pointing
                          at the checkboxes and the "I'm home →" bar.
-                         Auto-retires when checked_count > 0.
+                         Phase 6U makes this first-run session help:
+                         it fires once on the first qualifying render,
+                         then stays retired for that browser session.
 
-All three are PURE-DERIVED from data — no schema changes, no cookies,
-no manual dismiss. Contextual empty-state help, not sticky first-run
-tutorials. A user who deletes all their plans WILL see nudge #1 again;
-that's correct.
+The planner and +Shop nudges remain pure-derived from data — no schema
+changes, no manual dismiss. The crossoff nudge is now intentionally
+session-scoped first-run help so it doesn't become repeat-visit chrome.
+A user who deletes all their plans WILL see nudge #1 again; that's correct.
 
 Tests cover:
 
@@ -311,11 +313,12 @@ class TestCrossoffNudge:
 
     def test_unchecked_items_show_nudge(self, client):
         """Add one item → still 0 checked → nudge fires. This is the
-        primary teach-moment for the two-way shopping flow."""
+        primary teach-moment for the two-way shopping flow. Phase 6U
+        makes this visible on the first qualifying response only, so
+        assert against the POST response that created the list item."""
         sign_up(client, "alice@example.com", "Alice")
-        _add_shopping(client, "tortillas")
 
-        body = _shopping_body(client)
+        body = _add_shopping(client, "tortillas").get_data(as_text=True)
 
         assert 'id="nudge-crossoff"' in body
         # Copy anchors — "I'm home" is the recognizable label we're
@@ -342,11 +345,10 @@ class TestCrossoffNudge:
         assert "I&#39;m home" in body or "I'm home" in body
         assert "1 checked off" in body
 
-    def test_uncheck_last_item_re_shows_nudge(self, client):
-        """Symmetric to the plan-delete test: pure-derived means the
-        nudge comes BACK if the user un-checks their only checked
-        item. Documents the trade-off; also useful for a real user
-        who mistoggled."""
+    def test_uncheck_last_item_does_not_re_show_seen_nudge(self, client):
+        """Phase 6U turns the crossoff strip into once-per-session help.
+        If the user checks then unchecks their only item, the state
+        qualifies again but the session has already seen the hint."""
         sign_up(client, "alice@example.com", "Alice")
         _add_shopping(client, "tortillas")
         item_id = _first_shopping_id(client)
@@ -354,7 +356,7 @@ class TestCrossoffNudge:
         _toggle_shopping_item(client, item_id)  # uncheck
 
         body = _shopping_body(client)
-        assert 'id="nudge-crossoff"' in body
+        assert 'id="nudge-crossoff"' not in body
 
 
 # ---------------------------------------------------------------------------

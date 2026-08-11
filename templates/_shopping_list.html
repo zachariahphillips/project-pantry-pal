@@ -2,15 +2,13 @@
   {# Phase 5D nudge #3: shopping list has items but the user hasn't
      checked anything off yet — they haven't discovered the two-way
      flow (check as you shop → "I'm home" moves the checked items into
-     the pantry). Only fires when there's ≥1 item AND checked_count ==
-     0; auto-retires the moment they check the first box (which is
-     also the moment the "N checked off" action bar appears just below).
+     the pantry). Phase 6U makes this once-per-session help rather than
+     pure-derived ambient copy: app.py passes show_shopping_helper only
+     on the first qualifying render, then stores the seen flag.
 
      Placed BEFORE the "Add again" suggestion chips so it reads as the
-     top-of-list callout on an empty-checked state. The partial is
-     re-rendered by every state-changing shopping route, so appear/
-     disappear happens naturally on every relevant action. #}
-  {% if items and checked_count == 0 %}
+     top-of-list callout on an empty-checked state. #}
+  {% if show_shopping_helper|default(false) %}
     {% from "_macros.html" import nudge_banner %}
     {% call nudge_banner(test_id="nudge-crossoff") %}
       Tap the checkbox as you shop. When you're home, tap <strong class="font-semibold">I'm home →</strong> to move items into your pantry.
