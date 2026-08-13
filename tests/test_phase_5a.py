@@ -356,7 +356,11 @@ class TestThresholdReached:
         sign_up(client, "fresh@example.com", "Fresh")
         _seed(client, 3)
         html = _pantry_body(client)
-        assert ">\n          Ask AI\n        <" in html or ">Ask AI<" in html
+        assert re.search(
+            r'<button type="submit"[^>]*>\s*Ask AI\s*</button>',
+            html,
+            re.DOTALL,
+        )
 
     def test_three_items_restores_spinner_slot(self, client):
         """The hx-indicator target must exist once the form does —

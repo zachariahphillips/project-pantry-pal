@@ -94,48 +94,53 @@
         ("Comfort food", "Something comforting"),
         ("Use what we have", "Use mostly what we already have in the pantry"),
       ] %}
-      <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Quick prompts">
-        {% for label, prompt in chips %}
-          <button type="button"
-                  data-prompt-chip="{{ prompt }}"
-                  class="{{ chip_class }}">{{ label }}</button>
-        {% endfor %}
+      {# Phase 6W (UX plan §5.2): group chips + input into one prompt
+         surface so suggestions read as part of the Ask AI control. #}
+      <div id="meal-plan-prompt-card"
+           class="mt-3 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <div class="flex flex-wrap gap-1.5" aria-label="Quick prompts">
+          {% for label, prompt in chips %}
+            <button type="button"
+                    data-prompt-chip="{{ prompt }}"
+                    class="{{ chip_class }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+
+        {# Phase 5D nudge #1: the planner has JUST unlocked (pantry cleared
+           the gate) but the household has never made a plan. One-shot
+           signpost pointing at the input right below. Auto-retires as
+           soon as `meal_plans_count` flips to 1. Sits between the chips
+           and the form so it doesn't create a "tip → tip → form" stack;
+           chips are visual affordances and read as ambient, whereas the
+           nudge reads as an active instruction anchored to the input. #}
+        {% if meal_plans_count == 0 %}
+          {% call nudge_banner(test_id="nudge-planner") %}
+            Nice — your pantry's stocked. Ask the AI for a meal idea below.
+          {% endcall %}
+        {% endif %}
+
+        <form hx-post="{{ url_for('meal_plan_create') }}"
+              hx-target="#meal-plan-result"
+              hx-swap="innerHTML"
+              hx-indicator="#meal-plan-spinner"
+              hx-on::after-request="if (event.detail.successful) this.reset();"
+              class="mt-3 flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
+          <input id="meal-plan-prompt"
+                 type="text"
+                 name="prompt"
+                 maxlength="240"
+                 required
+                 autocomplete="off"
+                 placeholder='e.g. "pasta carbonara"'
+                 class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+          <button type="submit"
+                  class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
+            Ask AI
+          </button>
+        </form>
       </div>
-
-      {# Phase 5D nudge #1: the planner has JUST unlocked (pantry cleared
-         the gate) but the household has never made a plan. One-shot
-         signpost pointing at the input right below. Auto-retires as
-         soon as `meal_plans_count` flips to 1. Sits between the chips
-         and the form so it doesn't create a "tip → tip → form" stack;
-         chips are visual affordances and read as ambient, whereas the
-         nudge reads as an active instruction anchored to the input. #}
-      {% if meal_plans_count == 0 %}
-        {% call nudge_banner(test_id="nudge-planner") %}
-          Nice — your pantry's stocked. Ask the AI for a meal idea below.
-        {% endcall %}
-      {% endif %}
-
-      <form hx-post="{{ url_for('meal_plan_create') }}"
-            hx-target="#meal-plan-result"
-            hx-swap="innerHTML"
-            hx-indicator="#meal-plan-spinner"
-            hx-on::after-request="if (event.detail.successful) this.reset();"
-            class="mt-3 flex gap-2">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
-        <input id="meal-plan-prompt"
-               type="text"
-               name="prompt"
-               maxlength="240"
-               required
-               autocomplete="off"
-               placeholder='e.g. "pasta carbonara"'
-               class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-        <button type="submit"
-                class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
-          Ask AI
-        </button>
-      </form>
     {% endif %}
 
     {# Phase 5A: spinner only makes sense while the planner form exists
