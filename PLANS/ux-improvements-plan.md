@@ -4,6 +4,10 @@ Working doc from a fresh visual audit on **2026-07-20** (Phase 6D just shipped).
 Full survey ran at mobile viewport (414×896) against a seeded account so we saw
 empty + populated + checked + duplicate-confirm states on every surface.
 
+Closeout update **2026-08-17**: all non-deferred items in this plan have
+now shipped. The only remaining entries are explicitly deferred
+cross-cutting infrastructure ideas (§6.1 Tailwind build, §6.2 dark mode).
+
 Rules for this plan:
 
 - **Small.** Each item is one-chunk-shippable (matches how we've been shipping
@@ -139,7 +143,7 @@ for a solo user) is preserved by adding one pantry item first.
 **Compare:** `/tmp/audit_02_pantry_empty.png` (before) →
 `/tmp/6g_empty_pantry.png` + `/tmp/6g_empty_pantry_scrolled.png` (after).
 
-### 1.3 Shopping empty-state hero (mirror the pantry pattern)
+### 1.3 Shopping empty-state hero (mirror the pantry pattern) — ✅ shipped (Phase 6K)
 
 Where: `templates/_shopping_list.html` (empty-state block)
 Size: **S**
@@ -155,7 +159,7 @@ short heading + subcopy. No seed-button equivalent (there's no meaningful
 "starter shopping list"). Focus copy on the two entry points that DO exist:
 adding here directly, or the `+ Shop` path from pantry.
 
-### 1.4 Empty meals page needs the seed of first-plan action
+### 1.4 Empty meals page needs the seed of first-plan action — ✅ shipped (Phases 6N/6O)
 
 Where: `templates/meals.html` empty state
 Size: **XS**
@@ -174,7 +178,7 @@ meal" copy. If the threshold is cleared, keep the current CTA.
 
 ## 2. Visual polish — P1 / P2
 
-### 2.1 Item-row action buttons — cramped on longer names
+### 2.1 Item-row action buttons — cramped on longer names — ✅ shipped (Phase 6M)
 
 Where: `templates/_pantry_item.html` + `templates/_shopping_item.html`
 Size: **S**
@@ -196,7 +200,7 @@ get truncated even on a 414px viewport. Shopping rows are lighter (only
 existing icon-only pattern already used on the shopping quick-add "+" and
 the tab bar. **P2 (nice-to-have), not urgent** — but a genuine mobile win.
 
-### 2.2 Delete button visual weight is too high for a rare action
+### 2.2 Delete button visual weight is too high for a rare action — ✅ shipped (Phase 6L)
 
 Where: `templates/_pantry_item.html` + `templates/_shopping_item.html`
 Size: **XS**
@@ -213,7 +217,7 @@ intent, not at rest.
 **Interaction with 2.1:** If we go icon-only in 2.1, this is even simpler —
 the trash icon can be neutral gray by default.
 
-### 2.3 Cost pill is too easy to miss
+### 2.3 Cost pill is too easy to miss — ✅ shipped (Phase 6P)
 
 Where: `templates/pantry.html` (the `#meal-plan-cost-pill` span)
 Size: **XS**
@@ -230,7 +234,7 @@ treatment (e.g., stone-50 pill with border-stone-200) so it reads as a
 budget indicator rather than a whisper. Preserve the amber/red color
 transitions.
 
-### 2.4 Nudge banner's "loading spinner" glyph reads ambiguously
+### 2.4 Nudge banner's "loading spinner" glyph reads ambiguously — ✅ shipped (Phase 6Q)
 
 Where: `templates/_macros.html` (the `nudge_banner` macro)
 Size: **XS**
@@ -248,7 +252,7 @@ skeleton).
 the icon entirely and let the amber background carry the "notice this"
 signal.
 
-### 2.5 "VIEW: Compact" toggle label is opaque
+### 2.5 "VIEW: Compact" toggle label is opaque — ✅ shipped (Phase 6R)
 
 Where: `templates/_pantry_list.html` (the density toggle)
 Size: **XS**
@@ -262,7 +266,7 @@ vs rows-1) with tooltip. Or: just call the button "Compact / Roomy" as a
 segmented control instead of a single toggle, so both states are visible
 and the switch is discoverable.
 
-### 2.6 Header logo is small + unstyled
+### 2.6 Header logo is small + unstyled — deferred
 
 Where: `templates/base.html` (the `P PantryPal` mark)
 Size: **XS**
@@ -280,7 +284,7 @@ starts. Could commission a small mark. Deferred.
 
 ## 3. Interaction / feedback — P1
 
-### 3.1 Add haptic-style press feedback to primary buttons
+### 3.1 Add haptic-style press feedback to primary buttons — ✅ shipped (Phase 6I)
 
 Where: Primary green buttons across `pantry.html`, `shopping.html`,
 `meals.html`
@@ -294,7 +298,7 @@ pantry` or `Ask AI` gives zero feedback until the response lands (which is
 **Recommendation:** Add `active:bg-green-800 active:scale-[0.98]
 transition` to primary buttons. Cheap, universal, feels alive.
 
-### 3.2 `htmx-request` state on the "+" quick-add button
+### 3.2 `htmx-request` state on the "+" quick-add button — ✅ shipped (Phase 6J)
 
 Where: `templates/shopping.html` (the round green "+" submit)
 Size: **XS**
@@ -309,7 +313,7 @@ it).
 inside the button via `.htmx-request` targeting. htmx already toggles the
 class for us.
 
-### 3.3 Toast timing feels short for the Undo grace window
+### 3.3 Toast timing feels short for the Undo grace window — ✅ shipped (Phase 6H)
 
 Where: `templates/base.html` (`showToast` function)
 Size: **XS**
@@ -323,7 +327,7 @@ before they could realize they wanted it.
 Text-only toasts stay at 1800ms. Tiny change, meaningfully broader
 safety window.
 
-### 3.4 Auto-dismiss the "Welcome to PantryPal, Alice!" flash
+### 3.4 Auto-dismiss the "Welcome to PantryPal, Alice!" flash — ✅ shipped (Phase 6S)
 
 Where: `templates/base.html` (the flash-messages block)
 Size: **XS**
@@ -342,7 +346,7 @@ dismissed (they can carry actionable info).
 
 ## 4. Copy — P2
 
-### 4.1 "+2 head" reads awkwardly in the shopping duplicate-confirm
+### 4.1 "+2 head" reads awkwardly in the shopping duplicate-confirm — ✅ shipped (Phase 6T)
 
 Where: `templates/_shopping_dupe_confirm.html`
 Size: **XS**
@@ -361,7 +365,7 @@ Alone it reads as broken English.
 
 **Recommendation:** third option. Cleanest.
 
-### 4.2 "Tap the checkbox as you shop..." strip is redundant
+### 4.2 "Tap the checkbox as you shop..." strip is redundant — ✅ shipped (Phase 6U)
 
 Where: `templates/_shopping_list.html` (helper strip when items exist)
 Size: **XS**
@@ -377,7 +381,7 @@ has any shopping items (mirrors the Phase 5D "one-shot signpost" pattern
 you built for the pantry). Store a `has_seen_shopping_helper` flag in the
 session; retire the strip after that.
 
-### 4.3 Meals page — "Meal history" heading feels like archive
+### 4.3 Meals page — "Meal history" heading feels like archive — ✅ shipped (Phase 6V)
 
 Where: `templates/meals.html`
 Size: **XS**
@@ -394,7 +398,7 @@ context.
 
 ## 5. Density / hierarchy — P2
 
-### 5.1 Above-the-fold planner is bigger than the actual pantry list
+### 5.1 Above-the-fold planner is bigger than the actual pantry list — ✅ shipped (Phases 6X-A/6X-B)
 
 Where: `templates/pantry.html` — the whole `<section aria-labelledby="meal-plan-heading">` block
 Size: **M**
@@ -417,7 +421,7 @@ user came here for on visit N > 1. First visit yes; return visit no.
 the AI-first framing without letting the planner monopolize the fold.
 Bigger chunk than the XS items above — leave for a later phase.
 
-### 5.2 Chip strip on pantry has no visual anchor
+### 5.2 Chip strip on pantry has no visual anchor — ✅ shipped (Phase 6W)
 
 Where: `templates/pantry.html` (the 5 prompt chips)
 Size: **XS**
@@ -433,7 +437,7 @@ card the way the shopping quick-add bar is. Reads as one composed control.
 
 ## 6. Cross-cutting infrastructure — P2, deferred
 
-### 6.1 Tailwind CDN causes ~300–600ms of white-flash on load
+### 6.1 Tailwind CDN causes ~300–600ms of white-flash on load — deferred
 
 Where: `templates/base.html` (`<script src="https://cdn.tailwindcss.com">`)
 Size: **M**
@@ -453,7 +457,7 @@ appear."
 **Recommendation:** Defer. Only take on when you have another reason to
 add a build step.
 
-### 6.2 No dark mode
+### 6.2 No dark mode — deferred
 
 Where: everywhere
 Size: **M**
@@ -467,23 +471,22 @@ Defer until you feel it personally. Not a v1 priority.
 
 ---
 
-## Ranked shortlist (my picks for the next 3 shipments)
+## Ranked shortlist (closed out)
 
-If you asked "what next, in order?" — this is what I'd pull off the shelf:
+If you asked "what next, in order?" — this was the pull order. All
+non-deferred recommendations from this audit are now shipped:
 
 1. ~~**§0.1** — Fix the checked-off shopping row's red-leak bleed. Bug. XS.~~ ✅ shipped 2026-07-20
 2. ~~**§1.1** — Empty-pantry planner subcopy dedup.~~ ✅ shipped 2026-07-22
 3. ~~**§1.2** — Hide search + household cards on empty pantry.~~ ✅ shipped 2026-07-22
-4. **§3.1 + §3.3** — Button `active:` state + longer Undo toast (7s).
-   Both XS, both universally felt, one commit.
+4. ~~**§3.1 + §3.3** — Button `active:` state + longer Undo toast (7s).~~ ✅ shipped (Phases 6I/6H)
+5. ~~**§2.1** — Icon-only row actions.~~ ✅ shipped (Phase 6M)
+6. ~~**§1.3** — Shopping empty-state hero.~~ ✅ shipped (Phase 6K)
+7. ~~**§4.2** — First-visit shopping helper.~~ ✅ shipped (Phase 6U)
 
-After those three the "next natural chunk" I'd reach for is one of:
-- **§2.1** — Icon-only row actions (biggest visual density win, some risk
-  of accessibility regression so wants care)
-- **§1.3** — Shopping empty-state hero (mirrors an existing pattern; low
-  risk)
-- **§4.2** — First-visit shopping helper (leverages the Phase 5D nudge
-  infra you already built)
+Remaining items are intentionally deferred infrastructure/product-scope
+work rather than next UX polish chunks: Tailwind build setup (§6.1) and
+dark mode (§6.2).
 
 ---
 

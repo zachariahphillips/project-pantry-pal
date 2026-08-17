@@ -27,7 +27,7 @@ OpenAI-powered meal planner. Full stack + deploy story in `README.md`.
 ```bash
 source .venv/bin/activate         # Python 3.11+
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, ~200+ tests
+pytest -q                         # full regression, 582 tests as of Phase 7A
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
 
@@ -38,7 +38,7 @@ uses 5000, so both can run side-by-side.
 
 | Path | What lives there |
 |---|---|
-| `app.py` | Every route + helper. Big file (~3100 LOC) but shallow — grep by route name. |
+| `app.py` | Every route + helper. Big file (~3K LOC) but shallow — grep by route name. |
 | `models.py` | SQLAlchemy models. Watch: `PantryItem.added_by_user_id` maps to DB column `user_id`. |
 | `forms.py` | Flask-WTF forms. |
 | `extensions.py` | `db = SQLAlchemy()` init. |
@@ -53,7 +53,7 @@ uses 5000, so both can run side-by-side.
 
 ## Development workflow
 
-Work happens in **Phases** (`Phase 6E`, `Phase 6F`, `Phase 6G`, ...).
+Work happens in **Phases** (`Phase 7A`, `Phase 7B`, `Phase 7C`, ...).
 Each phase:
 
 1. **Plan** — either extend `PLAN.md` or reference a section of a
@@ -95,7 +95,7 @@ Each phase:
 - `hx-swap-oob="true"` — out-of-band swap. Used for toast slots and
   pending-toast bridges.
 - **Session-based undo pattern**: destructive actions store a snapshot
-  in `session[..._UNDO_SESSION_KEY]`; the toast has a 5s Undo CTA.
+  in `session[..._UNDO_SESSION_KEY]`; the toast has a 7s Undo CTA.
   For `HX-Refresh` scenarios we store the pending toast in
   `session[..._PENDING_TOAST_SESSION_KEY]` and re-fire it via a
   one-shot script on the reloaded page.

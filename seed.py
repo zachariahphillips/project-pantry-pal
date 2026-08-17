@@ -4,7 +4,7 @@ Seed two known test accounts so we never have to re-signup during dev.
 Run: `python seed.py` (or `.venv/bin/python seed.py`).
 
 What it does:
-- (Re-)creates `alice@test.local` and `bob@test.local` with known
+- (Re-)creates `alice@example.com` and `bob@example.com` with known
   passwords and a small pantry + shopping list each.
 - Idempotent: re-running drops the two test users' data and rebuilds
   it. Your real accounts and their data are NEVER touched.

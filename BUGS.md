@@ -30,14 +30,14 @@ A chunk can ship with open bugs, provided:
 
 ## Test tiers (to minimize full-regression time)
 
-Full runs take ~100s on this repo. We don't need to eat that on every
-save. Convention:
+Full runs take ~3-4 minutes on this repo. We don't need to eat that on
+every save. Convention:
 
 | Tier | When | Command | Wall time |
 |---|---|---|---|
 | **1 — Chunk** | Dev loop, after each code change | `pytest tests/test_phase_XX.py -q` (just the chunk you're working on) | ~5-10s |
 | **2 — Focused** | Before commit, once the chunk feels done | Chunk file + any phase file whose contract you touched | ~20-40s |
-| **3 — Full** | Before pushing to `main`, or once per work session | `pytest tests/ -q` | ~100s |
+| **3 — Full** | Before pushing to `main`, or once per work session | `pytest tests/ -q` | ~3-4 min |
 
 **Only Tier 3 failures ever get logged here.** Tier 1 and 2 failures
 must be resolved before proceeding to the next tier — those are your

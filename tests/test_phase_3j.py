@@ -456,10 +456,10 @@ class TestUIWiring:
         _add_shopping(client, "Milk")
         html = client.get("/shopping").get_data(as_text=True)
 
-        # Find the Delete button's hx-delete attribute and inspect
-        # the surrounding markup.
+        # Find the accessible icon-only Delete button's hx-delete
+        # attribute and inspect the surrounding markup.
         del_match = re.search(
-            r'hx-delete="/shopping/\d+"[^>]*>\s*Delete',
+            r'aria-label="Delete Milk"[^>]*\s+hx-delete="/shopping/\d+"',
             html, re.DOTALL,
         )
         assert del_match, "Delete button should still exist"

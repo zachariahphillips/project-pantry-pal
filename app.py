@@ -64,6 +64,8 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
+APP_PHASE = "7A"
+
 
 # The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed
 # as a module constant so the production-guard check below can compare
@@ -1714,7 +1716,7 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok", "phase": "3C"}
+        return {"status": "ok", "phase": APP_PHASE}
 
     @app.route("/cost")
     @login_required
@@ -1740,7 +1742,7 @@ def _register_routes(app: Flask) -> None:
             household_used * _ESTIMATED_COST_PER_CALL_USD, 4,
         )
         return {
-            "phase": "3C",
+            "phase": APP_PHASE,
             "model": _get_openai_model(),
             "your_calls_today": per_user_used,
             "your_daily_limit": per_user_limit,
