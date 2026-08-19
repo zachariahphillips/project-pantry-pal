@@ -2,7 +2,7 @@
 
 A household-shared pantry + shopping list, mobile-first, with an AI meal planner that knows what you already have at home.
 
-**Current status (Phase 7A, 2026-08-17):** Phase 6 mobile UX closeout is complete. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, and mobile polish across the main tabs. Full regression is **582 pytest tests** green. The next backlog is incremental: docs/status upkeep, health-check hardening, Ask AI loading/limit polish, CI, PWA manifest, and production reliability work.
+**Current status (Phase 7B, 2026-08-19):** Phase 6 mobile UX closeout is complete and Phase 7 has started with status/docs cleanup plus a DB-backed `/healthz` check. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, and mobile polish across the main tabs. Full regression is **583 pytest tests** green. The next backlog is incremental: Ask AI loading/limit polish, CI, PWA manifest, and production reliability work.
 
 ---
 

@@ -79,4 +79,25 @@ class TestHealthz:
         # Phase string is also the cue Fly's `fly logs` watch uses to
         # confirm the right code is live after a deploy. Bump this when
         # phase number changes.
-        assert resp.json == {"status": "ok", "phase": "7A"}
+        assert resp.json == {"status": "ok", "phase": "7B"}
+
+    def test_healthz_returns_503_when_database_ping_fails(
+            self, client, monkeypatch):
+        """Phase 7B: healthz is now a deep check, not just a process check.
+        Fly should stop sending traffic to a machine whose SQLite volume is
+        missing, locked, or otherwise unavailable."""
+        from extensions import db
+
+        def fail_db_ping(*args, **kwargs):
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(db.session, "execute", fail_db_ping)
+
+        resp = client.get("/healthz")
+
+        assert resp.status_code == 503
+        assert resp.json == {
+            "status": "error",
+            "phase": "7B",
+            "database": "unavailable",
+        }

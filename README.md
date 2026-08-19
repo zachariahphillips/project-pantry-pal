@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7A current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, and focused mobile polish across the main tabs. Full regression is **582 pytest tests** green.
+**Status:** Phase 7B current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, and a DB-backed `/healthz` check for deploy readiness. Full regression is **583 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -86,7 +86,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7A",
+#   "phase": "7B",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -212,8 +212,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 3C:** Per-user-per-day rate limits + differentiated error messages + prompt-injection mitigation + cost telemetry — done
 - **Phases 4–5:** Pantry/shopping flow improvements, duplicate handling, undo/toast safety, onboarding gates, and signpost nudges — done
 - **Phase 6:** Mobile UX audit improvements and closeout — done
-- **Phase 7A:** Docs/status sync — current
-- **Next:** Small backlog items such as health-check hardening, Ask AI loading/limit polish, CI, PWA manifest, and reliability hardening
+- **Phase 7A:** Docs/status sync — done
+- **Phase 7B:** DB-backed health check — current
+- **Next:** Small backlog items such as Ask AI loading/limit polish, CI, PWA manifest, and reliability hardening
 
 Full plan in [PLAN.md](./PLAN.md).
 

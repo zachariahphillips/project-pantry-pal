@@ -48,7 +48,7 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from extensions import csrf, db, login_manager
 from forms import (
@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7A"
+APP_PHASE = "7B"
 
 
 # The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed
@@ -1716,6 +1716,15 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/healthz")
     def healthz():
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception as e:
+            log.warning("Health check database ping failed: %s", e)
+            return {
+                "status": "error",
+                "phase": APP_PHASE,
+                "database": "unavailable",
+            }, 503
         return {"status": "ok", "phase": APP_PHASE}
 
     @app.route("/cost")
