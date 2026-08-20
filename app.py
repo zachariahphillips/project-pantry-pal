@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7B"
+APP_PHASE = "7C"
 
 
 # The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed

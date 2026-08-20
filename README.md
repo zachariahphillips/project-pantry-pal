@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7B current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, and a DB-backed `/healthz` check for deploy readiness. Full regression is **583 pytest tests** green.
+**Status:** Phase 7C current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, and in-flight disabling on Ask AI planner buttons. Full regression is **585 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -86,7 +86,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7B",
+#   "phase": "7C",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -213,8 +213,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phases 4–5:** Pantry/shopping flow improvements, duplicate handling, undo/toast safety, onboarding gates, and signpost nudges — done
 - **Phase 6:** Mobile UX audit improvements and closeout — done
 - **Phase 7A:** Docs/status sync — done
-- **Phase 7B:** DB-backed health check — current
-- **Next:** Small backlog items such as Ask AI loading/limit polish, CI, PWA manifest, and reliability hardening
+- **Phase 7B:** DB-backed health check — done
+- **Phase 7C:** Ask AI in-flight disable — current
+- **Next:** Small backlog items such as Ask AI quota-limit polish, CI, PWA manifest, and reliability hardening
 
 Full plan in [PLAN.md](./PLAN.md).
 

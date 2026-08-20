@@ -121,7 +121,8 @@
                    class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
             <button type="submit"
                     aria-label="Ask AI for another meal"
-                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
+                    hx-disabled-elt="this"
+                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
               Ask
             </button>
           </form>
@@ -184,7 +185,8 @@
                    placeholder='e.g. "pasta carbonara"'
                    class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
             <button type="submit"
-                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300">
+                    hx-disabled-elt="this"
+                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
               Ask AI
             </button>
           </form>
