@@ -27,7 +27,7 @@ OpenAI-powered meal planner. Full stack + deploy story in `README.md`.
 ```bash
 source .venv/bin/activate         # Python 3.11+
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, 585 tests as of Phase 7C
+pytest -q                         # full regression, 587 tests as of Phase 7D
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
 

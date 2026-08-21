@@ -79,6 +79,12 @@
       </div>
     {% else %}
       {# Unlocked: full planner UI. #}
+      <p id="meal-plan-quota-empty-hint"
+         class="mt-2 hidden text-xs font-medium text-red-700"
+         role="status"
+         aria-live="polite">
+        Daily AI limit reached. Try again after midnight UTC.
+      </p>
       {# Phase 3D: prompt chips. Tap to prefill the input below — does NOT
          auto-submit, so the user can tweak before pressing Ask AI. The
          chip's data-prompt-chip is the verbatim text we drop into the
@@ -114,6 +120,7 @@
             <input id="meal-plan-prompt"
                    type="text"
                    name="prompt"
+                   data-meal-plan-prompt
                    maxlength="240"
                    required
                    autocomplete="off"
@@ -121,6 +128,7 @@
                    class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
             <button type="submit"
                     aria-label="Ask AI for another meal"
+                    data-meal-plan-submit
                     hx-disabled-elt="this"
                     class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
               Ask
@@ -179,12 +187,14 @@
             <input id="meal-plan-prompt"
                    type="text"
                    name="prompt"
+                   data-meal-plan-prompt
                    maxlength="240"
                    required
                    autocomplete="off"
                    placeholder='e.g. "pasta carbonara"'
                    class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
             <button type="submit"
+                    data-meal-plan-submit
                     hx-disabled-elt="this"
                     class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
               Ask AI
@@ -470,6 +480,28 @@
     // successful POST /meal-plan so the count reflects the just-fired
     // call. Fails silently — a broken /cost shouldn't break the page.
     const pill = document.getElementById('meal-plan-cost-pill');
+    const quotaHint = document.getElementById('meal-plan-quota-empty-hint');
+
+    function setPlannerQuotaState(remaining) {
+      const limitHit = remaining === 0;
+      document.querySelectorAll('[data-meal-plan-submit]').forEach((btn) => {
+        btn.disabled = limitHit;
+        btn.setAttribute('aria-disabled', limitHit ? 'true' : 'false');
+      });
+      document.querySelectorAll('[data-meal-plan-prompt]').forEach((input) => {
+        if (limitHit) {
+          input.dataset.originalPlaceholder =
+            input.dataset.originalPlaceholder || input.getAttribute('placeholder') || '';
+          input.setAttribute('placeholder', 'Daily AI limit reached');
+        } else if (input.dataset.originalPlaceholder) {
+          input.setAttribute('placeholder', input.dataset.originalPlaceholder);
+        }
+      });
+      if (quotaHint) {
+        quotaHint.classList.toggle('hidden', !limitHit);
+      }
+    }
+
     async function refreshCostPill() {
       if (!pill) return;
       try {
@@ -489,6 +521,7 @@
         if (remaining === 0)        pill.classList.add('text-red-700');
         else if (remaining <= 3)    pill.classList.add('text-amber-700');
         else                        pill.classList.add('text-stone-500');
+        setPlannerQuotaState(remaining);
       } catch (_) {
         // network/JSON error — pill stays hidden
       }

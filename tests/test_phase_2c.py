@@ -79,7 +79,7 @@ class TestHealthz:
         # Phase string is also the cue Fly's `fly logs` watch uses to
         # confirm the right code is live after a deploy. Bump this when
         # phase number changes.
-        assert resp.json == {"status": "ok", "phase": "7C"}
+        assert resp.json == {"status": "ok", "phase": "7D"}
 
     def test_healthz_returns_503_when_database_ping_fails(
             self, client, monkeypatch):
@@ -98,6 +98,6 @@ class TestHealthz:
         assert resp.status_code == 503
         assert resp.json == {
             "status": "error",
-            "phase": "7C",
+            "phase": "7D",
             "database": "unavailable",
         }
