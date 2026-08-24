@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7E current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, and GitHub Actions running the pytest suite on push/PR. Full regression is **589 pytest tests** green.
+**Status:** Phase 7F current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, and PWA manifest/icon metadata for home-screen installs. Full regression is **592 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -10,7 +10,7 @@ One pantry per household. Multiple people contribute from their own phones with 
 
 ## Stack
 
-Python + Flask · SQLite (→ Postgres later) · Flask-Login · Tailwind CSS via CDN · htmx · OpenAI GPT-4o-mini. PWA manifest/home-screen polish is still planned.
+Python + Flask · SQLite (→ Postgres later) · Flask-Login · Tailwind CSS via CDN · htmx · OpenAI GPT-4o-mini · PWA manifest/icons for home-screen installs.
 
 ## Quick start
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7E",
+#   "phase": "7F",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -121,7 +121,7 @@ Two things make logging in on your phone painless:
 1. **Keychain saves your password.** The forms use the standard autofill attributes (`autocomplete="new-password"` on signup, `autocomplete="current-password"` on login), so iOS will offer to save your password the first time you sign up, and to autofill it on every later sign-in. If Safari doesn't prompt, double-check that **Settings → Passwords → AutoFill Passwords** is on.
 2. **"Keep me signed in" defaults to ON.** Flask-Login issues a 365-day remember-me cookie so closing the tab / rebooting your phone doesn't sign you out. Uncheck it on a shared device.
 
-To make PantryPal feel like a native app on your phone, use Safari's **Share → Add to Home Screen**. Full PWA manifest/icon polish is still planned, but iOS already gives you a usable launcher.
+To make PantryPal feel like a native app on your phone, use Safari's **Share → Add to Home Screen**. PantryPal ships a manifest and app icons so home-screen installs use the right name, color, and launcher artwork.
 
 ## Deploy to Fly.io (Phase 2C)
 
@@ -171,7 +171,7 @@ After a successful deploy, `fly status` shows the machine state and `fly logs` t
 1. Open `https://<your-app>.fly.dev` in Safari.
 2. Sign up with your email + name (this creates your household-of-one).
 3. Mint an invite from the Household card, AirDrop / iMessage the link to your roommate.
-4. **Share → Add to Home Screen** to install it as a home-screen app. PWA manifest/icon polish is still planned, but iOS gives you a usable launcher even without one.
+4. **Share → Add to Home Screen** to install it as a home-screen app with the PantryPal name, color, and icon.
 
 ### Redeploys
 
@@ -217,8 +217,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7B:** DB-backed health check — done
 - **Phase 7C:** Ask AI in-flight disable — done
 - **Phase 7D:** Ask AI quota-zero disable — done
-- **Phase 7E:** GitHub Actions pytest CI — current
-- **Next:** Small backlog items such as PWA manifest and reliability hardening
+- **Phase 7E:** GitHub Actions pytest CI — done
+- **Phase 7F:** PWA manifest + app icons — current
+- **Next:** Small backlog items such as SQLite reliability hardening
 
 Full plan in [PLAN.md](./PLAN.md).
 
