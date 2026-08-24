@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7D current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, and proactive Ask AI disablement when daily quota is exhausted. Full regression is **587 pytest tests** green.
+**Status:** Phase 7E current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, and GitHub Actions running the pytest suite on push/PR. Full regression is **589 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -27,6 +27,7 @@ python app.py
 ```
 
 Open <http://localhost:5001>. Health check at <http://localhost:5001/healthz>.
+Run the full local suite with `python -m pytest -q`; CI runs the same command on pushes and pull requests.
 
 Port 5001 is intentional — Pawsitive Coach uses 5000, so both can run side by side.
 
@@ -86,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7D",
+#   "phase": "7E",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -215,8 +216,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7A:** Docs/status sync — done
 - **Phase 7B:** DB-backed health check — done
 - **Phase 7C:** Ask AI in-flight disable — done
-- **Phase 7D:** Ask AI quota-zero disable — current
-- **Next:** Small backlog items such as CI, PWA manifest, and reliability hardening
+- **Phase 7D:** Ask AI quota-zero disable — done
+- **Phase 7E:** GitHub Actions pytest CI — current
+- **Next:** Small backlog items such as PWA manifest and reliability hardening
 
 Full plan in [PLAN.md](./PLAN.md).
 

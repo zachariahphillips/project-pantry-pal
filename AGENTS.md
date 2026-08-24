@@ -27,9 +27,12 @@ OpenAI-powered meal planner. Full stack + deploy story in `README.md`.
 ```bash
 source .venv/bin/activate         # Python 3.11+
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, 587 tests as of Phase 7D
+pytest -q                         # full regression, 589 tests as of Phase 7E
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
+
+GitHub Actions runs the same `python -m pytest -q` full regression on
+every push and pull request.
 
 Port 5001 is intentional — the sibling project (`project-pawsitive-coach`)
 uses 5000, so both can run side-by-side.
