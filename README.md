@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7F current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, and PWA manifest/icon metadata for home-screen installs. Full regression is **592 pytest tests** green.
+**Status:** Phase 7G current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, and SQLite busy-timeout/WAL hardening. Full regression is **594 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7F",
+#   "phase": "7G",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -218,8 +218,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7C:** Ask AI in-flight disable — done
 - **Phase 7D:** Ask AI quota-zero disable — done
 - **Phase 7E:** GitHub Actions pytest CI — done
-- **Phase 7F:** PWA manifest + app icons — current
-- **Next:** Small backlog items such as SQLite reliability hardening
+- **Phase 7F:** PWA manifest + app icons — done
+- **Phase 7G:** SQLite busy timeout + WAL — current
+- **Next:** Small backlog items such as production cookie hardening
 
 Full plan in [PLAN.md](./PLAN.md).
 

@@ -48,7 +48,7 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from sqlalchemy import func, text
+from sqlalchemy import event, func, text
 
 from extensions import csrf, db, login_manager
 from forms import (
@@ -64,13 +64,27 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7F"
+APP_PHASE = "7G"
+SQLITE_BUSY_TIMEOUT_SECONDS = 15
 
 
 # The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed
 # as a module constant so the production-guard check below can compare
 # without duplicating the literal string.
 _PLACEHOLDER_SECRET_KEY = "dev-secret-change-me-in-env"
+
+
+def _is_sqlite_database_url(database_url: str) -> bool:
+    return database_url.startswith("sqlite:")
+
+
+def _enable_sqlite_wal(dbapi_connection, _connection_record) -> None:
+    """Phase 7G: keep SQLite more tolerant of concurrent threaded writes."""
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+    finally:
+        cursor.close()
 
 
 def create_app() -> Flask:
@@ -83,6 +97,10 @@ def create_app() -> Flask:
         "DATABASE_URL", "sqlite:///pantrypal.sqlite3"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    if _is_sqlite_database_url(app.config["SQLALCHEMY_DATABASE_URI"]):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "connect_args": {"timeout": SQLITE_BUSY_TIMEOUT_SECONDS},
+        }
 
     # Production-only guard: refuse to start if the secret key is still the
     # placeholder (or empty). Without this, a `fly deploy` where the user
@@ -133,6 +151,8 @@ def create_app() -> Flask:
     login_manager.login_message_category = "info"
 
     with app.app_context():
+        if _is_sqlite_database_url(app.config["SQLALCHEMY_DATABASE_URI"]):
+            event.listen(db.engine, "connect", _enable_sqlite_wal)
         # Phase 1A: bootstrap the schema on startup. We'll switch to
         # Flask-Migrate in Phase 2 when the schema needs to evolve without
         # dropping data. For Phase 2A's additive change (households table,
