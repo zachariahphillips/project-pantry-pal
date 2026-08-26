@@ -23,6 +23,10 @@ Run manually:
                    --workers 1 --threads 4 'app:app'
     3. terminal B: .venv/bin/python scripts/prod_smoke.py
     4. Ctrl-C the gunicorn process when done.
+
+Run against an HTTPS deploy to include Phase 7I cookie hardening checks:
+    BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
+        .venv/bin/python scripts/prod_smoke.py
 """
 from __future__ import annotations
 
@@ -37,6 +41,10 @@ import urllib.request
 
 
 BASE = os.environ.get("BASE", "http://127.0.0.1:8080")
+EXPECT_SECURE_COOKIES = (
+    os.environ.get("EXPECT_SECURE_COOKIES", "").lower() in {"1", "true", "yes"}
+    or urllib.parse.urlsplit(BASE).scheme == "https"
+)
 # Randomize email/name per run so the smoke test is idempotent against a
 # persistent gunicorn DB. (Restarting gunicorn between runs is a pain;
 # we'd rather pollute the smoke DB with N test users than couple the
@@ -107,6 +115,44 @@ def check(name: str, condition: bool, detail: str = "") -> None:
         raise SystemExit(1)
 
 
+def _latest_cookie(named: str) -> http.cookiejar.Cookie | None:
+    cookies = [cookie for cookie in COOKIE_JAR if cookie.name == named]
+    return cookies[-1] if cookies else None
+
+
+def _missing_cookie_security_flags(cookie: http.cookiejar.Cookie) -> list[str]:
+    rest = {
+        key.lower(): value
+        for key, value in getattr(cookie, "_rest", {}).items()
+    }
+    missing = []
+    if not cookie.secure:
+        missing.append("Secure")
+    if "httponly" not in rest:
+        missing.append("HttpOnly")
+    if str(rest.get("samesite", "")).lower() != "lax":
+        missing.append("SameSite=Lax")
+    return missing
+
+
+def _check_cookie_hardened(cookie_name: str) -> None:
+    if not EXPECT_SECURE_COOKIES:
+        print(
+            f"  [SKIP] {cookie_name} cookie hardening "
+            "(set EXPECT_SECURE_COOKIES=1 or use BASE=https://...)"
+        )
+        return
+
+    cookie = _latest_cookie(cookie_name)
+    check(f"{cookie_name} cookie present", cookie is not None)
+    missing = _missing_cookie_security_flags(cookie)
+    check(
+        f"{cookie_name} cookie hardened",
+        not missing,
+        f"missing {', '.join(missing)}",
+    )
+
+
 def main() -> int:
     print("Phase 2C prod-shape smoke test")
     print(f"  target: {BASE}")
@@ -116,7 +162,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7H", '"phase":"7H"' in body or '"phase": "7H"' in body, body)
+    check("phase == 7I", '"phase":"7I"' in body or '"phase": "7I"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")
@@ -132,6 +178,7 @@ def main() -> int:
         },
     )
     check("signup landed on /pantry", "/pantry" in final, final)
+    _check_cookie_hardened("session")
     # Stable markers on the pantry page: the H1 + the household-share aside
     # ID (rendered as an empty card on first signup).
     check("pantry H1 visible", "Your pantry" in body, body[:300])
@@ -197,6 +244,31 @@ def main() -> int:
     check("redirected to /pantry", "/pantry" in final, final)
     check("roommate sees Olive Oil (shared household)", "Olive Oil" in body, body[:500])
     check(f"roommate sees 'added by {SMOKE_NAME}'", SMOKE_NAME in body, body[:500])
+
+    # ----- Phase 7I: login emits hardened remember-me cookies on HTTPS deploys -----
+    print("\nRemember-me login:")
+    token = _get_csrf("/pantry")
+    status, _, final = _request(
+        "POST", "/logout",
+        data={"csrf_token": token},
+    )
+    check("logged out", "/login" in final, final)
+    COOKIE_JAR.clear()
+
+    token = _get_csrf("/login")
+    status, body, final = _request(
+        "POST", "/login",
+        data={
+            "csrf_token": token,
+            "email": ROOMMATE_EMAIL,
+            "password": "roompass1",
+            "remember": "y",
+        },
+    )
+    check("remember login landed on /pantry", "/pantry" in final, final)
+    check("remember login sees pantry", "Your pantry" in body, body[:300])
+    _check_cookie_hardened("session")
+    _check_cookie_hardened("remember_token")
 
     print("\nAll prod-shape smoke checks passed.")
     return 0
