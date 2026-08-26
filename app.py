@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7G"
+APP_PHASE = "7H"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 
 
@@ -87,6 +87,22 @@ def _enable_sqlite_wal(dbapi_connection, _connection_record) -> None:
         cursor.close()
 
 
+def _is_production_env() -> bool:
+    return os.environ.get("FLASK_ENV", "").lower() == "production"
+
+
+def _configure_production_cookie_security(app: Flask) -> None:
+    """Phase 7H: harden browser cookies once the app is HTTPS-only."""
+    app.config.update(
+        SESSION_COOKIE_SECURE=True,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        REMEMBER_COOKIE_SECURE=True,
+        REMEMBER_COOKIE_HTTPONLY=True,
+        REMEMBER_COOKIE_SAMESITE="Lax",
+    )
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
@@ -101,6 +117,9 @@ def create_app() -> Flask:
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
             "connect_args": {"timeout": SQLITE_BUSY_TIMEOUT_SECONDS},
         }
+    is_production = _is_production_env()
+    if is_production:
+        _configure_production_cookie_security(app)
 
     # Production-only guard: refuse to start if the secret key is still the
     # placeholder (or empty). Without this, a `fly deploy` where the user
@@ -108,7 +127,7 @@ def create_app() -> Flask:
     # with a well-known key — session cookies become forgeable and CSRF
     # tokens become predictable. Detected via FLASK_ENV which fly.toml
     # already sets to "production".
-    if os.environ.get("FLASK_ENV", "").lower() == "production":
+    if is_production:
         if (not app.config["SECRET_KEY"]
                 or app.config["SECRET_KEY"] == _PLACEHOLDER_SECRET_KEY):
             raise RuntimeError(
