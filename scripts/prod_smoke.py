@@ -10,12 +10,13 @@ Flask dev server. Specifically catches:
 - CSRF token / cookie handling differences under gthread vs single-threaded dev
 - the migration-on-boot path under prod-shape DATABASE_URL (absolute SQLite)
 - htmx fragment responses (which are the bulk of POST/PUT/DELETE traffic)
+- Phase 7I secure cookie flags on HTTPS deploys
 
 This is intentionally NOT a pytest test — it requires an externally-running
 gunicorn, and that's exactly what we're trying to validate ("does the same
 code that passes pytest also work under gunicorn?").
 
-Run manually:
+Run locally before deploy:
     1. terminal A: rm -f /tmp/pantrypal-prod-smoke.sqlite3
     2. terminal A: DATABASE_URL=sqlite:////tmp/pantrypal-prod-smoke.sqlite3 \
                    FLASK_SECRET_KEY=secret \
@@ -27,6 +28,11 @@ Run manually:
 Run against an HTTPS deploy to include Phase 7I cookie hardening checks:
     BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
         .venv/bin/python scripts/prod_smoke.py
+
+Expected PASS coverage: /healthz current phase, signup, htmx pantry add,
+invite minting, anonymous invite preview, invited roommate signup, shared
+pantry attribution, logout, remember-me login, and hardened cookie flags
+when EXPECT_SECURE_COOKIES is enabled or BASE uses HTTPS.
 """
 from __future__ import annotations
 
@@ -162,7 +168,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7I", '"phase":"7I"' in body or '"phase": "7I"' in body, body)
+    check("phase == 7J", '"phase":"7J"' in body or '"phase": "7J"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")

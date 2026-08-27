@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7I"
+APP_PHASE = "7J"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 
 

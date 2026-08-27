@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7I current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, and deploy smoke checks for cookie flags. Full regression is **598 pytest tests** green.
+**Status:** Phase 7J current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, and a post-deploy smoke runbook. Full regression is **600 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7I",
+#   "phase": "7J",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -166,6 +166,38 @@ fly deploy        # builds the Docker image remotely on Fly's builder
 
 After a successful deploy, `fly status` shows the machine state and `fly logs` tails server logs. The app lives at `https://pantrypal-riah.fly.dev` (replace with your chosen name).
 
+### Post-deploy smoke check
+
+Run the smoke script after deploys that touch auth, cookies, database boot, invites, or core pantry/shopping flows. It signs up randomized throwaway users, adds a pantry item, mints an invite, joins a roommate into the household, verifies shared visibility, and checks hardened cookie flags when pointed at HTTPS.
+
+```bash
+# Local gunicorn smoke, useful before deploying. Cookie hardening checks are skipped
+# because the local target is plain HTTP.
+rm -f /tmp/pantrypal-prod-smoke.sqlite3
+DATABASE_URL=sqlite:////tmp/pantrypal-prod-smoke.sqlite3 \
+  FLASK_SECRET_KEY=secret \
+  .venv/bin/gunicorn --bind 127.0.0.1:8080 \
+  --workers 1 --threads 4 'app:app'
+
+# In another terminal:
+.venv/bin/python scripts/prod_smoke.py
+```
+
+```bash
+# HTTPS deploy smoke, including Phase 7I cookie flag checks.
+BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
+  .venv/bin/python scripts/prod_smoke.py
+```
+
+Expected coverage:
+
+- `/healthz` returns `200` and the current phase.
+- Signup sets a usable session and lands on `/pantry`.
+- Pantry add works through the htmx route.
+- Invite minting, anonymous invite preview, and invite signup all work.
+- A roommate sees the shared pantry item with attribution.
+- HTTPS deploy smoke verifies `session` and `remember_token` cookies include `Secure`, `HttpOnly`, and `SameSite=Lax`.
+
 ### Use it on your phone
 
 1. Open `https://<your-app>.fly.dev` in Safari.
@@ -221,8 +253,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7F:** PWA manifest + app icons — done
 - **Phase 7G:** SQLite busy timeout + WAL — done
 - **Phase 7H:** Production cookie hardening — done
-- **Phase 7I:** Deploy smoke cookie checks — current
-- **Next:** Small backlog items such as deploy smoke docs/runbook polish
+- **Phase 7I:** Deploy smoke cookie checks — done
+- **Phase 7J:** Deploy smoke runbook polish — current
+- **Next:** Small backlog items such as backup/restore docs
 
 Full plan in [PLAN.md](./PLAN.md).
 

@@ -313,7 +313,7 @@ class TestCostEndpoint:
         resp = client.get("/cost")
         assert resp.status_code == 200
         data = resp.json
-        assert data["phase"] == "7I"
+        assert data["phase"] == "7J"
         assert data["your_calls_today"] == 0
         assert data["household_calls_today"] == 0
         assert data["estimated_spend_today_usd"] == 0.0
