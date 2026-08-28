@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7J current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, and a post-deploy smoke runbook. Full regression is **600 pytest tests** green.
+**Status:** Phase 7K current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, and a SQLite backup/restore runbook. Full regression is **602 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7J",
+#   "phase": "7K",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -213,6 +213,80 @@ fly deploy         # ~60s build + ~30s machine swap; SQLite stays put
                    # because /data is volume-mounted, not in the image.
 ```
 
+### SQLite backup and restore
+
+Production SQLite lives at `/data/pantrypal.sqlite3` on the Fly volume. Do not copy the file with plain `cp` while the app is writing to it: Phase 7G enables WAL, so a live database can also have `pantrypal.sqlite3-wal` and `pantrypal.sqlite3-shm` sidecar files. For backups, use SQLite's online backup API from inside the machine.
+
+```bash
+# Create a consistent backup on the Fly volume.
+fly ssh console -C "mkdir -p /data/backups && python - <<'PY'
+import datetime as dt
+import sqlite3
+from pathlib import Path
+
+source = Path('/data/pantrypal.sqlite3')
+stamp = dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+dest = Path('/data/backups') / f'pantrypal-{stamp}.sqlite3'
+
+with sqlite3.connect(f'file:{source}?mode=ro', uri=True) as src:
+    with sqlite3.connect(dest) as dst:
+        src.backup(dst)
+
+print(dest)
+PY"
+```
+
+Download the new backup and keep at least one copy off the Fly volume:
+
+```bash
+mkdir -p backups
+fly ssh sftp
+sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
+sftp> exit
+```
+
+Before restoring production, do a local restore drill with the backup file:
+
+```bash
+cp backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 /tmp/pantrypal-restore-test.sqlite3
+DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3 \
+  FLASK_SECRET_KEY=secret \
+  .venv/bin/gunicorn --bind 127.0.0.1:8080 \
+  --workers 1 --threads 4 'app:app'
+
+# In another terminal:
+.venv/bin/python scripts/prod_smoke.py
+```
+
+For production restore, schedule a quiet window, take a fresh pre-restore backup first, upload the known-good backup with `fly ssh sftp`, then replace the DB and remove stale WAL sidecars before restarting the app:
+
+```bash
+fly ssh sftp
+sftp> put backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 /data/restore.sqlite3
+sftp> exit
+
+fly ssh console -C "python - <<'PY'
+import datetime as dt
+import shutil
+from pathlib import Path
+
+data_dir = Path('/data')
+live = data_dir / 'pantrypal.sqlite3'
+restore = data_dir / 'restore.sqlite3'
+stamp = dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+
+shutil.copy2(live, data_dir / f'pantrypal-pre-restore-{stamp}.sqlite3')
+shutil.copy2(restore, live)
+for sidecar in (data_dir / 'pantrypal.sqlite3-wal', data_dir / 'pantrypal.sqlite3-shm'):
+    sidecar.unlink(missing_ok=True)
+print(f'restored {restore} to {live}')
+PY"
+
+fly deploy
+BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
+  .venv/bin/python scripts/prod_smoke.py
+```
+
 ### Phase 2C deploy gotchas (learned the hard way)
 
 - **SQLite URL needs 4 slashes for absolute paths.** `sqlite:////data/pantrypal.sqlite3` (four slashes) = absolute. Three slashes = relative-to-Flask-instance-folder, which on Fly would silently put your DB on the ephemeral container disk instead of the volume — and you'd lose data on every redeploy. There's a test (`tests/test_phase_2c.py`) that pins this behavior.
@@ -254,8 +328,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7G:** SQLite busy timeout + WAL — done
 - **Phase 7H:** Production cookie hardening — done
 - **Phase 7I:** Deploy smoke cookie checks — done
-- **Phase 7J:** Deploy smoke runbook polish — current
-- **Next:** Small backlog items such as backup/restore docs
+- **Phase 7J:** Deploy smoke runbook polish — done
+- **Phase 7K:** SQLite backup/restore runbook — current
+- **Next:** Small backlog items such as maintenance-mode restore safety
 
 Full plan in [PLAN.md](./PLAN.md).
 
