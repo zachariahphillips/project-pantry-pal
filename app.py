@@ -43,7 +43,8 @@ from urllib.parse import parse_qsl, urlsplit
 
 from dotenv import load_dotenv
 from flask import (
-    Flask, abort, flash, redirect, render_template, request, session, url_for,
+    Flask, abort, flash, make_response, redirect, render_template, request,
+    session, url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -64,8 +65,10 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7K"
+APP_PHASE = "7L"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
+MAINTENANCE_MODE_ENV = "MAINTENANCE_MODE"
+_MAINTENANCE_MODE_TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
 
 # The placeholder value of FLASK_SECRET_KEY when nothing is set. Exposed
@@ -100,6 +103,21 @@ def _configure_production_cookie_security(app: Flask) -> None:
         REMEMBER_COOKIE_SECURE=True,
         REMEMBER_COOKIE_HTTPONLY=True,
         REMEMBER_COOKIE_SAMESITE="Lax",
+    )
+
+
+def _maintenance_mode_enabled() -> bool:
+    return (
+        os.environ.get(MAINTENANCE_MODE_ENV, "").strip().lower()
+        in _MAINTENANCE_MODE_TRUTHY_VALUES
+    )
+
+
+def _is_maintenance_exempt_request() -> bool:
+    return (
+        request.endpoint in {"healthz", "static"}
+        or request.path == "/healthz"
+        or request.path.startswith("/static/")
     )
 
 
@@ -147,6 +165,15 @@ def create_app() -> Flask:
     app.wsgi_app = ProxyFix(
         app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1,
     )
+
+    @app.before_request
+    def maintenance_mode_gate():
+        if not _maintenance_mode_enabled() or _is_maintenance_exempt_request():
+            return None
+
+        response = make_response(render_template("maintenance.html"), 503)
+        response.headers["Retry-After"] = "300"
+        return response
 
     db.init_app(app)
     csrf.init_app(app)  # exposes csrf_token() to Jinja and guards every POST
