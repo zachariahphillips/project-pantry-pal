@@ -65,7 +65,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7L"
+APP_PHASE = "7M"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 MAINTENANCE_MODE_ENV = "MAINTENANCE_MODE"
 _MAINTENANCE_MODE_TRUTHY_VALUES = {"1", "true", "yes", "on"}

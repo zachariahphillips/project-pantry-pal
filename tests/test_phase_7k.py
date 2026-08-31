@@ -23,8 +23,8 @@ def test_readme_documents_online_sqlite_backup_command():
     assert "### SQLite backup and restore" in readme
     assert "/data/pantrypal.sqlite3" in readme
     assert "/data/backups" in readme
-    assert "sqlite3.connect(f'file:{source}?mode=ro', uri=True)" in readme
-    assert "src.backup(dst)" in readme
+    assert "python /app/scripts/backup_sqlite.py" in readme
+    assert ".venv/bin/python scripts/backup_sqlite.py" in readme
     assert "fly ssh sftp" in readme
 
 
