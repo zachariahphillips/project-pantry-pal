@@ -13,12 +13,17 @@
       <p class="text-sm font-semibold uppercase tracking-wide text-green-700">
         PantryPal
       </p>
+      <p class="mx-auto mt-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-50 text-2xl" aria-hidden="true">
+        PP
+      </p>
       <h1 class="mt-3 text-2xl font-bold text-stone-950">
         PantryPal is down for maintenance
       </h1>
       <p class="mt-3 text-sm leading-6 text-stone-600">
-        We are doing a quick database safety task. Please try again in a few
-        minutes.
+        {{ maintenance_message }}
+      </p>
+      <p class="mt-4 rounded-2xl bg-stone-50 px-4 py-3 text-xs font-medium text-stone-500">
+        Your pantry data is safe. Try refreshing this page in about five minutes.
       </p>
     </section>
   </main>

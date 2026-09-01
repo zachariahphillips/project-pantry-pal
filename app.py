@@ -65,9 +65,14 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7M"
+APP_PHASE = "7N"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 MAINTENANCE_MODE_ENV = "MAINTENANCE_MODE"
+MAINTENANCE_MESSAGE_ENV = "MAINTENANCE_MESSAGE"
+DEFAULT_MAINTENANCE_MESSAGE = (
+    "We are doing a quick database safety task. Please try again in about "
+    "five minutes."
+)
 _MAINTENANCE_MODE_TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -110,6 +115,13 @@ def _maintenance_mode_enabled() -> bool:
     return (
         os.environ.get(MAINTENANCE_MODE_ENV, "").strip().lower()
         in _MAINTENANCE_MODE_TRUTHY_VALUES
+    )
+
+
+def _get_maintenance_message() -> str:
+    return (
+        os.environ.get(MAINTENANCE_MESSAGE_ENV, "").strip()
+        or DEFAULT_MAINTENANCE_MESSAGE
     )
 
 
@@ -171,7 +183,13 @@ def create_app() -> Flask:
         if not _maintenance_mode_enabled() or _is_maintenance_exempt_request():
             return None
 
-        response = make_response(render_template("maintenance.html"), 503)
+        response = make_response(
+            render_template(
+                "maintenance.html",
+                maintenance_message=_get_maintenance_message(),
+            ),
+            503,
+        )
         response.headers["Retry-After"] = "300"
         return response
 

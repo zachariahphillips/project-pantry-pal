@@ -30,7 +30,7 @@ def test_maintenance_mode_blocks_normal_app_routes(tmp_path, monkeypatch):
     assert resp.headers["Retry-After"] == "300"
     body = resp.get_data(as_text=True)
     assert "PantryPal is down for maintenance" in body
-    assert "Please try again in a few" in body
+    assert "Please try again in about five minutes." in body
 
 
 def test_maintenance_mode_allows_healthz(tmp_path, monkeypatch):
@@ -39,7 +39,7 @@ def test_maintenance_mode_allows_healthz(tmp_path, monkeypatch):
     resp = app.test_client().get("/healthz")
 
     assert resp.status_code == 200
-    assert resp.json == {"status": "ok", "phase": "7M"}
+    assert resp.json == {"status": "ok", "phase": "7N"}
 
 
 def test_maintenance_mode_allows_static_assets(tmp_path, monkeypatch):
