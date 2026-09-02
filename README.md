@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7N current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, and configurable maintenance-page copy. Full regression is **609 pytest tests** green.
+**Status:** Phase 7O current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, and a scheduled backup workflow. Full regression is **611 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7N",
+#   "phase": "7O",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -236,6 +236,10 @@ sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
 sftp> exit
 ```
 
+The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py` on the Fly machine for app `pantrypal-riah`.
+
+The scheduled workflow is a safety net for corruption or bad deploys, but it still writes to `/data/backups` on the same Fly volume. Keep periodically downloading backups with `fly ssh sftp` so at least one recent copy lives off the volume.
+
 Before restoring production, do a local restore drill with the backup file:
 
 ```bash
@@ -328,8 +332,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7K:** SQLite backup/restore runbook — done
 - **Phase 7L:** Maintenance mode for restore safety — done
 - **Phase 7M:** Automated SQLite backup helper — done
-- **Phase 7N:** Maintenance page polish — current
-- **Next:** Small backlog items such as scheduled backups
+- **Phase 7N:** Maintenance page polish — done
+- **Phase 7O:** Scheduled backup workflow — current
+- **Next:** Small backlog items such as off-volume backup download automation
 
 Full plan in [PLAN.md](./PLAN.md).
 

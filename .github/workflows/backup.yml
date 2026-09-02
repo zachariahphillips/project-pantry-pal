@@ -1,0 +1,33 @@
+name: Backup SQLite
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 10:23 UTC keeps it away from common top-of-hour service spikes.
+    - cron: "23 10 * * *"
+
+jobs:
+  backup:
+    name: Create Fly SQLite backup
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      FLY_APP_NAME: pantrypal-riah
+
+    steps:
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create timestamped backup on Fly volume
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "Set the FLY_API_TOKEN repository secret before running backups."
+            exit 1
+          fi
+
+          fly ssh console --app "$FLY_APP_NAME" -C "python /app/scripts/backup_sqlite.py"
