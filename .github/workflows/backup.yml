@@ -25,9 +25,30 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
+          set -euo pipefail
+
           if [ -z "$FLY_API_TOKEN" ]; then
             echo "Set the FLY_API_TOKEN repository secret before running backups."
             exit 1
           fi
 
-          fly ssh console --app "$FLY_APP_NAME" -C "python /app/scripts/backup_sqlite.py"
+          fly ssh console --app "$FLY_APP_NAME" \
+            -C "python /app/scripts/backup_sqlite.py --emit-base64" \
+            > backup-output.txt
+
+          awk '
+            /^BEGIN_PANTRYPAL_SQLITE_BACKUP_BASE64$/ { capture = 1; next }
+            /^END_PANTRYPAL_SQLITE_BACKUP_BASE64$/ { capture = 0 }
+            capture { print }
+          ' backup-output.txt | base64 --decode > pantrypal-backup.sqlite3
+
+          test -s pantrypal-backup.sqlite3
+          rm backup-output.txt
+
+      - name: Upload SQLite backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantrypal-sqlite-backup-${{ github.run_id }}
+          path: pantrypal-backup.sqlite3
+          if-no-files-found: error
+          retention-days: 14
