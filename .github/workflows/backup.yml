@@ -33,7 +33,7 @@ jobs:
           fi
 
           fly ssh console --app "$FLY_APP_NAME" \
-            -C "python /app/scripts/backup_sqlite.py --emit-base64" \
+            -C "python /app/scripts/backup_sqlite.py --emit-base64 --keep 14" \
             > backup-output.txt
 
           awk '

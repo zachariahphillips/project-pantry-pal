@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7P current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, and short-retention off-volume backup artifacts. Full regression is **613 pytest tests** green.
+**Status:** Phase 7Q current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, and Fly-volume backup retention pruning. Full regression is **615 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7P",
+#   "phase": "7Q",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -236,7 +236,7 @@ sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
 sftp> exit
 ```
 
-The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py --emit-base64` on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, and uploads `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact.
+The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py --emit-base64 --keep 14` on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only the newest 14 backups in `/data/backups`.
 
 The artifact is private to people who can access this repository's Actions runs, but it still contains real pantry data. Keep retention short, download only when you need a restore point, and delete any local copies you no longer need.
 
@@ -334,8 +334,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7M:** Automated SQLite backup helper — done
 - **Phase 7N:** Maintenance page polish — done
 - **Phase 7O:** Scheduled backup workflow — done
-- **Phase 7P:** Off-volume backup artifacts — current
-- **Next:** Small backlog items such as backup retention pruning
+- **Phase 7P:** Off-volume backup artifacts — done
+- **Phase 7Q:** Backup retention pruning — current
+- **Next:** Small backlog items such as backup artifact restore docs
 
 Full plan in [PLAN.md](./PLAN.md).
 

@@ -13,7 +13,7 @@ Local usage:
 
 GitHub Actions artifact capture:
 
-    python /app/scripts/backup_sqlite.py --emit-base64
+    python /app/scripts/backup_sqlite.py --emit-base64 --keep 14
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from urllib.parse import quote
 DEFAULT_SOURCE = Path("/data/pantrypal.sqlite3")
 DEFAULT_DEST_DIR = Path("/data/backups")
 BACKUP_FILENAME_PREFIX = "pantrypal"
+BACKUP_FILE_GLOB = f"{BACKUP_FILENAME_PREFIX}-*.sqlite3"
 BASE64_BEGIN_MARKER = "BEGIN_PANTRYPAL_SQLITE_BACKUP_BASE64"
 BASE64_END_MARKER = "END_PANTRYPAL_SQLITE_BACKUP_BASE64"
 BASE64_CHUNK_SIZE = 57 * 1024
@@ -72,6 +73,25 @@ def emit_backup_base64(backup_path: Path, output: TextIO = sys.stdout) -> None:
     print(BASE64_END_MARKER, file=output)
 
 
+def prune_old_backups(dest_dir: Path, keep: int) -> list[Path]:
+    if keep < 0:
+        raise ValueError("--keep must be zero or greater")
+
+    candidates = [
+        path for path in dest_dir.expanduser().glob(BACKUP_FILE_GLOB)
+        if path.is_file()
+    ]
+    newest_first = sorted(
+        candidates,
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
+    )
+    to_delete = newest_first[keep:]
+    for path in to_delete:
+        path.unlink()
+    return to_delete
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Create a consistent SQLite backup.",
@@ -101,6 +121,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "as base64 for GitHub Actions artifact capture."
         ),
     )
+    parser.add_argument(
+        "--keep",
+        type=int,
+        help=(
+            "After creating the backup, keep only the newest N "
+            f"{BACKUP_FILE_GLOB} files in the backup directory."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -113,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
         emit_backup_base64(backup_path)
     else:
         print(backup_path)
+    if args.keep is not None:
+        deleted = prune_old_backups(backup_path.parent, args.keep)
+        print(f"Pruned {len(deleted)} old backup(s)", file=sys.stderr)
     return 0
 
 
