@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7Q current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, and Fly-volume backup retention pruning. Full regression is **615 pytest tests** green.
+**Status:** Phase 7R current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, and backup artifact restore docs. Full regression is **617 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7Q",
+#   "phase": "7R",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -240,6 +240,38 @@ The `.github/workflows/backup.yml` workflow creates a timestamped backup on the 
 
 The artifact is private to people who can access this repository's Actions runs, but it still contains real pantry data. Keep retention short, download only when you need a restore point, and delete any local copies you no longer need.
 
+#### Restoring from a GitHub Actions artifact
+
+If the Fly volume copy is unavailable or you want an off-volume restore point, download the Actions artifact first:
+
+1. Open GitHub **Actions -> Backup SQLite**.
+2. Open the successful run you want.
+3. Under **Artifacts**, download `pantrypal-sqlite-backup-<run_id>`.
+4. Unzip it locally; it contains `pantrypal-backup.sqlite3`.
+
+Use the artifact file in the same restore drill:
+
+```bash
+mkdir -p backups
+unzip ~/Downloads/pantrypal-sqlite-backup-*.zip -d backups/
+cp backups/pantrypal-backup.sqlite3 /tmp/pantrypal-restore-test.sqlite3
+DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3 \
+  FLASK_SECRET_KEY=secret \
+  .venv/bin/gunicorn --bind 127.0.0.1:8080 \
+  --workers 1 --threads 4 'app:app'
+
+# In another terminal:
+.venv/bin/python scripts/prod_smoke.py
+```
+
+If the local drill passes, upload the artifact as the production restore candidate:
+
+```bash
+fly ssh sftp
+sftp> put backups/pantrypal-backup.sqlite3 /data/restore.sqlite3
+sftp> exit
+```
+
 Before restoring production, do a local restore drill with the backup file:
 
 ```bash
@@ -335,8 +367,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7N:** Maintenance page polish — done
 - **Phase 7O:** Scheduled backup workflow — done
 - **Phase 7P:** Off-volume backup artifacts — done
-- **Phase 7Q:** Backup retention pruning — current
-- **Next:** Small backlog items such as backup artifact restore docs
+- **Phase 7Q:** Backup retention pruning — done
+- **Phase 7R:** Backup artifact restore docs — current
+- **Next:** Small backlog items such as backup workflow failure docs
 
 Full plan in [PLAN.md](./PLAN.md).
 
