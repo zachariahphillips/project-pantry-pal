@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7S current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, and a backup workflow failure runbook. Full regression is **620 pytest tests** green.
+**Status:** Phase 7T current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, a backup workflow failure runbook, and integrity-checked backups that fail the workflow before a corrupt restore point can be published. Full regression is **631 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7S",
+#   "phase": "7T",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -236,7 +236,19 @@ sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
 sftp> exit
 ```
 
-The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py --emit-base64 --keep 14` on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only the newest 14 backups in `/data/backups`.
+The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14` on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only the newest 14 backups in `/data/backups`.
+
+#### What "verified" means
+
+A backup that exists is not the same as a backup you can restore from, so the file is checked twice: once on the Fly machine right after it is written (`--verify`), and once in GitHub Actions on the decoded artifact (the `Verify decoded backup` step). The second check is the one that matters most, because the base64 round-trip through `fly ssh console` is the fragile part.
+
+Both checks open the file read-only and require that it is a non-empty SQLite database, that `PRAGMA integrity_check` returns `ok`, and that the `households`, `users`, `pantry_items`, and `shopping_items` tables are present. The table list is a required subset rather than the full schema, so adding a table in a later phase doesn't invalidate artifacts that are still in retention. A failed check exits non-zero *before* emitting base64 and before pruning, so a bad backup can neither become an artifact nor count against `--keep` and evict a good one.
+
+Run the same check by hand on any backup file you have locally:
+
+```bash
+.venv/bin/python scripts/backup_sqlite.py --verify-file backups/pantrypal-backup.sqlite3
+```
 
 The artifact is private to people who can access this repository's Actions runs, but it still contains real pantry data. Keep retention short, download only when you need a restore point, and delete any local copies you no longer need.
 
@@ -249,6 +261,7 @@ A failed backup run is silent by default — nothing in the app breaks, you just
 | `Create timestamped backup on Fly volume`, log says `Set the FLY_API_TOKEN repository secret before running backups.` | The `FLY_API_TOKEN` secret is missing, or the token was revoked / expired | Mint a new one with `fly tokens create deploy`, then update the repository secret |
 | `Create timestamped backup on Fly volume`, flyctl fails to open an SSH session | The machine is stopped (`auto_stop_machines = "stop"`) or the app is mid-deploy | `fly status`, then `fly machine start <machine-id>`, then re-run the workflow |
 | `Create timestamped backup on Fly volume`, `test -s pantrypal-backup.sqlite3` fails | The helper wrote nothing between the base64 markers, so the decode produced an empty file | Run `fly ssh console -C "python /app/scripts/backup_sqlite.py"` by hand and read the real error |
+| `Verify decoded backup` | The file decoded but is not a restorable database — usually a truncated base64 round-trip, occasionally a genuinely corrupt source DB | Re-run the workflow; if it fails the same way twice, the source DB on the volume is suspect, so check `fly ssh console -C "sqlite3 /data/pantrypal.sqlite3 'PRAGMA integrity_check'"` |
 | `Upload SQLite backup artifact` | The backup decoded but the upload step could not find the file (`if-no-files-found: error`) | Re-run the workflow; if it repeats, check that the workflow's `path:` still matches the decoded filename |
 
 Two failure modes never show up as a red run, because no run happens at all:
@@ -283,6 +296,10 @@ Use the artifact file in the same restore drill:
 ```bash
 mkdir -p backups
 unzip ~/Downloads/pantrypal-sqlite-backup-*.zip -d backups/
+
+# Cheap pre-check before the full drill below.
+.venv/bin/python scripts/backup_sqlite.py --verify-file backups/pantrypal-backup.sqlite3
+
 cp backups/pantrypal-backup.sqlite3 /tmp/pantrypal-restore-test.sqlite3
 DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3 \
   FLASK_SECRET_KEY=secret \
@@ -398,8 +415,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7P:** Off-volume backup artifacts — done
 - **Phase 7Q:** Backup retention pruning — done
 - **Phase 7R:** Backup artifact restore docs — done
-- **Phase 7S:** Backup workflow failure docs — current
-- **Next:** Small backlog items such as backup restore verification
+- **Phase 7S:** Backup workflow failure docs — done
+- **Phase 7T:** Backup restore verification — current
+- **Next:** Small backlog items such as a scripted restore drill
 
 Full plan in [PLAN.md](./PLAN.md).
 

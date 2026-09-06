@@ -13,7 +13,11 @@ Local usage:
 
 GitHub Actions artifact capture:
 
-    python /app/scripts/backup_sqlite.py --emit-base64 --keep 14
+    python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14
+
+Verify a backup file you already have (e.g. a decoded artifact):
+
+    python scripts/backup_sqlite.py --verify-file pantrypal-backup.sqlite3
 """
 from __future__ import annotations
 
@@ -34,6 +38,16 @@ BACKUP_FILE_GLOB = f"{BACKUP_FILENAME_PREFIX}-*.sqlite3"
 BASE64_BEGIN_MARKER = "BEGIN_PANTRYPAL_SQLITE_BACKUP_BASE64"
 BASE64_END_MARKER = "END_PANTRYPAL_SQLITE_BACKUP_BASE64"
 BASE64_CHUNK_SIZE = 57 * 1024
+
+# A required subset, deliberately not the full schema: verification should fail
+# on "corrupt file" or "not a PantryPal database", not on "we added a table
+# last week". An exact match would reject every artifact taken before a schema
+# addition for as long as that artifact is still in retention.
+REQUIRED_BACKUP_TABLES = ("households", "users", "pantry_items", "shopping_items")
+
+
+class BackupVerificationError(RuntimeError):
+    """A backup file is missing, empty, corrupt, or not a PantryPal database."""
 
 
 def timestamped_backup_path(
@@ -64,7 +78,57 @@ def backup_sqlite(source: Path, dest: Path) -> Path:
     return dest
 
 
-def emit_backup_base64(backup_path: Path, output: TextIO = sys.stdout) -> None:
+def verify_backup(
+        backup_path: Path,
+        *,
+        required_tables: tuple[str, ...] = REQUIRED_BACKUP_TABLES,
+) -> list[str]:
+    """Confirm a backup file is a restorable PantryPal SQLite database.
+
+    Returns the table names found. Raises BackupVerificationError with a
+    human-readable reason on any failure, so callers can turn it into an exit
+    code without picking apart sqlite3's exception types.
+    """
+    backup_path = backup_path.expanduser()
+    if not backup_path.exists():
+        raise BackupVerificationError(f"backup file not found: {backup_path}")
+    if backup_path.stat().st_size == 0:
+        raise BackupVerificationError(f"backup file is empty: {backup_path}")
+
+    try:
+        with sqlite3.connect(_sqlite_readonly_uri(backup_path), uri=True) as conn:
+            integrity = conn.execute("PRAGMA integrity_check").fetchone()
+            table_names = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+    except sqlite3.DatabaseError as exc:
+        raise BackupVerificationError(
+            f"backup file is not a readable SQLite database: {backup_path} ({exc})"
+        ) from exc
+
+    if integrity is None or integrity[0] != "ok":
+        detail = "no result" if integrity is None else integrity[0]
+        raise BackupVerificationError(
+            f"PRAGMA integrity_check failed for {backup_path}: {detail}"
+        )
+
+    missing = sorted(set(required_tables) - table_names)
+    if missing:
+        raise BackupVerificationError(
+            f"backup at {backup_path} is missing expected table(s): "
+            f"{', '.join(missing)}"
+        )
+
+    return sorted(table_names)
+
+
+def emit_backup_base64(backup_path: Path, output: TextIO | None = None) -> None:
+    # Resolved at call time, not bound as a default: a default would freeze
+    # whatever sys.stdout was at import, which silently writes past any later
+    # redirection of the stream this protocol depends on.
+    output = sys.stdout if output is None else output
     print(BASE64_BEGIN_MARKER, file=output)
     with backup_path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(BASE64_CHUNK_SIZE), b""):
@@ -129,13 +193,55 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             f"{BACKUP_FILE_GLOB} files in the backup directory."
         ),
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "After creating the backup, run an integrity check and confirm "
+            "the required tables are present. Exits non-zero without emitting "
+            "or pruning anything if the check fails."
+        ),
+    )
+    parser.add_argument(
+        "--verify-file",
+        type=Path,
+        help=(
+            "Verify an existing backup file, then exit. Skips creating a new "
+            "backup; used to check an artifact after it is decoded."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _verify_or_report(backup_path: Path) -> bool:
+    """Verify a backup, reporting on stderr so stdout stays base64-clean."""
+    try:
+        table_names = verify_backup(backup_path)
+    except BackupVerificationError as exc:
+        print(f"Backup verification FAILED: {exc}", file=sys.stderr)
+        return False
+    print(
+        f"Backup verification passed for {backup_path} "
+        f"({len(table_names)} tables)",
+        file=sys.stderr,
+    )
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.verify_file is not None:
+        return 0 if _verify_or_report(args.verify_file) else 1
+
     dest = args.dest or timestamped_backup_path(args.dest_dir)
     backup_path = backup_sqlite(args.source, dest)
+
+    # Before emitting or pruning: a bad backup should never reach the artifact
+    # upload, and should never count toward --keep.
+    if args.verify and not _verify_or_report(backup_path):
+        return 1
+
     if args.emit_base64:
         print(f"Created backup at {backup_path}", file=sys.stderr)
         emit_backup_base64(backup_path)

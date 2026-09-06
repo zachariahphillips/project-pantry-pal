@@ -18,6 +18,10 @@ jobs:
       FLY_APP_NAME: pantrypal-riah
 
     steps:
+      # Needed so the verify step can run the repo's own backup helper.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Set up flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
@@ -33,7 +37,7 @@ jobs:
           fi
 
           fly ssh console --app "$FLY_APP_NAME" \
-            -C "python /app/scripts/backup_sqlite.py --emit-base64 --keep 14" \
+            -C "python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14" \
             > backup-output.txt
 
           awk '
@@ -44,6 +48,11 @@ jobs:
 
           test -s pantrypal-backup.sqlite3
           rm backup-output.txt
+
+      # `test -s` above only proves the decode produced bytes. This proves the
+      # bytes are a restorable database, before it becomes a restore point.
+      - name: Verify decoded backup
+        run: python3 scripts/backup_sqlite.py --verify-file pantrypal-backup.sqlite3
 
       - name: Upload SQLite backup artifact
         uses: actions/upload-artifact@v4
