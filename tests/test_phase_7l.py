@@ -39,7 +39,7 @@ def test_maintenance_mode_allows_healthz(tmp_path, monkeypatch):
     resp = app.test_client().get("/healthz")
 
     assert resp.status_code == 200
-    assert resp.json == {"status": "ok", "phase": "7R"}
+    assert resp.json == {"status": "ok", "phase": "7S"}
 
 
 def test_maintenance_mode_allows_static_assets(tmp_path, monkeypatch):

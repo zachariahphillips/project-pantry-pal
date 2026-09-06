@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7R current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, and backup artifact restore docs. Full regression is **617 pytest tests** green.
+**Status:** Phase 7S current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, and a backup workflow failure runbook. Full regression is **620 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7R",
+#   "phase": "7S",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -240,6 +240,35 @@ The `.github/workflows/backup.yml` workflow creates a timestamped backup on the 
 
 The artifact is private to people who can access this repository's Actions runs, but it still contains real pantry data. Keep retention short, download only when you need a restore point, and delete any local copies you no longer need.
 
+#### When the backup workflow fails
+
+A failed backup run is silent by default — nothing in the app breaks, you just stop accumulating restore points. Start at GitHub **Actions -> Backup SQLite**, open the red run, and match the failing step:
+
+| Failing step | Likely cause | Fix |
+|---|---|---|
+| `Create timestamped backup on Fly volume`, log says `Set the FLY_API_TOKEN repository secret before running backups.` | The `FLY_API_TOKEN` secret is missing, or the token was revoked / expired | Mint a new one with `fly tokens create deploy`, then update the repository secret |
+| `Create timestamped backup on Fly volume`, flyctl fails to open an SSH session | The machine is stopped (`auto_stop_machines = "stop"`) or the app is mid-deploy | `fly status`, then `fly machine start <machine-id>`, then re-run the workflow |
+| `Create timestamped backup on Fly volume`, `test -s pantrypal-backup.sqlite3` fails | The helper wrote nothing between the base64 markers, so the decode produced an empty file | Run `fly ssh console -C "python /app/scripts/backup_sqlite.py"` by hand and read the real error |
+| `Upload SQLite backup artifact` | The backup decoded but the upload step could not find the file (`if-no-files-found: error`) | Re-run the workflow; if it repeats, check that the workflow's `path:` still matches the decoded filename |
+
+Two failure modes never show up as a red run, because no run happens at all:
+
+- **GitHub disables scheduled workflows in repositories with no activity for 60 days.** If the newest run is older than that, re-enable the workflow from its Actions page and push any commit.
+- **Cron in GitHub Actions is best-effort** and can be delayed or dropped under load. A single missed `23 10 * * *` run is not an incident.
+
+Either way, take the backup by hand rather than waiting for tomorrow's run. `workflow_dispatch` is enabled, so **Actions -> Backup SQLite -> Run workflow** is the first thing to try. If GitHub Actions itself is the problem, skip it entirely:
+
+```bash
+fly ssh console -C "python /app/scripts/backup_sqlite.py --keep 14"
+
+mkdir -p backups
+fly ssh sftp
+sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
+sftp> exit
+```
+
+Escalate when two consecutive nights fail: artifacts expire after 14 days, so a stalled workflow plus an aging artifact list means the off-volume restore path is quietly gone even though `/data/backups` still looks healthy.
+
 #### Restoring from a GitHub Actions artifact
 
 If the Fly volume copy is unavailable or you want an off-volume restore point, download the Actions artifact first:
@@ -368,8 +397,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7O:** Scheduled backup workflow — done
 - **Phase 7P:** Off-volume backup artifacts — done
 - **Phase 7Q:** Backup retention pruning — done
-- **Phase 7R:** Backup artifact restore docs — current
-- **Next:** Small backlog items such as backup workflow failure docs
+- **Phase 7R:** Backup artifact restore docs — done
+- **Phase 7S:** Backup workflow failure docs — current
+- **Next:** Small backlog items such as backup restore verification
 
 Full plan in [PLAN.md](./PLAN.md).
 
