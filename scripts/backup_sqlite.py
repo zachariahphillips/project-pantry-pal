@@ -61,8 +61,26 @@ def timestamped_backup_path(
 
 
 def _sqlite_readonly_uri(source: Path) -> str:
+    """Read a database that may have a live writer, e.g. the production file."""
     resolved = source.expanduser().resolve()
     return f"file:{quote(str(resolved), safe='/')}?mode=ro"
+
+
+def _sqlite_immutable_uri(path: Path) -> str:
+    """Read a *finished* database file that has no writer and no sidecars.
+
+    `mode=ro` on its own cannot open a WAL-mode database unless a `-shm` file
+    already exists, and a completed backup has none -- which made verification
+    reject every real production backup (Phase 7K put prod in WAL mode).
+    `immutable=1` promises SQLite the file cannot change, so it skips the
+    WAL/shm machinery entirely.
+
+    Only valid for a completed artifact. Pointing this at the live database
+    would skip its `-wal` and silently read stale pages, so `backup_sqlite`
+    deliberately keeps using `_sqlite_readonly_uri` instead.
+    """
+    resolved = path.expanduser().resolve()
+    return f"file:{quote(str(resolved), safe='/')}?mode=ro&immutable=1"
 
 
 def backup_sqlite(source: Path, dest: Path) -> Path:
@@ -96,7 +114,7 @@ def verify_backup(
         raise BackupVerificationError(f"backup file is empty: {backup_path}")
 
     try:
-        with sqlite3.connect(_sqlite_readonly_uri(backup_path), uri=True) as conn:
+        with sqlite3.connect(_sqlite_immutable_uri(backup_path), uri=True) as conn:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()
             table_names = {
                 row[0] for row in conn.execute(

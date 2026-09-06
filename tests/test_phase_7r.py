@@ -29,7 +29,10 @@ def test_readme_documents_actions_artifact_download():
 def test_readme_documents_artifact_restore_drill_and_upload():
     readme = (ROOT / "README.md").read_text()
 
-    assert "cp backups/pantrypal-backup.sqlite3 /tmp/pantrypal-restore-test.sqlite3" in readme
-    assert "DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3" in readme
-    assert ".venv/bin/python scripts/prod_smoke.py" in readme
+    # Phase 7U replaced the hand-rolled gunicorn + prod_smoke dance here with
+    # the scripted drill; the runbook step it stood for is unchanged.
+    assert (
+        ".venv/bin/python scripts/restore_drill.py backups/pantrypal-backup.sqlite3"
+        in readme
+    )
     assert "sftp> put backups/pantrypal-backup.sqlite3 /data/restore.sqlite3" in readme

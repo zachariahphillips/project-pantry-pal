@@ -31,8 +31,9 @@ def test_readme_documents_online_sqlite_backup_command():
 def test_readme_documents_restore_drill_and_wal_cleanup():
     readme = (ROOT / "README.md").read_text()
 
-    assert "Before restoring production, do a local restore drill" in readme
-    assert "pantrypal-restore-test.sqlite3" in readme
+    # Phase 7U turned this step into scripts/restore_drill.py.
+    assert "Before restoring production, drill the backup locally" in readme
+    assert "scripts/restore_drill.py backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3" in readme
     assert "pantrypal-pre-restore" in readme
     assert "pantrypal.sqlite3-wal" in readme
     assert "pantrypal.sqlite3-shm" in readme

@@ -25,6 +25,9 @@ Run locally before deploy:
     3. terminal B: .venv/bin/python scripts/prod_smoke.py
     4. Ctrl-C the gunicorn process when done.
 
+To run all four steps against a backup file instead, use the restore drill:
+    .venv/bin/python scripts/restore_drill.py backups/pantrypal-backup.sqlite3
+
 Run against an HTTPS deploy to include Phase 7I cookie hardening checks:
     BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
         .venv/bin/python scripts/prod_smoke.py
@@ -65,6 +68,17 @@ OPENER = urllib.request.build_opener(
 )
 
 
+# Headers of the most recent response, keys lowercased. Kept beside the
+# (status, body, url) tuple rather than widening it, so the htmx contract
+# checks below can read HX-* headers without churning every call site.
+LAST_RESPONSE_HEADERS: dict[str, str] = {}
+
+
+def _record_headers(headers) -> None:
+    LAST_RESPONSE_HEADERS.clear()
+    LAST_RESPONSE_HEADERS.update({k.lower(): v for k, v in headers.items()})
+
+
 def _request(
         method: str,
         path: str,
@@ -72,7 +86,7 @@ def _request(
         extra_headers: dict | None = None,
         allow_redirect: bool = True,
 ) -> tuple[int, str, str]:
-    """Returns (status, body, final_url)."""
+    """Returns (status, body, final_url); headers land in LAST_RESPONSE_HEADERS."""
     url = f"{BASE}{path}"
     body = None
     headers = {"User-Agent": "pantrypal-prod-smoke/1.0"}
@@ -96,8 +110,10 @@ def _request(
                 NoRedirect,
             )
             resp = no_redirect_opener.open(req, timeout=10)
+        _record_headers(resp.headers)
         return resp.status, resp.read().decode("utf-8", "replace"), resp.url
     except urllib.error.HTTPError as e:
+        _record_headers(e.headers)
         return e.code, e.read().decode("utf-8", "replace"), e.url
 
 
@@ -168,7 +184,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7T", '"phase":"7T"' in body or '"phase": "7T"' in body, body)
+    check("phase == 7U", '"phase":"7U"' in body or '"phase": "7U"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")
@@ -185,10 +201,16 @@ def main() -> int:
     )
     check("signup landed on /pantry", "/pantry" in final, final)
     _check_cookie_hardened("session")
-    # Stable markers on the pantry page: the H1 + the household-share aside
-    # ID (rendered as an empty card on first signup).
     check("pantry H1 visible", "Your pantry" in body, body[:300])
-    check("household-share aside rendered", 'id="household-share"' in body, body[:300])
+    # Phase 6G gates the household-share card behind having something to share
+    # (`pantry_item_count > 0 or members|length > 1 or invites`), so a fresh
+    # solo account must NOT see it yet. This script asserted the opposite
+    # until Phase 7U's restore drill actually ran it.
+    check(
+        "household-share card gated on a fresh account",
+        'id="household-share"' not in body,
+        body[:300],
+    )
 
     # ----- Phase 1B + 2A: add a pantry item -----
     print("\nPantry add:")
@@ -206,8 +228,27 @@ def main() -> int:
         },
         extra_headers={"HX-Request": "true"},
     )
+    # Phase 5A: an add while at or below the onboarding threshold answers
+    # 204 + HX-Refresh instead of the list partial, because the hero card and
+    # planner gate above the list slot have to re-render too. This script
+    # asserted the pre-5A partial-swap contract until Phase 7U's restore drill
+    # actually ran it.
+    check("status 204 (onboarding-zone add)", status == 204, f"got {status}")
+    check(
+        "HX-Refresh asks the client to reload",
+        LAST_RESPONSE_HEADERS.get("hx-refresh") == "true",
+        f"headers {LAST_RESPONSE_HEADERS}",
+    )
+
+    status, body, _ = _request("GET", "/pantry")
     check("status 200", status == 200, f"got {status}")
-    check("item rendered", "Olive Oil" in body, body[:300])
+    check("item rendered after reload", "Olive Oil" in body, body[:300])
+    # The first item also unlocks the Phase 6G gate checked above.
+    check(
+        "household-share card unlocked by first item",
+        'id="household-share"' in body,
+        body[:300],
+    )
 
     # ----- Phase 2B: mint an invite -----
     print("\nInvite mint:")

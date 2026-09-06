@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7T current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, a backup workflow failure runbook, and integrity-checked backups that fail the workflow before a corrupt restore point can be published. Full regression is **631 pytest tests** green.
+**Status:** Phase 7T current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, a backup workflow failure runbook, integrity-checked backups that fail the workflow before a corrupt restore point can be published, and a one-command restore drill that boots the app on a backup and smoke-tests it. Full regression is **647 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -87,7 +87,7 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
 # {
-#   "phase": "7T",
+#   "phase": "7U",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -282,6 +282,20 @@ sftp> exit
 
 Escalate when two consecutive nights fail: artifacts expire after 14 days, so a stalled workflow plus an aging artifact list means the off-volume restore path is quietly gone even though `/data/backups` still looks healthy.
 
+#### Proving a backup is restorable
+
+Verification proves a file is a well-formed PantryPal database. It does not prove *this* code can serve traffic from it — a database written before a model change passes every integrity check and still fails to boot. `scripts/restore_drill.py` closes that gap by doing the restore for real: it verifies the file, copies it, serves the copy under gunicorn on an unused port, waits for `/healthz`, and runs the full `prod_smoke.py` suite against it.
+
+```bash
+.venv/bin/python scripts/restore_drill.py backups/pantrypal-backup.sqlite3
+```
+
+An exit code 0 means that file is a usable restore point. Run it on any backup you are about to restore from, and after any model or migration change, since that is what invalidates older backups.
+
+The drill never touches the file you point it at — the smoke suite signs users up, so gunicorn is always given a throwaway copy that is deleted on exit, pass or fail. It also drops any inherited `MAINTENANCE_MODE`, because the production restore steps below tell you to turn it on, and an exported value would leave the drill smoke-testing the maintenance page instead of the app.
+
+Its first real run immediately found three things that all four previous backup phases had missed: verification could not open a WAL-mode database (so it would have rejected every real production backup), and `prod_smoke.py` was asserting a page shape that Phase 5A and Phase 6G had each changed out from under it. A drill nobody runs is documentation, not evidence.
+
 #### Restoring from a GitHub Actions artifact
 
 If the Fly volume copy is unavailable or you want an off-volume restore point, download the Actions artifact first:
@@ -297,17 +311,7 @@ Use the artifact file in the same restore drill:
 mkdir -p backups
 unzip ~/Downloads/pantrypal-sqlite-backup-*.zip -d backups/
 
-# Cheap pre-check before the full drill below.
-.venv/bin/python scripts/backup_sqlite.py --verify-file backups/pantrypal-backup.sqlite3
-
-cp backups/pantrypal-backup.sqlite3 /tmp/pantrypal-restore-test.sqlite3
-DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3 \
-  FLASK_SECRET_KEY=secret \
-  .venv/bin/gunicorn --bind 127.0.0.1:8080 \
-  --workers 1 --threads 4 'app:app'
-
-# In another terminal:
-.venv/bin/python scripts/prod_smoke.py
+.venv/bin/python scripts/restore_drill.py backups/pantrypal-backup.sqlite3
 ```
 
 If the local drill passes, upload the artifact as the production restore candidate:
@@ -318,17 +322,10 @@ sftp> put backups/pantrypal-backup.sqlite3 /data/restore.sqlite3
 sftp> exit
 ```
 
-Before restoring production, do a local restore drill with the backup file:
+Before restoring production, drill the backup locally and don't proceed unless it exits 0:
 
 ```bash
-cp backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 /tmp/pantrypal-restore-test.sqlite3
-DATABASE_URL=sqlite:////tmp/pantrypal-restore-test.sqlite3 \
-  FLASK_SECRET_KEY=secret \
-  .venv/bin/gunicorn --bind 127.0.0.1:8080 \
-  --workers 1 --threads 4 'app:app'
-
-# In another terminal:
-.venv/bin/python scripts/prod_smoke.py
+.venv/bin/python scripts/restore_drill.py backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3
 ```
 
 For production restore, schedule a quiet window, enable maintenance mode, take a fresh pre-restore backup first, upload the known-good backup with `fly ssh sftp`, then replace the DB and remove stale WAL sidecars before restarting the app:
@@ -416,8 +413,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7Q:** Backup retention pruning — done
 - **Phase 7R:** Backup artifact restore docs — done
 - **Phase 7S:** Backup workflow failure docs — done
-- **Phase 7T:** Backup restore verification — current
-- **Next:** Small backlog items such as a scripted restore drill
+- **Phase 7T:** Backup restore verification — done
+- **Phase 7U:** Scripted restore drill — current
+- **Next:** Small backlog items such as backup restore alerting
 
 Full plan in [PLAN.md](./PLAN.md).
 
