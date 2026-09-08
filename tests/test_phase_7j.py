@@ -19,11 +19,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_readme_documents_local_and_https_smoke_commands():
     readme = (ROOT / "README.md").read_text()
 
-    assert "### Post-deploy smoke check" in readme
+    assert "### PythonAnywhere post-deploy smoke check" in readme
     assert "DATABASE_URL=sqlite:////tmp/pantrypal-prod-smoke.sqlite3" in readme
     assert ".venv/bin/gunicorn --bind 127.0.0.1:8080" in readme
     assert ".venv/bin/python scripts/prod_smoke.py" in readme
-    assert "BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1" in readme
+    assert (
+        "BASE=https://<your-pythonanywhere-username>.pythonanywhere.com "
+        "EXPECT_SECURE_COOKIES=1"
+    ) in readme
     assert "Secure`, `HttpOnly`, and `SameSite=Lax" in readme
 
 

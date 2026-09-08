@@ -29,7 +29,7 @@ To run all four steps against a backup file instead, use the restore drill:
     .venv/bin/python scripts/restore_drill.py backups/pantrypal-backup.sqlite3
 
 Run against an HTTPS deploy to include Phase 7I cookie hardening checks:
-    BASE=https://<your-app>.fly.dev EXPECT_SECURE_COOKIES=1 \
+    BASE=https://<your-pythonanywhere-username>.pythonanywhere.com EXPECT_SECURE_COOKIES=1 \
         .venv/bin/python scripts/prod_smoke.py
 
 Expected PASS coverage: /healthz current phase, signup, htmx pantry add,
@@ -184,7 +184,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7U", '"phase":"7U"' in body or '"phase": "7U"' in body, body)
+    check("phase == 7V", '"phase":"7V"' in body or '"phase": "7V"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")

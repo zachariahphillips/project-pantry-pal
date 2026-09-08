@@ -9,6 +9,8 @@ Phase 2A: households — items are owned by a household, with provenance
           (who added each item) preserved for the "added by X" stamps.
 Phase 2B: invite/join — magic-link tokens let users share a household.
 Phase 2C: deploy — Dockerfile + Fly.io config; app served via gunicorn
+Phase 7V: PythonAnywhere free deploy path; SQLite WAL can be disabled for
+          network filesystems
           with single worker (SQLite single-writer constraint) and a
           persistent volume mounted at /data for the DB file.
 Phase 3A: AI meal planning — POST /meal-plan takes a free-text prompt,
@@ -65,8 +67,11 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7U"
+APP_PHASE = "7V"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
+SQLITE_JOURNAL_MODE_ENV = "SQLITE_JOURNAL_MODE"
+SQLITE_DEFAULT_JOURNAL_MODE = "WAL"
+SQLITE_ALLOWED_JOURNAL_MODES = {"WAL", "DELETE"}
 MAINTENANCE_MODE_ENV = "MAINTENANCE_MODE"
 MAINTENANCE_MESSAGE_ENV = "MAINTENANCE_MESSAGE"
 DEFAULT_MAINTENANCE_MESSAGE = (
@@ -86,11 +91,25 @@ def _is_sqlite_database_url(database_url: str) -> bool:
     return database_url.startswith("sqlite:")
 
 
-def _enable_sqlite_wal(dbapi_connection, _connection_record) -> None:
-    """Phase 7G: keep SQLite more tolerant of concurrent threaded writes."""
+def _sqlite_journal_mode() -> str:
+    requested = os.environ.get(
+        SQLITE_JOURNAL_MODE_ENV, SQLITE_DEFAULT_JOURNAL_MODE,
+    ).strip().upper()
+    if requested in SQLITE_ALLOWED_JOURNAL_MODES:
+        return requested
+    return SQLITE_DEFAULT_JOURNAL_MODE
+
+
+def _configure_sqlite_journal_mode(dbapi_connection, _connection_record) -> None:
+    """Phase 7G/7V: tune SQLite for the deployment filesystem.
+
+    WAL remains the default for local/Fly-style disks. PythonAnywhere's free
+    tier runs app files on a network filesystem, so its deploy runbook sets
+    SQLITE_JOURNAL_MODE=DELETE to avoid WAL sidecars there.
+    """
     cursor = dbapi_connection.cursor()
     try:
-        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute(f"PRAGMA journal_mode={_sqlite_journal_mode()}")
     finally:
         cursor.close()
 
@@ -152,28 +171,25 @@ def create_app() -> Flask:
         _configure_production_cookie_security(app)
 
     # Production-only guard: refuse to start if the secret key is still the
-    # placeholder (or empty). Without this, a `fly deploy` where the user
-    # forgot `fly secrets set FLASK_SECRET_KEY=...` would silently boot
-    # with a well-known key — session cookies become forgeable and CSRF
-    # tokens become predictable. Detected via FLASK_ENV which fly.toml
-    # already sets to "production".
+    # placeholder (or empty). Without this, a production deploy where the host
+    # env/.env forgot FLASK_SECRET_KEY would silently boot with a well-known
+    # key -- session cookies become forgeable and CSRF tokens predictable.
     if is_production:
         if (not app.config["SECRET_KEY"]
                 or app.config["SECRET_KEY"] == _PLACEHOLDER_SECRET_KEY):
             raise RuntimeError(
                 "FLASK_SECRET_KEY is unset or is the default placeholder, "
-                "but FLASK_ENV=production. Refusing to start. Run "
-                "`fly secrets set FLASK_SECRET_KEY=\"$(python3 -c "
-                "'import secrets; print(secrets.token_hex(32))')\"` "
-                "and redeploy."
+                "but FLASK_ENV=production. Refusing to start. Set a real "
+                "FLASK_SECRET_KEY in the deploy environment or server-side "
+                ".env file, then reload the app."
             )
 
-    # Trust Fly.io's single edge proxy hop for X-Forwarded-{Proto,Host,For}.
+    # Trust the hosting platform's single edge proxy hop for
+    # X-Forwarded-{Proto,Host,For}.
     # Without this, `request.is_secure` is False even on HTTPS deploys, and
     # `url_for(_external=True)` builds `http://...` URLs — visible in the
     # invite-share copy field, which would show http:// links to roommates.
-    # x_for/proto/host/port = 1 means "trust one upstream hop." Fly's
-    # architecture is exactly one hop (their edge proxy → our machine).
+    # x_for/proto/host/port = 1 means "trust one upstream hop."
     app.wsgi_app = ProxyFix(
         app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1,
     )
@@ -216,7 +232,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         if _is_sqlite_database_url(app.config["SQLALCHEMY_DATABASE_URI"]):
-            event.listen(db.engine, "connect", _enable_sqlite_wal)
+            event.listen(db.engine, "connect", _configure_sqlite_journal_mode)
         # Phase 1A: bootstrap the schema on startup. We'll switch to
         # Flask-Migrate in Phase 2 when the schema needs to evolve without
         # dropping data. For Phase 2A's additive change (households table,
@@ -2592,7 +2608,7 @@ MEAL_PLAN_ERROR_KIND_TO_STATUS = {
 
 def _get_openai_model() -> str:
     """Read MEAL_PLAN_MODEL at call time so env overrides take effect
-    without a process restart (e.g. `fly secrets set MEAL_PLAN_MODEL=gpt-4o`)."""
+    without code changes."""
     return (os.environ.get("MEAL_PLAN_MODEL") or "").strip() or _DEFAULT_OPENAI_MODEL
 
 

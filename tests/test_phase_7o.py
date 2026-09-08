@@ -1,8 +1,10 @@
 """
-Phase 7O regression suite — scheduled backup workflow.
+Phase 7O regression suite — legacy Fly backup workflow.
 
-The workflow should stay manual/scheduled only and should run the tested Fly
-backup helper with an explicit FLY_API_TOKEN secret.
+The workflow used to be scheduled while Fly was the primary deploy target.
+Phase 7V moved the app to PythonAnywhere for no-cost hosting, so the Fly
+workflow should stay manual-only while still running the tested helper if
+someone intentionally dispatches it.
 
 Tier-1 dev loop:
 
@@ -17,13 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "backup.yml"
 
 
-def test_backup_workflow_is_manual_and_scheduled():
+def test_legacy_fly_backup_workflow_is_manual_only():
     workflow = WORKFLOW.read_text()
 
-    assert "name: Backup SQLite" in workflow
+    assert "name: Legacy Fly SQLite Backup" in workflow
     assert "workflow_dispatch:" in workflow
-    assert "schedule:" in workflow
-    assert 'cron: "23 10 * * *"' in workflow
+    assert "schedule:" not in workflow
+    assert "cron:" not in workflow
     assert "push:" not in workflow
     assert "pull_request:" not in workflow
 

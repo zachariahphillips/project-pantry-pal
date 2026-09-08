@@ -42,9 +42,10 @@ def test_prune_old_backups_keeps_newest_and_ignores_unrelated_files(tmp_path):
     assert notes.exists()
 
 
-def test_backup_workflow_prunes_fly_volume_backups():
+def test_legacy_fly_backup_workflow_prunes_fly_volume_backups():
     workflow = (ROOT / ".github" / "workflows" / "backup.yml").read_text()
     readme = (ROOT / "README.md").read_text()
 
     assert "--emit-base64 --keep 14" in workflow
-    assert "keeps only the newest 14 backups" in readme
+    assert "the newest 14 backups" in readme
+    assert "legacy `.github/workflows/backup.yml` workflow is manual-only" in readme

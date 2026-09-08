@@ -1,10 +1,9 @@
 """
-Phase 7S regression suite — backup workflow failure docs.
+Phase 7S regression suite — legacy Fly backup workflow failure docs.
 
-A failed backup run is silent: the app keeps serving traffic while restore
-points quietly stop accumulating. These tests guard the triage runbook so the
-"what do I do about a red backup run" answer stays in the README, and so the
-symptoms it tells you to match keep matching what backup.yml actually emits.
+The Fly workflow used to be scheduled while Fly was the primary deploy target.
+Phase 7V moved the README's happy path to PythonAnywhere, so these tests now
+guard the manual legacy troubleshooting path instead of nightly alerts.
 
 Tier-1 dev loop:
 
@@ -21,8 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_readme_documents_backup_workflow_failure_triage():
     readme = (ROOT / "README.md").read_text()
 
-    assert "#### When the backup workflow fails" in readme
-    assert "Actions -> Backup SQLite" in readme
+    assert "#### When the legacy Fly backup workflow fails" in readme
+    assert "Actions -> Legacy Fly SQLite Backup" in readme
     assert "fly tokens create deploy" in readme
     assert "fly machine start <machine-id>" in readme
 
@@ -43,17 +42,16 @@ def test_readme_failure_symptoms_match_the_backup_workflow():
         "Set the FLY_API_TOKEN repository secret before running backups.",
         "test -s pantrypal-backup.sqlite3",
         "if-no-files-found: error",
-        "23 10 * * *",
     ):
         assert quoted_from_readme in readme
         assert quoted_from_readme in workflow
 
     assert "workflow_dispatch" in workflow
+    assert "schedule:" not in workflow
 
 
 def test_readme_documents_manual_backup_fallback_and_escalation():
     readme = (ROOT / "README.md").read_text()
 
-    assert "no activity for 60 days" in readme
     assert 'fly ssh console -C "python /app/scripts/backup_sqlite.py --keep 14"' in readme
-    assert "two consecutive nights fail" in readme
+    assert "Escalate only if you are actively using Fly again" in readme

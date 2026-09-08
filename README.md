@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7T current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, a scheduled backup workflow, short-retention off-volume backup artifacts, Fly-volume backup retention pruning, backup artifact restore docs, a backup workflow failure runbook, integrity-checked backups that fail the workflow before a corrupt restore point can be published, and a one-command restore drill that boots the app on a backup and smoke-tests it. Full regression is **647 pytest tests** green.
+**Status:** Phase 7V current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, and a PythonAnywhere-safe SQLite journal-mode switch. Full regression is **655 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -65,7 +65,9 @@ Invites default to **10 uses, 7-day expiration**. Both are tunable in `models.py
 
 ### Tuning the AI meal planner (Phase 3C+)
 
-Two optional env vars control the meal planner's cost + behavior. Both are read **lazily** (per-request, not per-boot), so `fly secrets set` takes effect on the next request — no restart needed.
+Two optional env vars control the meal planner's cost + behavior. Both are read
+from the process environment. On PythonAnywhere, edit the server-side `.env`
+file and reload the web app.
 
 | Env var | Default | What it does |
 |---|---|---|
@@ -74,10 +76,10 @@ Two optional env vars control the meal planner's cost + behavior. Both are read 
 
 ```bash
 # Tighten the cap to 5/user/day:
-fly secrets set MEAL_PLAN_DAILY_LIMIT=5
+MEAL_PLAN_DAILY_LIMIT=5
 
 # Upgrade to gpt-4o for the household:
-fly secrets set MEAL_PLAN_MODEL=gpt-4o
+MEAL_PLAN_MODEL=gpt-4o
 ```
 
 #### Watching your spend
@@ -85,9 +87,9 @@ fly secrets set MEAL_PLAN_MODEL=gpt-4o
 `GET /cost` (login required) returns JSON with today's call counts + estimated USD spend:
 
 ```bash
-curl -b <auth-cookie> https://<your-app>.fly.dev/cost | jq
+curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "7U",
+#   "phase": "7V",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -123,7 +125,182 @@ Two things make logging in on your phone painless:
 
 To make PantryPal feel like a native app on your phone, use Safari's **Share → Add to Home Screen**. PantryPal ships a manifest and app icons so home-screen installs use the right name, color, and launcher artwork.
 
-## Deploy to Fly.io (Phase 2C)
+## Deploy to PythonAnywhere (Phase 7V)
+
+PythonAnywhere is the recommended no-cost deploy target for this personal app.
+The old Fly.io files remain in the repo as legacy/off-ramp tooling, but the
+happy path is now: one free PythonAnywhere web app, one virtualenv, one SQLite
+file, and manual backups when you care.
+
+This is intentionally not a serious production setup. PythonAnywhere makes
+SQLite available on free accounts, but their own docs warn that SQLite on the
+cloud filesystem can be slower and less concurrency-friendly. That is fine for
+a low-traffic personal pantry app; if this ever becomes a launched product,
+move the database to Postgres instead.
+
+### PythonAnywhere one-time setup
+
+Create a free PythonAnywhere account, then open a Bash console there:
+
+```bash
+git clone https://github.com/zachariahphillips/project-pantry-pal.git
+cd project-pantry-pal
+
+# Pick the same Python 3.11+ version in the Web tab later.
+mkvirtualenv --python=/usr/bin/python3.13 pantrypal
+pip install -r requirements.txt
+mkdir -p data backups
+```
+
+Create the server-side `.env` file in the project directory. It is gitignored,
+so it should exist on PythonAnywhere but never be committed:
+
+```bash
+python - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+
+cat > .env <<'EOF'
+FLASK_ENV=production
+FLASK_DEBUG=0
+FLASK_SECRET_KEY=<paste-the-generated-secret-here>
+DATABASE_URL=sqlite:////home/<your-pythonanywhere-username>/project-pantry-pal/data/pantrypal.sqlite3
+SQLITE_JOURNAL_MODE=DELETE
+OPENAI_API_KEY=<optional-for-ai-meal-planning>
+MEAL_PLAN_DAILY_LIMIT=5
+EOF
+```
+
+Two details matter:
+
+- `DATABASE_URL` has four slashes after `sqlite:` because it is an absolute
+  path. Three slashes would put the database under Flask's instance folder
+  instead.
+- `SQLITE_JOURNAL_MODE=DELETE` is PythonAnywhere-specific. PantryPal still
+  defaults to WAL locally, but WAL sidecars are a poor fit for
+  PythonAnywhere's network-backed free filesystem.
+
+Initialize the app once from the Bash console. Importing `app` runs
+`db.create_all()` and the in-place migrations:
+
+```bash
+workon pantrypal
+cd ~/project-pantry-pal
+python - <<'PY'
+from app import app
+print(app.config["SQLALCHEMY_DATABASE_URI"])
+PY
+```
+
+### PythonAnywhere Web tab setup
+
+In PythonAnywhere's **Web** tab:
+
+1. Add a new web app using **Manual configuration**.
+2. Choose the same Python version used for `mkvirtualenv`.
+3. Set **Source code** to `/home/<your-pythonanywhere-username>/project-pantry-pal`.
+4. Set **Virtualenv** to `/home/<your-pythonanywhere-username>/.virtualenvs/pantrypal`.
+5. Open the WSGI configuration file, usually
+   `/var/www/<your-pythonanywhere-username>_pythonanywhere_com_wsgi.py`, and
+   adapt `pythonanywhere_wsgi.py.example` by replacing the placeholder username.
+6. Reload the web app.
+
+Do not call `app.run()` in the WSGI file. PythonAnywhere owns the web server;
+the WSGI file only imports `from app import app as application`.
+
+Static-file mappings are optional for this low-traffic app because Flask can
+serve the manifest and icons. If you add one later, map `/static/` to
+`/home/<your-pythonanywhere-username>/project-pantry-pal/static/`.
+
+### PythonAnywhere post-deploy smoke check
+
+Run the smoke script after deploys that touch auth, cookies, database boot,
+invites, or core pantry/shopping flows. It signs up randomized throwaway users,
+adds a pantry item, mints an invite, joins a roommate into the household,
+verifies shared visibility, and checks hardened cookie flags when pointed at
+HTTPS.
+
+```bash
+BASE=https://<your-pythonanywhere-username>.pythonanywhere.com EXPECT_SECURE_COOKIES=1 \
+  .venv/bin/python scripts/prod_smoke.py
+```
+
+Expected coverage:
+
+- `/healthz` returns `200` and the current phase.
+- Signup sets a usable session and lands on `/pantry`.
+- Pantry add works through the htmx route.
+- Invite minting, anonymous invite preview, and invite signup all work.
+- A roommate sees the shared pantry item with attribution.
+- HTTPS deploy smoke verifies `session` and `remember_token` cookies include
+  `Secure`, `HttpOnly`, and `SameSite=Lax`.
+
+### Use it on your phone
+
+1. Open `https://<your-pythonanywhere-username>.pythonanywhere.com` in Safari.
+2. Sign up with your email + name; this creates your household-of-one.
+3. Mint an invite from the Household card, then send the link to your roommate.
+4. **Share -> Add to Home Screen** to install it as a home-screen app with the
+   PantryPal name, color, and icon.
+
+### PythonAnywhere redeploys
+
+```bash
+cd ~/project-pantry-pal
+git pull
+workon pantrypal
+pip install -r requirements.txt
+# Then press Reload in the PythonAnywhere Web tab.
+```
+
+### PythonAnywhere backups
+
+On PythonAnywhere, production SQLite should live at
+`~/project-pantry-pal/data/pantrypal.sqlite3`. Create backups from a
+PythonAnywhere Bash console:
+
+```bash
+cd ~/project-pantry-pal
+workon pantrypal
+python scripts/backup_sqlite.py \
+  --source data/pantrypal.sqlite3 \
+  --dest-dir backups \
+  --verify \
+  --keep 14
+```
+
+Download important backup files from PythonAnywhere's **Files** tab. Before
+trusting one, run the local restore drill against the downloaded file:
+
+```bash
+.venv/bin/python scripts/restore_drill.py backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3
+```
+
+An exit code 0 means that file is a usable restore point. The drill never
+writes into the backup you point it at; it serves a throwaway copy under
+gunicorn and deletes that copy on exit.
+
+To restore on PythonAnywhere, use the Web tab to temporarily disable the app or
+avoid writes, upload the known-good backup into `backups/`, then run:
+
+```bash
+cd ~/project-pantry-pal
+workon pantrypal
+python scripts/backup_sqlite.py \
+  --source data/pantrypal.sqlite3 \
+  --dest-dir backups \
+  --verify \
+  --keep 14
+cp backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 data/pantrypal.sqlite3
+# Then press Reload in the PythonAnywhere Web tab.
+```
+
+### Legacy Fly.io deploy (Phase 2C)
+
+Fly.io was the original deploy target. These notes remain for history, for
+extracting any old Fly volume data, and in case you later decide the paid
+hosting tradeoff is worth it. They are no longer the recommended no-cost path.
 
 The app ships with everything you need to deploy: a `Dockerfile` (gunicorn-based, single worker so SQLite stays single-writer), a `.dockerignore` that keeps your local DB + venv out of the image, and a `fly.toml` with sensible Hobby-tier defaults (region `sea`, persistent volume at `/data`, auto-stop machines so cold starts are free).
 
@@ -236,7 +413,16 @@ sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
 sftp> exit
 ```
 
-The `.github/workflows/backup.yml` workflow creates a timestamped backup on the Fly volume every day and can also be run manually from GitHub Actions. Add a repository secret named `FLY_API_TOKEN` first: GitHub repo **Settings -> Secrets and variables -> Actions -> New repository secret**. The workflow calls `python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14` on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only the newest 14 backups in `/data/backups`.
+The legacy `.github/workflows/backup.yml` workflow is manual-only now, because
+PythonAnywhere is the no-cost deploy target and the old scheduled Fly run never
+succeeded without a `FLY_API_TOKEN`. If you return to Fly or need to extract
+old volume data, add a repository secret named `FLY_API_TOKEN` first: GitHub
+repo **Settings -> Secrets and variables -> Actions -> New repository
+secret**. When dispatched, the workflow calls
+`python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14` on the
+Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads
+`pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only
+the newest 14 backups in `/data/backups`.
 
 #### What "verified" means
 
@@ -252,9 +438,11 @@ Run the same check by hand on any backup file you have locally:
 
 The artifact is private to people who can access this repository's Actions runs, but it still contains real pantry data. Keep retention short, download only when you need a restore point, and delete any local copies you no longer need.
 
-#### When the backup workflow fails
+#### When the legacy Fly backup workflow fails
 
-A failed backup run is silent by default — nothing in the app breaks, you just stop accumulating restore points. Start at GitHub **Actions -> Backup SQLite**, open the red run, and match the failing step:
+A failed legacy Fly backup run does not affect the PythonAnywhere deploy path.
+If you intentionally dispatched it, start at GitHub **Actions -> Legacy Fly
+SQLite Backup**, open the red run, and match the failing step:
 
 | Failing step | Likely cause | Fix |
 |---|---|---|
@@ -264,12 +452,10 @@ A failed backup run is silent by default — nothing in the app breaks, you just
 | `Verify decoded backup` | The file decoded but is not a restorable database — usually a truncated base64 round-trip, occasionally a genuinely corrupt source DB | Re-run the workflow; if it fails the same way twice, the source DB on the volume is suspect, so check `fly ssh console -C "sqlite3 /data/pantrypal.sqlite3 'PRAGMA integrity_check'"` |
 | `Upload SQLite backup artifact` | The backup decoded but the upload step could not find the file (`if-no-files-found: error`) | Re-run the workflow; if it repeats, check that the workflow's `path:` still matches the decoded filename |
 
-Two failure modes never show up as a red run, because no run happens at all:
-
-- **GitHub disables scheduled workflows in repositories with no activity for 60 days.** If the newest run is older than that, re-enable the workflow from its Actions page and push any commit.
-- **Cron in GitHub Actions is best-effort** and can be delayed or dropped under load. A single missed `23 10 * * *` run is not an incident.
-
-Either way, take the backup by hand rather than waiting for tomorrow's run. `workflow_dispatch` is enabled, so **Actions -> Backup SQLite -> Run workflow** is the first thing to try. If GitHub Actions itself is the problem, skip it entirely:
+Either way, take the backup by hand rather than treating Fly as the primary
+backup path. `workflow_dispatch` is enabled, so **Actions -> Legacy Fly SQLite
+Backup -> Run workflow** is the first thing to try. If GitHub Actions itself is
+the problem, skip it entirely:
 
 ```bash
 fly ssh console -C "python /app/scripts/backup_sqlite.py --keep 14"
@@ -280,7 +466,10 @@ sftp> get /data/backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 backups/
 sftp> exit
 ```
 
-Escalate when two consecutive nights fail: artifacts expire after 14 days, so a stalled workflow plus an aging artifact list means the off-volume restore path is quietly gone even though `/data/backups` still looks healthy.
+Escalate only if you are actively using Fly again. Artifacts expire after 14
+days, so a stalled legacy workflow plus an aging artifact list means the
+off-volume Fly restore path is quietly gone even though `/data/backups` still
+looks healthy.
 
 #### Proving a backup is restorable
 
@@ -300,7 +489,7 @@ Its first real run immediately found three things that all four previous backup 
 
 If the Fly volume copy is unavailable or you want an off-volume restore point, download the Actions artifact first:
 
-1. Open GitHub **Actions -> Backup SQLite**.
+1. Open GitHub **Actions -> Legacy Fly SQLite Backup**.
 2. Open the successful run you want.
 3. Under **Artifacts**, download `pantrypal-sqlite-backup-<run_id>`.
 4. Unzip it locally; it contains `pantrypal-backup.sqlite3`.
@@ -414,8 +603,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7R:** Backup artifact restore docs — done
 - **Phase 7S:** Backup workflow failure docs — done
 - **Phase 7T:** Backup restore verification — done
-- **Phase 7U:** Scripted restore drill — current
-- **Next:** Small backlog items such as backup restore alerting
+- **Phase 7U:** Scripted restore drill — done
+- **Phase 7V:** PythonAnywhere free deploy path — current
+- **Next:** Small backlog items such as PythonAnywhere deploy verification and backup reminders
 
 Full plan in [PLAN.md](./PLAN.md).
 

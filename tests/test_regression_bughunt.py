@@ -5,14 +5,14 @@ Three issues surfaced during a pre-Phase-3 code review. Each test below
 REPRODUCES the bug first (red), then the corresponding fix in app.py
 turns it green. Keeping these in the suite so we never regress.
 
-1) ProxyFix not installed: behind a reverse proxy (Fly.io's edge), Flask
+1) ProxyFix not installed: behind a hosting reverse proxy, Flask
    doesn't trust X-Forwarded-Proto / X-Forwarded-For headers, so
    `url_for(_external=True)` and `request.is_secure` lie. Result: the
    invite-share URL in _household_share.html would say `http://` on
-   the production Fly.dev URL even though Fly serves over HTTPS.
+   the production HTTPS URL.
 
 2) SECRET_KEY default fallback in production: if the user forgets to
-   `fly secrets set FLASK_SECRET_KEY=...`, the app starts with a
+   set FLASK_SECRET_KEY in the deploy environment, the app starts with a
    well-known default value, making session cookies forgeable and
    CSRF tokens predictable. We want to FAIL LOUD when running with
    FLASK_ENV=production + a placeholder secret.
@@ -39,14 +39,14 @@ from tests.conftest import sign_up
 class TestProxyFix:
     def test_proxy_fix_is_installed(self, app):
         """Structural check: ProxyFix must be wrapped around app.wsgi_app.
-        Without it, X-Forwarded-Proto/Host/For headers from Fly's edge
+        Without it, X-Forwarded-Proto/Host/For headers from the host proxy
         proxy are ignored and `url_for(_external=True)` builds http://
         URLs. The behavioral test below confirms the wiring works."""
         from werkzeug.middleware.proxy_fix import ProxyFix
         assert isinstance(app.wsgi_app, ProxyFix), (
-            "ProxyFix not installed on app.wsgi_app. On Fly.io, the "
-            "invite-share Copy field would show http:// URLs even though "
-            "Fly serves over HTTPS. See create_app() in app.py."
+            "ProxyFix not installed on app.wsgi_app. Behind the host proxy, "
+            "the invite-share Copy field would show http:// URLs even though "
+            "the app is served over HTTPS. See create_app() in app.py."
         )
 
     def test_x_forwarded_proto_https_promotes_request_to_secure(
@@ -75,7 +75,7 @@ class TestProxyFix:
             "/_test_proxy_fix_probe",
             headers={
                 "X-Forwarded-Proto": "https",
-                "X-Forwarded-Host": "pantrypal-riah.fly.dev",
+                "X-Forwarded-Host": "riah.pythonanywhere.com",
                 "X-Forwarded-For": "203.0.113.1",
             },
         )
@@ -89,7 +89,7 @@ class TestProxyFix:
         assert captured["external_url"].startswith("https://"), (
             f"Expected https:// invite URL, got {captured['external_url']!r}"
         )
-        assert "pantrypal-riah.fly.dev" in captured["external_url"], captured
+        assert "riah.pythonanywhere.com" in captured["external_url"], captured
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ class TestSecretKeyGuard:
     def test_production_with_placeholder_secret_raises(
             self, tmp_path, monkeypatch):
         """The first-deploy footgun: FLASK_ENV=production + the default
-        placeholder key (because `fly secrets set FLASK_SECRET_KEY=...`
+        placeholder key (because FLASK_SECRET_KEY
         was forgotten) → silent boot with a well-known secret. Guard
         must refuse to start.
 
@@ -127,7 +127,7 @@ class TestSecretKeyGuard:
             importlib.reload(app_module)
 
     def test_production_with_empty_secret_raises(self, tmp_path, monkeypatch):
-        """`fly secrets set FLASK_SECRET_KEY=` (empty value) is also unsafe
+        """An empty FLASK_SECRET_KEY is also unsafe
         — the guard should catch both empty AND placeholder."""
         db_file = tmp_path / "empty.sqlite3"
         monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")

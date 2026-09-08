@@ -20,7 +20,7 @@ def test_readme_documents_actions_artifact_download():
     readme = (ROOT / "README.md").read_text()
 
     assert "#### Restoring from a GitHub Actions artifact" in readme
-    assert "Actions -> Backup SQLite" in readme
+    assert "Actions -> Legacy Fly SQLite Backup" in readme
     assert "pantrypal-sqlite-backup-<run_id>" in readme
     assert "pantrypal-backup.sqlite3" in readme
     assert "unzip ~/Downloads/pantrypal-sqlite-backup-*.zip -d backups/" in readme

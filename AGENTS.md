@@ -27,7 +27,7 @@ OpenAI-powered meal planner. Full stack + deploy story in `README.md`.
 ```bash
 source .venv/bin/activate         # Python 3.11+
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, 647 tests as of Phase 7U
+pytest -q                         # full regression, 655 tests as of Phase 7V
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
 
@@ -51,7 +51,8 @@ uses 5000, so both can run side-by-side.
 | `PLAN.md` | Macro roadmap. Skim for phase history. |
 | `PLANS/` | Narrower plans (e.g. `ux-improvements-plan.md`). Referenced from code comments. |
 | `BUGS.md` | Known issues, priority-tagged. Add new ones here; don't silently fix them without an entry. |
-| `Dockerfile`, `fly.toml` | Fly.io deploy artifacts. `--workers=1` is intentional (see gotchas). |
+| `pythonanywhere_wsgi.py.example` | Current no-cost deploy template for PythonAnywhere. Replace the username placeholder in the Web tab WSGI file. |
+| `Dockerfile`, `fly.toml` | Legacy Fly.io deploy artifacts. Keep them working, but PythonAnywhere is the recommended free path. |
 | `seed.py` | Reseeds `alice@example.com` + `bob@example.com` test accounts. |
 
 ## Development workflow

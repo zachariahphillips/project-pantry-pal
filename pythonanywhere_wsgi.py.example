@@ -1,0 +1,33 @@
+"""
+PythonAnywhere WSGI template for PantryPal.
+
+On PythonAnywhere, open the Web tab's WSGI configuration file
+(`/var/www/<your-pythonanywhere-username>_pythonanywhere_com_wsgi.py`) and use
+this shape, replacing the placeholder username with your account name.
+
+Do not start Flask's development server here. PythonAnywhere owns the web
+server; this file only imports PantryPal's Flask app object as `application`.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+PROJECT_DIR = Path(
+    "/home/<your-pythonanywhere-username>/project-pantry-pal"
+)
+
+os.chdir(PROJECT_DIR)
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
+
+os.environ.setdefault("FLASK_ENV", "production")
+os.environ.setdefault(
+    "DATABASE_URL",
+    f"sqlite:///{PROJECT_DIR / 'data' / 'pantrypal.sqlite3'}",
+)
+os.environ.setdefault("SQLITE_JOURNAL_MODE", "DELETE")
+
+from app import app as application  # noqa: E402

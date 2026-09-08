@@ -1,14 +1,11 @@
-name: Backup SQLite
+name: Legacy Fly SQLite Backup
 
 on:
   workflow_dispatch:
-  schedule:
-    # 10:23 UTC keeps it away from common top-of-hour service spikes.
-    - cron: "23 10 * * *"
 
 jobs:
   backup:
-    name: Create Fly SQLite backup
+    name: Create legacy Fly SQLite backup
     runs-on: ubuntu-latest
 
     permissions:
