@@ -266,7 +266,7 @@ vs rows-1) with tooltip. Or: just call the button "Compact / Roomy" as a
 segmented control instead of a single toggle, so both states are visible
 and the switch is discoverable.
 
-### 2.6 Header logo is small + unstyled — deferred
+### 2.6 Header logo is small + unstyled — ✅ shipped 2026-09-09 (Phase 7W)
 
 Where: `templates/base.html` (the `P PantryPal` mark)
 Size: **XS**
@@ -278,7 +278,16 @@ surface, it feels understated.
 
 **Recommendation:** Zero code change urgency — but if you ever want the
 app to feel less like a form and more like a product, this is where it
-starts. Could commission a small mark. Deferred.
+starts. Could commission a small mark.
+
+**Final fix:** replaced the plain green `P` tile with an inline pantry-bag
+mark in a green gradient app tile, tightened the `PantryPal` wordmark, and
+added a tiny `Pantry + meals` descriptor. Kept the existing compact header
+layout and home link.
+
+**Test coverage:** `tests/test_phase_7w.py` guards the accessible home link,
+inline pantry mark, product descriptor, and retirement of the old plain-letter
+tile.
 
 ---
 

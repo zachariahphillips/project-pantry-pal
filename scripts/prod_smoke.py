@@ -184,7 +184,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7V", '"phase":"7V"' in body or '"phase": "7V"' in body, body)
+    check("phase == 7W", '"phase":"7W"' in body or '"phase": "7W"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")

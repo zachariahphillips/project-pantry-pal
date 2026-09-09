@@ -9,10 +9,11 @@ Phase 2A: households — items are owned by a household, with provenance
           (who added each item) preserved for the "added by X" stamps.
 Phase 2B: invite/join — magic-link tokens let users share a household.
 Phase 2C: deploy — Dockerfile + Fly.io config; app served via gunicorn
-Phase 7V: PythonAnywhere free deploy path; SQLite WAL can be disabled for
-          network filesystems
           with single worker (SQLite single-writer constraint) and a
           persistent volume mounted at /data for the DB file.
+Phase 7V: PythonAnywhere free deploy path; SQLite WAL can be disabled for
+          network filesystems.
+Phase 7W: header brand mark polish from the UX audit.
 Phase 3A: AI meal planning — POST /meal-plan takes a free-text prompt,
           ships it + the household's pantry to OpenAI in JSON mode,
           stores the response as a MealPlan row, and renders a card
@@ -67,7 +68,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "7V"
+APP_PHASE = "7W"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 SQLITE_JOURNAL_MODE_ENV = "SQLITE_JOURNAL_MODE"
 SQLITE_DEFAULT_JOURNAL_MODE = "WAL"

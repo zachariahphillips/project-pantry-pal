@@ -390,9 +390,25 @@
 <body class="min-h-screen bg-stone-50 text-stone-900 antialiased">
   <header class="border-b border-stone-200 bg-white">
     <div class="mx-auto flex max-w-md items-center justify-between px-5 py-4">
-      <a href="{{ url_for('index') }}" class="flex items-center gap-2.5">
-        <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-green-600 text-base font-bold text-white">P</span>
-        <span class="text-base font-semibold tracking-tight">PantryPal</span>
+      <a href="{{ url_for('index') }}"
+         aria-label="PantryPal home"
+         class="group flex items-center gap-3 rounded-2xl pr-2 transition active:scale-[0.99]">
+        {# Phase 7W (UX plan §2.6): richer mark without introducing an asset pipeline. #}
+        <span aria-hidden="true"
+              class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-green-600 to-lime-600 text-white shadow-sm shadow-green-900/20 ring-1 ring-green-500/20 transition group-active:scale-[0.98]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+               class="h-7 w-7 drop-shadow-sm">
+            <path d="M7.25 8.25h9.5l-.65 10.25a1.4 1.4 0 0 1-1.4 1.3H9.3a1.4 1.4 0 0 1-1.4-1.3L7.25 8.25Z" fill="rgba(255,255,255,0.16)" />
+            <path d="M9 8.25V6.75A2.75 2.75 0 0 1 11.75 4h.5A2.75 2.75 0 0 1 15 6.75v1.5" />
+            <path d="M10 12h4M10 15.5h3" />
+            <path d="M6.5 8.25h11" />
+          </svg>
+        </span>
+        <span class="leading-tight">
+          <span class="block text-[0.98rem] font-extrabold tracking-tight text-stone-950">PantryPal</span>
+          <span class="block text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-green-700">Pantry + meals</span>
+        </span>
       </a>
       <div class="flex items-center gap-3">
         {% block header_right %}
