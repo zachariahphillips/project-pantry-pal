@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7W current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, and a PythonAnywhere-safe SQLite journal-mode switch. Full regression is **659 pytest tests** green.
+**Status:** Phase 7X current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, and a one-command PythonAnywhere deploy verifier. Full regression is **667 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -89,7 +89,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "7W",
+#   "phase": "7X",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -213,17 +213,23 @@ Static-file mappings are optional for this low-traffic app because Flask can
 serve the manifest and icons. If you add one later, map `/static/` to
 `/home/<your-pythonanywhere-username>/project-pantry-pal/static/`.
 
-### PythonAnywhere post-deploy smoke check
+### PythonAnywhere deploy verification (Phase 7X)
 
-Run the smoke script after deploys that touch auth, cookies, database boot,
-invites, or core pantry/shopping flows. It signs up randomized throwaway users,
-adds a pantry item, mints an invite, joins a roommate into the household,
-verifies shared visibility, and checks hardened cookie flags when pointed at
-HTTPS.
+Run the verifier after deploys that touch auth, cookies, database boot, invites,
+or core pantry/shopping flows. It signs up randomized throwaway users, adds a
+pantry item, mints an invite, joins a roommate into the household, verifies
+shared visibility, and checks hardened cookie flags.
+
+The wrapper accepts either your PythonAnywhere username or the full deploy URL.
+It forces HTTPS and secure-cookie checks, so this is the preferred command for
+the PythonAnywhere happy path:
 
 ```bash
-BASE=https://<your-pythonanywhere-username>.pythonanywhere.com EXPECT_SECURE_COOKIES=1 \
-  .venv/bin/python scripts/prod_smoke.py
+.venv/bin/python scripts/verify_pythonanywhere_deploy.py <your-pythonanywhere-username>
+
+# Equivalent, useful in shell history or automation:
+PYTHONANYWHERE_BASE=https://<your-pythonanywhere-username>.pythonanywhere.com \
+  .venv/bin/python scripts/verify_pythonanywhere_deploy.py
 ```
 
 Expected coverage:
@@ -605,8 +611,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7T:** Backup restore verification — done
 - **Phase 7U:** Scripted restore drill — done
 - **Phase 7V:** PythonAnywhere free deploy path — done
-- **Phase 7W:** Header brand mark polish — current
-- **Next:** Small backlog items such as PythonAnywhere deploy verification and backup reminders
+- **Phase 7W:** Header brand mark polish — done
+- **Phase 7X:** PythonAnywhere deploy verification — current
+- **Next:** Small backlog items such as backup reminders
 
 Full plan in [PLAN.md](./PLAN.md).
 

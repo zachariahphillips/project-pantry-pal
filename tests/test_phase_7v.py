@@ -17,6 +17,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from scripts import prod_smoke
 from app import SQLITE_DEFAULT_JOURNAL_MODE, create_app
 
 
@@ -81,6 +82,49 @@ def test_legacy_fly_backup_workflow_is_manual_only():
     assert "workflow_dispatch:" in workflow
     assert "schedule:" not in workflow
     assert "legacy `.github/workflows/backup.yml` workflow is manual-only" in readme
+
+
+def test_prod_smoke_posts_send_https_csrf_referrer(monkeypatch):
+    """PythonAnywhere exposed this on the first real deploy smoke.
+
+    Flask-WTF requires a same-origin Referer on HTTPS POSTs. A browser sends
+    one automatically, but urllib does not, so the smoke script was getting a
+    400 before it ever reached signup validation.
+    """
+    captured = {}
+
+    class FakeResponse:
+        status = 200
+        url = "https://ZachariahPhillips.pythonanywhere.com/signup"
+        headers = {}
+
+        def read(self):
+            return b"ok"
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            captured["headers"] = dict(request.header_items())
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        prod_smoke,
+        "BASE",
+        "https://ZachariahPhillips.pythonanywhere.com",
+    )
+    monkeypatch.setattr(prod_smoke, "OPENER", FakeOpener())
+
+    status, body, final_url = prod_smoke._request(
+        "POST", "/signup", data={"csrf_token": "token"}
+    )
+
+    assert status == 200
+    assert body == "ok"
+    assert final_url == "https://ZachariahPhillips.pythonanywhere.com/signup"
+    assert captured["headers"]["Referer"] == (
+        "https://ZachariahPhillips.pythonanywhere.com/signup"
+    )
+    assert captured["headers"]["Content-type"] == "application/x-www-form-urlencoded"
 
 
 def test_pythonanywhere_can_disable_sqlite_wal(tmp_path, monkeypatch):

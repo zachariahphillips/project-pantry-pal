@@ -1,5 +1,5 @@
 """
-Phase 2C prod-shape smoke test.
+PantryPal prod-shape smoke test.
 
 Hits a running gunicorn instance (NOT the Flask dev server) on port 8080
 and exercises the full Phase 1B / 1C / 2A / 2B happy paths to confirm
@@ -31,6 +31,9 @@ To run all four steps against a backup file instead, use the restore drill:
 Run against an HTTPS deploy to include Phase 7I cookie hardening checks:
     BASE=https://<your-pythonanywhere-username>.pythonanywhere.com EXPECT_SECURE_COOKIES=1 \
         .venv/bin/python scripts/prod_smoke.py
+
+For PythonAnywhere, prefer the Phase 7X wrapper:
+    .venv/bin/python scripts/verify_pythonanywhere_deploy.py <username>
 
 Expected PASS coverage: /healthz current phase, signup, htmx pantry add,
 invite minting, anonymous invite preview, invited roommate signup, shared
@@ -93,6 +96,10 @@ def _request(
     if data is not None:
         body = urllib.parse.urlencode(data).encode("utf-8")
         headers["Content-Type"] = "application/x-www-form-urlencoded"
+        # Flask-WTF requires a same-origin Referer for CSRF-protected POSTs
+        # over HTTPS. Browsers send this; the smoke script has to as well or
+        # PythonAnywhere deploys fail before app-level form validation runs.
+        headers["Referer"] = url
     if extra_headers:
         headers.update(extra_headers)
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
@@ -176,7 +183,7 @@ def _check_cookie_hardened(cookie_name: str) -> None:
 
 
 def main() -> int:
-    print("Phase 2C prod-shape smoke test")
+    print("PantryPal prod-shape smoke test")
     print(f"  target: {BASE}")
     print()
 
@@ -184,7 +191,7 @@ def main() -> int:
     print("Healthz:")
     status, body, _ = _request("GET", "/healthz")
     check("status 200", status == 200, f"got {status}")
-    check("phase == 7W", '"phase":"7W"' in body or '"phase": "7W"' in body, body)
+    check("phase == 7X", '"phase":"7X"' in body or '"phase": "7X"' in body, body)
 
     # ----- Phase 1A: signup -----
     print("\nSignup:")
