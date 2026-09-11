@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7X current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, and a one-command PythonAnywhere deploy verifier. Full regression is **667 pytest tests** green.
+**Status:** Phase 7Y current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, and manual-backup reminders. Full regression is **674 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -89,7 +89,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "7X",
+#   "phase": "7Y",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -275,6 +275,20 @@ python scripts/backup_sqlite.py \
   --verify \
   --keep 14
 ```
+
+### PythonAnywhere backup reminder (Phase 7Y)
+
+Because the no-cost PythonAnywhere path uses manual backups, run the reminder
+check when you open a PythonAnywhere Bash console or after a deploy:
+
+```bash
+python scripts/backup_reminder.py --backup-dir backups --max-age-days 7
+```
+
+Exit code 0 means the newest `pantrypal-*.sqlite3` backup is recent enough.
+Exit code 1 means there is no backup or the newest backup is older than the
+threshold; the output prints the exact `python scripts/backup_sqlite.py ...`
+command to run next.
 
 Download important backup files from PythonAnywhere's **Files** tab. Before
 trusting one, run the local restore drill against the downloaded file:
@@ -612,8 +626,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7U:** Scripted restore drill — done
 - **Phase 7V:** PythonAnywhere free deploy path — done
 - **Phase 7W:** Header brand mark polish — done
-- **Phase 7X:** PythonAnywhere deploy verification — current
-- **Next:** Small backlog items such as backup reminders
+- **Phase 7X:** PythonAnywhere deploy verification — done
+- **Phase 7Y:** Backup reminders — current
+- **Next:** Small backlog items such as post-backup download/check reminders or other low-touch reliability work
 
 Full plan in [PLAN.md](./PLAN.md).
 
