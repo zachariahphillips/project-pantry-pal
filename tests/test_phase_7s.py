@@ -53,5 +53,8 @@ def test_readme_failure_symptoms_match_the_backup_workflow():
 def test_readme_documents_manual_backup_fallback_and_escalation():
     readme = (ROOT / "README.md").read_text()
 
-    assert 'fly ssh console -C "python /app/scripts/backup_sqlite.py --keep 14"' in readme
+    assert (
+        'fly ssh console -C "python /app/scripts/backup_sqlite.py '
+        "--source /data/pantrypal.sqlite3 --dest-dir /data/backups --keep 14\""
+    ) in readme
     assert "Escalate only if you are actively using Fly again" in readme

@@ -102,13 +102,7 @@ def test_backup_reminder_status_warns_when_latest_backup_is_stale(tmp_path):
 
 
 def test_backup_command_matches_pythonanywhere_runbook_paths():
-    assert backup_command() == (
-        "python scripts/backup_sqlite.py "
-        "--source data/pantrypal.sqlite3 "
-        "--dest-dir backups "
-        "--verify "
-        "--keep 14"
-    )
+    assert backup_command() == "python scripts/backup_sqlite.py --verify --keep 14"
 
 
 def test_main_returns_nonzero_for_stale_or_invalid_threshold(tmp_path, capsys):

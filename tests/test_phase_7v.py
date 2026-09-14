@@ -53,7 +53,8 @@ def test_readme_documents_pythonanywhere_sqlite_and_backup_path():
     assert "DATABASE_URL=sqlite:////home/<your-pythonanywhere-username>" in readme
     assert "SQLITE_JOURNAL_MODE=DELETE" in readme
     assert "PythonAnywhere Bash console" in readme
-    assert "--source data/pantrypal.sqlite3" in readme
+    assert "backup_sqlite.py` defaults to" in readme
+    assert "`data/pantrypal.sqlite3` and `backups`" in readme
     assert "scripts/restore_drill.py backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3" in readme
 
 

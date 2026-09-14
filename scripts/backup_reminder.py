@@ -48,13 +48,13 @@ def backup_command(
         backup_dir: Path = DEFAULT_BACKUP_DIR,
         keep: int = DEFAULT_KEEP,
 ) -> str:
-    return (
-        "python scripts/backup_sqlite.py "
-        f"--source {source} "
-        f"--dest-dir {backup_dir} "
-        "--verify "
-        f"--keep {keep}"
-    )
+    parts = ["python scripts/backup_sqlite.py"]
+    if source != DEFAULT_SOURCE:
+        parts.extend(["--source", str(source)])
+    if backup_dir != DEFAULT_BACKUP_DIR:
+        parts.extend(["--dest-dir", str(backup_dir)])
+    parts.extend(["--verify", "--keep", str(keep)])
+    return " ".join(parts)
 
 
 def latest_backup(backup_dir: Path) -> Path | None:

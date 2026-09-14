@@ -1,9 +1,9 @@
 """
 Create a consistent SQLite backup using SQLite's online backup API.
 
-Default paths match PantryPal's Fly deploy:
+Default paths match PantryPal's PythonAnywhere deploy:
 
-    python /app/scripts/backup_sqlite.py
+    python scripts/backup_sqlite.py
 
 Local usage:
 
@@ -11,9 +11,10 @@ Local usage:
         --source instance/pantrypal.sqlite3 \
         --dest-dir backups
 
-GitHub Actions artifact capture:
+Legacy Fly GitHub Actions artifact capture:
 
-    python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14
+    python /app/scripts/backup_sqlite.py --source /data/pantrypal.sqlite3 \
+        --dest-dir /data/backups --verify --emit-base64 --keep 14
 
 Verify a backup file you already have (e.g. a decoded artifact):
 
@@ -34,8 +35,8 @@ from typing import TextIO
 from urllib.parse import quote
 
 
-DEFAULT_SOURCE = Path("/data/pantrypal.sqlite3")
-DEFAULT_DEST_DIR = Path("/data/backups")
+DEFAULT_SOURCE = Path("data/pantrypal.sqlite3")
+DEFAULT_DEST_DIR = Path("backups")
 BACKUP_FILENAME_PREFIX = "pantrypal"
 BACKUP_FILE_GLOB = f"{BACKUP_FILENAME_PREFIX}-*.sqlite3"
 BASE64_BEGIN_MARKER = "BEGIN_PANTRYPAL_SQLITE_BACKUP_BASE64"

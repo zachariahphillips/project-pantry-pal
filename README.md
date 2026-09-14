@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 7Z current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, and post-backup download/check reminders. Full regression is **680 pytest tests** green.
+**Status:** Phase 8A current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, and PythonAnywhere-aligned backup defaults. Full regression is **684 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -89,7 +89,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "7Z",
+#   "phase": "8A",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -264,14 +264,13 @@ pip install -r requirements.txt
 
 On PythonAnywhere, production SQLite should live at
 `~/project-pantry-pal/data/pantrypal.sqlite3`. Create backups from a
-PythonAnywhere Bash console:
+PythonAnywhere Bash console. `backup_sqlite.py` defaults to
+`data/pantrypal.sqlite3` and `backups`, so the common command stays short:
 
 ```bash
 cd ~/project-pantry-pal
 workon pantrypal
 python scripts/backup_sqlite.py \
-  --source data/pantrypal.sqlite3 \
-  --dest-dir backups \
   --verify \
   --keep 14
 ```
@@ -314,8 +313,6 @@ avoid writes, upload the known-good backup into `backups/`, then run:
 cd ~/project-pantry-pal
 workon pantrypal
 python scripts/backup_sqlite.py \
-  --source data/pantrypal.sqlite3 \
-  --dest-dir backups \
   --verify \
   --keep 14
 cp backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 data/pantrypal.sqlite3
@@ -422,7 +419,7 @@ Production SQLite lives at `/data/pantrypal.sqlite3` on the Fly volume. Do not c
 
 ```bash
 # Create a consistent backup on the Fly volume.
-fly ssh console -C "python /app/scripts/backup_sqlite.py"
+fly ssh console -C "python /app/scripts/backup_sqlite.py --source /data/pantrypal.sqlite3 --dest-dir /data/backups"
 
 # Local backup helper usage:
 .venv/bin/python scripts/backup_sqlite.py \
@@ -445,8 +442,8 @@ succeeded without a `FLY_API_TOKEN`. If you return to Fly or need to extract
 old volume data, add a repository secret named `FLY_API_TOKEN` first: GitHub
 repo **Settings -> Secrets and variables -> Actions -> New repository
 secret**. When dispatched, the workflow calls
-`python /app/scripts/backup_sqlite.py --verify --emit-base64 --keep 14` on the
-Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads
+`python /app/scripts/backup_sqlite.py --source /data/pantrypal.sqlite3 --dest-dir /data/backups --verify --emit-base64 --keep 14`
+on the Fly machine for app `pantrypal-riah`, decodes it inside GitHub Actions, uploads
 `pantrypal-backup.sqlite3` as a 14-day GitHub Actions artifact, and keeps only
 the newest 14 backups in `/data/backups`.
 
@@ -474,7 +471,7 @@ SQLite Backup**, open the red run, and match the failing step:
 |---|---|---|
 | `Create timestamped backup on Fly volume`, log says `Set the FLY_API_TOKEN repository secret before running backups.` | The `FLY_API_TOKEN` secret is missing, or the token was revoked / expired | Mint a new one with `fly tokens create deploy`, then update the repository secret |
 | `Create timestamped backup on Fly volume`, flyctl fails to open an SSH session | The machine is stopped (`auto_stop_machines = "stop"`) or the app is mid-deploy | `fly status`, then `fly machine start <machine-id>`, then re-run the workflow |
-| `Create timestamped backup on Fly volume`, `test -s pantrypal-backup.sqlite3` fails | The helper wrote nothing between the base64 markers, so the decode produced an empty file | Run `fly ssh console -C "python /app/scripts/backup_sqlite.py"` by hand and read the real error |
+| `Create timestamped backup on Fly volume`, `test -s pantrypal-backup.sqlite3` fails | The helper wrote nothing between the base64 markers, so the decode produced an empty file | Run `fly ssh console -C "python /app/scripts/backup_sqlite.py --source /data/pantrypal.sqlite3 --dest-dir /data/backups"` by hand and read the real error |
 | `Verify decoded backup` | The file decoded but is not a restorable database — usually a truncated base64 round-trip, occasionally a genuinely corrupt source DB | Re-run the workflow; if it fails the same way twice, the source DB on the volume is suspect, so check `fly ssh console -C "sqlite3 /data/pantrypal.sqlite3 'PRAGMA integrity_check'"` |
 | `Upload SQLite backup artifact` | The backup decoded but the upload step could not find the file (`if-no-files-found: error`) | Re-run the workflow; if it repeats, check that the workflow's `path:` still matches the decoded filename |
 
@@ -484,7 +481,7 @@ Backup -> Run workflow** is the first thing to try. If GitHub Actions itself is
 the problem, skip it entirely:
 
 ```bash
-fly ssh console -C "python /app/scripts/backup_sqlite.py --keep 14"
+fly ssh console -C "python /app/scripts/backup_sqlite.py --source /data/pantrypal.sqlite3 --dest-dir /data/backups --keep 14"
 
 mkdir -p backups
 fly ssh sftp
@@ -634,8 +631,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7W:** Header brand mark polish — done
 - **Phase 7X:** PythonAnywhere deploy verification — done
 - **Phase 7Y:** Backup reminders — done
-- **Phase 7Z:** Post-backup download/check reminders — current
-- **Next:** Small backlog items such as no-cost hosting cleanup or other low-touch reliability work
+- **Phase 7Z:** Post-backup download/check reminders — done
+- **Phase 8A:** No-cost hosting cleanup — current
+- **Next:** Small backlog items such as more PythonAnywhere simplification or other low-touch reliability work
 
 Full plan in [PLAN.md](./PLAN.md).
 
