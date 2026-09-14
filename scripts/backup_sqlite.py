@@ -18,6 +18,9 @@ GitHub Actions artifact capture:
 Verify a backup file you already have (e.g. a decoded artifact):
 
     python scripts/backup_sqlite.py --verify-file pantrypal-backup.sqlite3
+
+After creating a backup, the CLI reminds you to download it from the host and
+run the restore drill locally before trusting it.
 """
 from __future__ import annotations
 
@@ -174,6 +177,25 @@ def prune_old_backups(dest_dir: Path, keep: int) -> list[Path]:
     return to_delete
 
 
+def restore_drill_command(
+        backup_path: Path,
+        *,
+        local_backup_dir: Path = Path("backups"),
+) -> str:
+    local_path = local_backup_dir / backup_path.name
+    return f".venv/bin/python scripts/restore_drill.py {local_path}"
+
+
+def post_backup_reminder(backup_path: Path) -> str:
+    return (
+        "Post-backup reminder:\n"
+        f"  1. Download {backup_path.name} from PythonAnywhere's Files tab "
+        "into your local backups/ folder.\n"
+        f"  2. Run: {restore_drill_command(backup_path)}\n"
+        "Only trust this backup after the restore drill exits 0."
+    )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Create a consistent SQLite backup.",
@@ -268,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.keep is not None:
         deleted = prune_old_backups(backup_path.parent, args.keep)
         print(f"Pruned {len(deleted)} old backup(s)", file=sys.stderr)
+    print(post_backup_reminder(backup_path), file=sys.stderr)
     return 0
 
 
