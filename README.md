@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 8A current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, and PythonAnywhere-aligned backup defaults. Full regression is **684 pytest tests** green.
+**Status:** Phase 8B current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, and a PythonAnywhere preflight helper. Full regression is **692 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -89,7 +89,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "8A",
+#   "phase": "8B",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -181,6 +181,20 @@ Two details matter:
   defaults to WAL locally, but WAL sidecars are a poor fit for
   PythonAnywhere's network-backed free filesystem.
 
+### PythonAnywhere preflight (Phase 8B)
+
+Before pressing Reload in the PythonAnywhere Web tab, run:
+
+```bash
+python scripts/pythonanywhere_preflight.py --create-dirs
+```
+
+The preflight checks that `.env` is present, `FLASK_ENV=production`,
+`FLASK_DEBUG=0`, `FLASK_SECRET_KEY` is not the dev placeholder, `DATABASE_URL`
+uses an absolute `sqlite:////.../data/pantrypal.sqlite3` path,
+`SQLITE_JOURNAL_MODE=DELETE`, and `data/` + `backups/` exist. Missing
+`OPENAI_API_KEY` is only a warning because AI meal planning is optional.
+
 Initialize the app once from the Bash console. Importing `app` runs
 `db.create_all()` and the in-place migrations:
 
@@ -257,6 +271,7 @@ cd ~/project-pantry-pal
 git pull
 workon pantrypal
 pip install -r requirements.txt
+python scripts/pythonanywhere_preflight.py --create-dirs
 # Then press Reload in the PythonAnywhere Web tab.
 ```
 
@@ -632,8 +647,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7X:** PythonAnywhere deploy verification — done
 - **Phase 7Y:** Backup reminders — done
 - **Phase 7Z:** Post-backup download/check reminders — done
-- **Phase 8A:** No-cost hosting cleanup — current
-- **Next:** Small backlog items such as more PythonAnywhere simplification or other low-touch reliability work
+- **Phase 8A:** No-cost hosting cleanup — done
+- **Phase 8B:** PythonAnywhere preflight helper — current
+- **Next:** Small backlog items such as no-cost deploy runbook closeout or other low-touch reliability work
 
 Full plan in [PLAN.md](./PLAN.md).
 
