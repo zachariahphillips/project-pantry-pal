@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 8B current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, and a PythonAnywhere preflight helper. Full regression is **692 pytest tests** green.
+**Status:** Phase 8C current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and the remaining Tailwind build/dark-mode work intentionally deferred. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, a PythonAnywhere preflight helper, and a no-cost deploy runbook checklist. Full regression is **696 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -89,7 +89,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "8B",
+#   "phase": "8C",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -137,6 +137,23 @@ SQLite available on free accounts, but their own docs warn that SQLite on the
 cloud filesystem can be slower and less concurrency-friendly. That is fine for
 a low-traffic personal pantry app; if this ever becomes a launched product,
 move the database to Postgres instead.
+
+### PythonAnywhere happy-path checklist (Phase 8C)
+
+Use this as the short version once the details below are familiar:
+
+1. **Set up or update code:** clone/pull the repo, activate the `pantrypal`
+   virtualenv, and run `pip install -r requirements.txt`.
+2. **Check config:** run `python scripts/pythonanywhere_preflight.py --create-dirs`.
+3. **Reload:** press **Reload** in the PythonAnywhere Web tab.
+4. **Verify deploy:** run
+   `.venv/bin/python scripts/verify_pythonanywhere_deploy.py <your-pythonanywhere-username>`.
+5. **Check backups:** run
+   `python scripts/backup_reminder.py --backup-dir backups --max-age-days 7`;
+   if it warns, run `python scripts/backup_sqlite.py --verify --keep 14`.
+
+Everything below is detail for one-time setup, restores, or legacy Fly data
+extraction.
 
 ### PythonAnywhere one-time setup
 
@@ -339,6 +356,8 @@ cp backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3 data/pantrypal.sqlite3
 Fly.io was the original deploy target. These notes remain for history, for
 extracting any old Fly volume data, and in case you later decide the paid
 hosting tradeoff is worth it. They are no longer the recommended no-cost path.
+If you are using PythonAnywhere, you can ignore the legacy Fly, Docker, and
+GitHub Actions backup notes below unless you need old Fly volume data.
 
 The app ships with everything you need to deploy: a `Dockerfile` (gunicorn-based, single worker so SQLite stays single-writer), a `.dockerignore` that keeps your local DB + venv out of the image, and a `fly.toml` with sensible Hobby-tier defaults (region `sea`, persistent volume at `/data`, auto-stop machines so cold starts are free).
 
@@ -648,8 +667,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 7Y:** Backup reminders — done
 - **Phase 7Z:** Post-backup download/check reminders — done
 - **Phase 8A:** No-cost hosting cleanup — done
-- **Phase 8B:** PythonAnywhere preflight helper — current
-- **Next:** Small backlog items such as no-cost deploy runbook closeout or other low-touch reliability work
+- **Phase 8B:** PythonAnywhere preflight helper — done
+- **Phase 8C:** No-cost deploy runbook closeout — current
+- **Next:** Small backlog items such as real-device polish, Tailwind build/dark mode, or other optional improvements
 
 Full plan in [PLAN.md](./PLAN.md).
 
