@@ -20,6 +20,7 @@ Phase 7Z: post-backup download/check reminders.
 Phase 8A: no-cost hosting cleanup; backup defaults match PythonAnywhere.
 Phase 8B: PythonAnywhere preflight helper for setup/redeploy checks.
 Phase 8C: no-cost deploy runbook closeout checklist.
+Phase 8D: real-device tap-target polish for signed-in mobile actions.
 Phase 3A: AI meal planning — POST /meal-plan takes a free-text prompt,
           ships it + the household's pantry to OpenAI in JSON mode,
           stores the response as a MealPlan row, and renders a card
@@ -74,7 +75,7 @@ log = logging.getLogger(__name__)
 
 load_dotenv()
 
-APP_PHASE = "8C"
+APP_PHASE = "8D"
 SQLITE_BUSY_TIMEOUT_SECONDS = 15
 SQLITE_JOURNAL_MODE_ENV = "SQLITE_JOURNAL_MODE"
 SQLITE_DEFAULT_JOURNAL_MODE = "WAL"

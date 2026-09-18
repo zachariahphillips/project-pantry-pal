@@ -416,7 +416,8 @@
             <span class="hidden text-sm text-stone-600 sm:inline">{{ current_user.name }}</span>
             <form action="{{ url_for('logout') }}" method="post" class="m-0">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-              <button type="submit" class="rounded-lg px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100">
+              {# Phase 8D: keep the signed-in header action thumb-friendly on phones. #}
+              <button type="submit" class="inline-flex h-11 items-center justify-center rounded-xl px-3 text-sm font-medium text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-300">
                 Sign out
               </button>
             </form>
