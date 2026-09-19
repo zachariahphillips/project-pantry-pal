@@ -446,9 +446,9 @@ card the way the shopping quick-add bar is. Reads as one composed control.
 
 ## 6. Cross-cutting infrastructure — P2, deferred
 
-### 6.1 Tailwind CDN causes ~300–600ms of white-flash on load — deferred
+### 6.1 Tailwind CDN causes ~300–600ms of white-flash on load — done in Phase 8E
 
-Where: `templates/base.html` (`<script src="https://cdn.tailwindcss.com">`)
+Pre-8E location: `templates/base.html` loaded Tailwind from the CDN.
 Size: **M**
 
 **What's wrong:** Loading Tailwind via CDN means the browser runs a JIT
@@ -463,8 +463,10 @@ appear."
 - Just accept the flash — it's a personal side project, deploy overhead
   matters more than a 300ms flash.
 
-**Recommendation:** Defer. Only take on when you have another reason to
-add a build step.
+**Status:** Shipped in Phase 8E with a pinned Tailwind CLI build that outputs
+committed `static/css/app.css`. PythonAnywhere deploys can keep using the
+committed CSS without a Node build step, while local style changes run
+`npm run build:css`.
 
 ### 6.2 No dark mode — deferred
 

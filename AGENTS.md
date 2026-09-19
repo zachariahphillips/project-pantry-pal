@@ -26,8 +26,10 @@ OpenAI-powered meal planner. Full stack + deploy story in `README.md`.
 
 ```bash
 source .venv/bin/activate         # Python 3.11+
+npm ci                            # install Tailwind CLI when changing CSS/classes
+npm run build:css                 # rebuild committed static/css/app.css
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, 700 tests as of Phase 8D
+pytest -q                         # full regression, 706 tests as of Phase 8E
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
 

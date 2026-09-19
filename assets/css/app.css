@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    visibility: hidden;
+  }
+
+  /* Inputs at 16px+ prevent iOS Safari from auto-zooming on focus. */
+  input,
+  button,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@layer components {
+  /* Fade newly inserted htmx content in to make swaps feel less abrupt. */
+  .htmx-added {
+    opacity: 0;
+  }
+
+  .htmx-settling .htmx-added {
+    opacity: 1;
+    transition: opacity 200ms;
+  }
+
+  /* Tab bar respects the iPhone home-indicator safe area. */
+  .tab-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  [data-unit-option]:hover,
+  [data-unit-option][data-active] {
+    background-color: rgb(240 253 244); /* green-50 */
+    color: rgb(20 83 45); /* green-900 */
+  }
+}

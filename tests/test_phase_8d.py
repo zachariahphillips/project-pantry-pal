@@ -20,7 +20,6 @@ from tests.conftest import Client, id_for, sign_up
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 PLAN = ROOT / "PLAN.md"
-AGENTS = ROOT / "AGENTS.md"
 
 
 def _class_for_button(html: str, label: str) -> str:
@@ -64,20 +63,16 @@ def test_shopping_checked_actions_are_thumb_sized_targets(client: Client):
     assert "rounded-xl" in home_classes
 
 
-def test_phase_8d_is_documented_as_current_mobile_polish():
+def test_phase_8d_is_documented_as_completed_mobile_polish():
     readme = README.read_text()
     plan = PLAN.read_text()
 
-    assert "**Status:** Phase 8D current" in readme
     assert "real-device tap-target polish" in readme
-    assert "**Current status (Phase 8D" in plan
     assert "real-device tap-target polish" in plan
 
 
-def test_phase_history_and_agent_test_count_are_current():
+def test_phase_history_marks_8d_done():
     readme = README.read_text()
-    agents = AGENTS.read_text()
 
     assert "- **Phase 8C:** No-cost deploy runbook closeout — done" in readme
-    assert "- **Phase 8D:** Real-device tap-target polish — current" in readme
-    assert "full regression, 700 tests as of Phase 8D" in agents
+    assert "- **Phase 8D:** Real-device tap-target polish — done" in readme
