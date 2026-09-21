@@ -38,3 +38,144 @@
     color: rgb(20 83 45); /* green-900 */
   }
 }
+
+/* Phase 8F: system dark mode. Kept as a compact override layer so the
+   existing template classes keep working without a manual theme toggle. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: rgb(12 10 9); /* stone-950 */
+    color: rgb(245 245 244); /* stone-100 */
+  }
+
+  .bg-white,
+  .bg-white\/95 {
+    background-color: rgb(28 25 23); /* stone-900 */
+  }
+
+  .bg-white\/60 {
+    background-color: rgb(28 25 23 / 0.72);
+  }
+
+  .bg-stone-50,
+  .hover\:bg-stone-50:hover {
+    background-color: rgb(12 10 9); /* stone-950 */
+  }
+
+  .bg-stone-100,
+  .hover\:bg-stone-100:hover {
+    background-color: rgb(41 37 36); /* stone-800 */
+  }
+
+  .bg-stone-200 {
+    background-color: rgb(68 64 60); /* stone-700 */
+  }
+
+  .bg-stone-300 {
+    background-color: rgb(87 83 78); /* stone-600 */
+  }
+
+  .border-stone-100,
+  .border-stone-200,
+  .border-stone-300 {
+    border-color: rgb(68 64 60); /* stone-700 */
+  }
+
+  .ring-stone-300 {
+    --tw-ring-color: rgb(68 64 60); /* stone-700 */
+  }
+
+  .text-stone-950,
+  .text-stone-900,
+  .text-stone-800,
+  .text-stone-700 {
+    color: rgb(245 245 244); /* stone-100 */
+  }
+
+  .text-stone-600 {
+    color: rgb(214 211 209); /* stone-300 */
+  }
+
+  .text-stone-500,
+  .text-stone-400 {
+    color: rgb(168 162 158); /* stone-400 */
+  }
+
+  .text-stone-300 {
+    color: rgb(120 113 108); /* stone-500 */
+  }
+
+  .placeholder\:text-stone-400::placeholder {
+    color: rgb(120 113 108); /* stone-500 */
+  }
+
+  .bg-green-50,
+  .bg-green-50\/40,
+  .bg-green-50\/60,
+  .bg-green-50\/70,
+  .hover\:bg-green-50:hover {
+    background-color: rgb(20 83 45 / 0.35); /* green-900 */
+  }
+
+  .border-green-200,
+  .border-green-300 {
+    border-color: rgb(22 101 52); /* green-800 */
+  }
+
+  .ring-green-200 {
+    --tw-ring-color: rgb(22 101 52); /* green-800 */
+  }
+
+  .text-green-700,
+  .text-green-800,
+  .text-green-900 {
+    color: rgb(134 239 172); /* green-300 */
+  }
+
+  .bg-red-50,
+  .hover\:bg-red-50:hover {
+    background-color: rgb(127 29 29 / 0.32); /* red-900 */
+  }
+
+  .border-red-200,
+  .border-red-300 {
+    border-color: rgb(153 27 27); /* red-800 */
+  }
+
+  .ring-red-200 {
+    --tw-ring-color: rgb(153 27 27); /* red-800 */
+  }
+
+  .text-red-700,
+  .text-red-800,
+  .text-red-900 {
+    color: rgb(252 165 165); /* red-300 */
+  }
+
+  .bg-amber-50,
+  .bg-amber-50\/60 {
+    background-color: rgb(120 53 15 / 0.32); /* amber-900 */
+  }
+
+  .border-amber-200 {
+    border-color: rgb(180 83 9); /* amber-700 */
+  }
+
+  .text-amber-600,
+  .text-amber-700,
+  .text-amber-900 {
+    color: rgb(252 211 77); /* amber-300 */
+  }
+
+  .shadow-sm,
+  .shadow-lg {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+  }
+
+  .supports-\[backdrop-filter\]\:bg-white\/80 {
+    background-color: rgb(28 25 23 / 0.88) !important;
+  }
+}

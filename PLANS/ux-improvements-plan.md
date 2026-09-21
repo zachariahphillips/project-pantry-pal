@@ -468,7 +468,7 @@ committed `static/css/app.css`. PythonAnywhere deploys can keep using the
 committed CSS without a Node build step, while local style changes run
 `npm run build:css`.
 
-### 6.2 No dark mode — deferred
+### 6.2 No dark mode — done in Phase 8F
 
 Where: everywhere
 Size: **M**
@@ -477,8 +477,10 @@ Size: **M**
 supports it out of the box (`dark:` variants). Right now the app is
 light-only.
 
-**Recommendation:** Real work — every color would need a `dark:` twin.
-Defer until you feel it personally. Not a v1 priority.
+**Status:** Shipped in Phase 8F as system dark mode via
+`prefers-color-scheme: dark`. The first pass uses the compiled stylesheet to
+map the existing light utility classes onto dark surfaces, text, borders,
+alerts, and focus rings without adding a manual theme toggle.
 
 ---
 

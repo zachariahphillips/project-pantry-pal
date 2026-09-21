@@ -26,7 +26,6 @@ BASE_TEMPLATE = ROOT / "templates" / "base.html"
 MAINTENANCE_TEMPLATE = ROOT / "templates" / "maintenance.html"
 README = ROOT / "README.md"
 PLAN = ROOT / "PLAN.md"
-AGENTS = ROOT / "AGENTS.md"
 UX_PLAN = ROOT / "PLANS" / "ux-improvements-plan.md"
 
 
@@ -86,17 +85,12 @@ def test_compiled_css_contains_representative_generated_utilities():
     assert "group-open\\:rotate-90" in css
 
 
-def test_phase_8e_docs_and_agent_test_count_are_current():
+def test_phase_8e_docs_mark_tailwind_build_done():
     readme = README.read_text()
     plan = PLAN.read_text()
-    agents = AGENTS.read_text()
     ux_plan = UX_PLAN.read_text()
 
-    assert "**Status:** Phase 8E current" in readme
     assert "compiled Tailwind CSS build" in readme
-    assert "Full regression is **706 pytest tests** green" in readme
-    assert "**Current status (Phase 8E" in plan
     assert "compiled Tailwind CSS build" in plan
-    assert "full regression, 706 tests as of Phase 8E" in agents
-    assert "- **Phase 8E:** Tailwind build pipeline — current" in readme
+    assert "- **Phase 8E:** Tailwind build pipeline — done" in readme
     assert "Shipped in Phase 8E" in ux_plan
