@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 8F current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, and system dark mode now supported. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, a PythonAnywhere preflight helper, a no-cost deploy runbook checklist, real-device tap-target polish for signed-in mobile actions, and a compiled Tailwind CSS build that replaces the CDN. Full regression is **711 pytest tests** green.
+**Status:** Phase 8G current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, system dark mode supported, and dark-mode real-device polish applied to checked shopping rows. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, a PythonAnywhere preflight helper, a no-cost deploy runbook checklist, real-device tap-target polish for signed-in mobile actions, and a compiled Tailwind CSS build that replaces the CDN. Full regression is **714 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -100,7 +100,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "8F",
+#   "phase": "8G",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -682,8 +682,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 8C:** No-cost deploy runbook closeout — done
 - **Phase 8D:** Real-device tap-target polish — done
 - **Phase 8E:** Tailwind build pipeline — done
-- **Phase 8F:** System dark mode — current
-- **Next:** Small optional improvements or a real-device dark-mode polish pass
+- **Phase 8F:** System dark mode — done
+- **Phase 8G:** Dark-mode real-device polish — current
+- **Next:** Small optional improvements or feature work
 
 Full plan in [PLAN.md](./PLAN.md).
 

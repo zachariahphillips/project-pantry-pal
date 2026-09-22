@@ -112,6 +112,10 @@
     color: rgb(120 113 108); /* stone-500 */
   }
 
+  .\[\&\>\*\]\:opacity-60 > * {
+    opacity: 0.72 !important;
+  }
+
   .bg-green-50,
   .bg-green-50\/40,
   .bg-green-50\/60,

@@ -481,6 +481,8 @@ light-only.
 `prefers-color-scheme: dark`. The first pass uses the compiled stylesheet to
 map the existing light utility classes onto dark surfaces, text, borders,
 alerts, and focus rings without adding a manual theme toggle.
+Phase 8G followed with a phone-sized dark-mode polish pass and lifted the
+checked shopping-row dim state so completed items stay readable on dark cards.
 
 ---
 

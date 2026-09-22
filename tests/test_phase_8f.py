@@ -21,7 +21,6 @@ TAILWIND_CONFIG = ROOT / "tailwind.config.js"
 BASE_TEMPLATE = ROOT / "templates" / "base.html"
 README = ROOT / "README.md"
 PLAN = ROOT / "PLAN.md"
-AGENTS = ROOT / "AGENTS.md"
 UX_PLAN = ROOT / "PLANS" / "ux-improvements-plan.md"
 
 
@@ -70,17 +69,12 @@ def test_base_template_declares_light_and_dark_theme_colors():
     assert 'content="#0c0a09"' in html
 
 
-def test_phase_8f_docs_and_agent_test_count_are_current():
+def test_phase_8f_docs_mark_system_dark_mode_done():
     readme = README.read_text()
     plan = PLAN.read_text()
-    agents = AGENTS.read_text()
     ux_plan = UX_PLAN.read_text()
 
-    assert "**Status:** Phase 8F current" in readme
     assert "system dark mode" in readme
-    assert "Full regression is **711 pytest tests** green" in readme
-    assert "**Current status (Phase 8F" in plan
     assert "system dark mode" in plan
-    assert "full regression, 711 tests as of Phase 8F" in agents
-    assert "- **Phase 8F:** System dark mode — current" in readme
+    assert "- **Phase 8F:** System dark mode — done" in readme
     assert "Shipped in Phase 8F" in ux_plan

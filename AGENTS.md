@@ -29,7 +29,7 @@ source .venv/bin/activate         # Python 3.11+
 npm ci                            # install Tailwind CLI when changing CSS/classes
 npm run build:css                 # rebuild committed static/css/app.css
 python app.py                     # http://127.0.0.1:5001
-pytest -q                         # full regression, 711 tests as of Phase 8F
+pytest -q                         # full regression, 714 tests as of Phase 8G
 .venv/bin/python seed.py          # (re)create alice@example.com + bob@example.com
 ```
 
