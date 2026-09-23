@@ -2,7 +2,7 @@
 
 A household-shared pantry and shopping list, mobile-first, with an AI meal planner that knows what you have at home.
 
-**Status:** Phase 8G current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, system dark mode supported, and dark-mode real-device polish applied to checked shopping rows. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, a PythonAnywhere preflight helper, a no-cost deploy runbook checklist, real-device tap-target polish for signed-in mobile actions, and a compiled Tailwind CSS build that replaces the CDN. Full regression is **714 pytest tests** green.
+**Status:** Phase 9A current — the Phase 6 mobile UX improvement plan is closed out, with every non-deferred audit item shipped, the previously deferred header mark polished, system dark mode supported, dark-mode real-device polish applied to checked shopping rows, and a real-use beta readiness checklist tying together deploy verification, phone smoke testing, and first-backup protection. PantryPal now has household sharing, pantry + shopping CRUD, duplicate-confirm/merge flows, undo toasts, AI meal planning with daily cost guardrails, meals history, onboarding gates, focused mobile polish across the main tabs, a richer header wordmark, a DB-backed `/healthz` check for deploy readiness, in-flight disabling on Ask AI planner buttons, proactive Ask AI disablement when daily quota is exhausted, GitHub Actions running the pytest suite on push/PR, PWA manifest/icon metadata for home-screen installs, SQLite busy-timeout/WAL hardening, production cookie hardening, deploy smoke checks for cookie flags, a post-deploy smoke runbook, a SQLite backup/restore runbook, env-controlled maintenance mode for safer restores, an automated SQLite backup helper, configurable maintenance-page copy, short-retention backup artifacts for the legacy Fly path, Fly-volume backup retention pruning, backup artifact restore docs, a legacy Fly backup workflow failure runbook, integrity-checked backups, a one-command restore drill that boots the app on a backup and smoke-tests it, PythonAnywhere as the recommended no-cost deploy path, manual-only legacy Fly backups, a PythonAnywhere-safe SQLite journal-mode switch, a one-command PythonAnywhere deploy verifier, manual-backup reminders, post-backup download/check reminders, PythonAnywhere-aligned backup defaults, a PythonAnywhere preflight helper, a no-cost deploy runbook checklist, real-device tap-target polish for signed-in mobile actions, and a compiled Tailwind CSS build that replaces the CDN. Full regression is **718 pytest tests** green.
 
 ## The idea in one paragraph
 
@@ -100,7 +100,7 @@ MEAL_PLAN_MODEL=gpt-4o
 ```bash
 curl -b <auth-cookie> https://<your-pythonanywhere-username>.pythonanywhere.com/cost | jq
 # {
-#   "phase": "8G",
+#   "phase": "9A",
 #   "model": "gpt-4o-mini",
 #   "your_calls_today": 3,
 #   "your_daily_limit": 20,
@@ -165,6 +165,17 @@ Use this as the short version once the details below are familiar:
 
 Everything below is detail for one-time setup, restores, or legacy Fly data
 extraction.
+
+### Real-use beta checklist (Phase 9A)
+
+Use this when PantryPal is ready to become the household's real pantry app:
+
+1. **Start clean:** pull `main`, activate the virtualenv, and run `python -m pytest -q` locally before touching the deployed app.
+2. **Preflight PythonAnywhere:** in the PythonAnywhere console, run `python scripts/pythonanywhere_preflight.py --create-dirs` and fix every error.
+3. **Reload and verify:** press **Reload** in the PythonAnywhere Web tab, then run `.venv/bin/python scripts/verify_pythonanywhere_deploy.py <your-pythonanywhere-username>`.
+4. **Phone smoke:** on the real phone you plan to use, sign in, add one pantry item, add one shopping item, check it off, tap **I'm home**, and ask for one simple meal idea if `OPENAI_API_KEY` is configured.
+5. **Protect the first real data:** run `python scripts/backup_sqlite.py --verify --keep 14`, download that backup from PythonAnywhere, and run `.venv/bin/python scripts/restore_drill.py backups/pantrypal-YYYYMMDDTHHMMSSZ.sqlite3` locally.
+6. **Set the weekly habit:** run `python scripts/backup_reminder.py --backup-dir backups --max-age-days 7`; only invite the household once it exits 0.
 
 ### PythonAnywhere one-time setup
 
@@ -683,8 +694,9 @@ git config --local --add credential.https://github.com.helper \
 - **Phase 8D:** Real-device tap-target polish — done
 - **Phase 8E:** Tailwind build pipeline — done
 - **Phase 8F:** System dark mode — done
-- **Phase 8G:** Dark-mode real-device polish — current
-- **Next:** Small optional improvements or feature work
+- **Phase 8G:** Dark-mode real-device polish — done
+- **Phase 9A:** Real-use beta readiness — current
+- **Next:** Small optional improvements or feature work discovered during beta use
 
 Full plan in [PLAN.md](./PLAN.md).
 

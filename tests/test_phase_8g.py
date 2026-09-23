@@ -21,7 +21,6 @@ ASSET_INPUT = ROOT / "assets" / "css" / "app.css"
 COMPILED_CSS = ROOT / "static" / "css" / "app.css"
 README = ROOT / "README.md"
 PLAN = ROOT / "PLAN.md"
-AGENTS = ROOT / "AGENTS.md"
 UX_PLAN = ROOT / "PLANS" / "ux-improvements-plan.md"
 
 
@@ -41,17 +40,12 @@ def test_dark_mode_checked_row_opacity_is_in_compiled_css():
     assert "opacity:.72" in css
 
 
-def test_phase_8g_docs_and_agent_test_count_are_current():
+def test_phase_8g_docs_mark_dark_mode_polish_done():
     readme = README.read_text()
     plan = PLAN.read_text()
-    agents = AGENTS.read_text()
     ux_plan = UX_PLAN.read_text()
 
-    assert "**Status:** Phase 8G current" in readme
     assert "dark-mode real-device polish" in readme
-    assert "Full regression is **714 pytest tests** green" in readme
-    assert "**Current status (Phase 8G" in plan
     assert "dark-mode real-device polish" in plan
-    assert "full regression, 714 tests as of Phase 8G" in agents
-    assert "- **Phase 8G:** Dark-mode real-device polish — current" in readme
+    assert "- **Phase 8G:** Dark-mode real-device polish — done" in readme
     assert "Phase 8G" in ux_plan
