@@ -22,6 +22,7 @@
 #}
 <div id="shopping-item-{{ item.id }}"
      class="relative overflow-hidden rounded-2xl shadow-sm"
+     data-shopping-transition-row="{{ item.id }}"
      data-swipe-row>
   <div class="pointer-events-none absolute inset-0 flex items-center justify-end bg-red-600 pl-6 pr-6"
        aria-hidden="true"
@@ -47,7 +48,7 @@
              {% if item.checked %}checked{% endif %}
              hx-post="{{ url_for('shopping_item_toggle', item_id=item.id) }}"
              hx-target="#shopping-list"
-             hx-swap="outerHTML"
+             hx-swap="outerHTML transition:true"
              class="h-5 w-5 cursor-pointer rounded border-stone-400 text-green-600 focus:ring-2 focus:ring-green-300" />
     </label>
 
@@ -96,7 +97,7 @@
               aria-label="Delete {{ item.name }}"
               hx-delete="{{ url_for('shopping_item_delete', item_id=item.id) }}"
               hx-target="#shopping-list"
-              hx-swap="outerHTML"
+              hx-swap="outerHTML transition:true"
               class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-stone-500 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
         <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"

@@ -25,6 +25,26 @@
       const meta = document.querySelector('meta[name="csrf-token"]');
       if (meta) event.detail.headers['X-CSRFToken'] = meta.content;
     });
+    // Phase 10B: htmx's `transition:true` modifier wraps the swap in
+    // document.startViewTransition() when the browser supports it. Give every
+    // persisted shopping row a stable name before the transition snapshots
+    // are captured, so checking an item animates its move into the checked
+    // section. This stays inert in browsers without View Transitions.
+    function nameShoppingTransitionRows(root = document) {
+      if (!document.startViewTransition) return;
+      const rows = [];
+      if (root.matches && root.matches('[data-shopping-transition-row]')) {
+        rows.push(root);
+      }
+      rows.push(...root.querySelectorAll('[data-shopping-transition-row]'));
+      rows.forEach((row) => {
+        row.style.viewTransitionName = `shopping-item-${row.dataset.shoppingTransitionRow}`;
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => nameShoppingTransitionRows());
+    document.addEventListener('htmx:afterSwap', (event) => {
+      nameShoppingTransitionRows(event.detail.target);
+    });
     // Brief bottom toast triggered by HX-Trigger response headers from
     // cross-action routes (e.g. "+ Shop" on a pantry row, +Shop All on
     // a meal plan). Optionally supports an inline action button — pass
@@ -95,7 +115,10 @@
         const target = action.dataset.target || '#shopping-list';
         if (window.htmx) {
           window.htmx.ajax('POST', url, {
-            target: target, swap: 'outerHTML',
+            target: target,
+            swap: target === '#shopping-list'
+              ? 'outerHTML transition:true'
+              : 'outerHTML',
           });
         }
         // Hide immediately — the success toast (`*:undone`) will

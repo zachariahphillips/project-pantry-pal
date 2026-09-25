@@ -44,7 +44,7 @@
         action="{{ url_for('shopping_add') }}"
         hx-post="{{ url_for('shopping_add') }}"
         hx-target="#shopping-list"
-        hx-swap="outerHTML"
+        hx-swap="outerHTML transition:true"
         hx-on::after-request="
           if (event.detail.successful
               && !event.detail.xhr.getResponseHeader('HX-Detour')) {
@@ -269,7 +269,7 @@
         if (window.htmx && typeof window.htmx.ajax === 'function') {
           window.htmx.ajax('DELETE', deleteUrl, {
             target: '#shopping-list',
-            swap: 'outerHTML',
+            swap: 'outerHTML transition:true',
           });
         }
       }, COMMIT_SLIDE_DURATION_MS);

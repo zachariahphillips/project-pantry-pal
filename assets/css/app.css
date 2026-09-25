@@ -39,6 +39,20 @@
   }
 }
 
+/* Phase 10B: shopping-list mutations opt into htmx's View Transitions
+   integration. Each persisted row has a unique `view-transition-name`, so
+   supporting browsers interpolate a row's old and new positions when a
+   checked item moves to its section instead of snapping. Browsers without the
+   API retain htmx's normal swap behavior. */
+@supports (view-transition-name: none) {
+  @media (prefers-reduced-motion: no-preference) {
+    ::view-transition-group(*) {
+      animation-duration: 220ms;
+      animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    }
+  }
+}
+
 /* Phase 8F: system dark mode. Kept as a compact override layer so the
    existing template classes keep working without a manual theme toggle. */
 @media (prefers-color-scheme: dark) {
