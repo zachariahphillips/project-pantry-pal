@@ -14,18 +14,18 @@ Rules for this plan:
 
 Focus: Make the app feel indistinguishable from a native mobile application.
 
-### Phase 10A — Inline Quick-Add for Pantry (Size: M, Priority: P1)
+### Phase 10A — Inline Quick-Add for Pantry (Size: M, Priority: P1) — DONE 2026-09-24
 - **Goal:** Port the Phase 3H inline quick-add UI from the Shopping list over to the Pantry view.
 - **Work:** Update `pantry.html` and `_pantry_list.html` to use a single `[Item name] [+]` bar with "More details" (qty, unit, notes) tucked behind a `<details>` expander. Keeps the top of the pantry view clean and saves vertical space. 
 - **Tests:** Verify duplicate-confirm detour doesn't auto-reset the details block, mirroring Phase 6D shopping logic.
 
-### Phase 10B — View Transitions (Size: S, Priority: P2)
+### Phase 10B — View Transitions (Size: S, Priority: P2) — DONE 2026-09-25
 - **Goal:** Smooth UI updates so checked shopping items slide down gracefully instead of snapping.
 - **Work:** Implement standard CSS View Transitions or `htmx` swapping animations for the Shopping list checkout actions. 
 
-### Phase 10C — Swipe Gestures (Size: M, Priority: P1)
-- **Goal:** Add swipe-to-delete on Pantry rows and swipe-to-check on Shopping rows.
-- **Work:** Use a lightweight mobile gesture library (or CSS scroll-snap trick) to enable native horizontal swipe actions on list items.
+### Phase 10C — Pantry Swipe-to-Delete (Size: M, Priority: P1) — DONE 2026-09-28
+- **Goal:** Add a left-swipe delete shortcut to Pantry rows.
+- **Work:** Reused the existing lightweight touch-event pattern from Shopping. The gesture calls Pantry's established DELETE route, preserving the Undo toast and onboarding-boundary reload behavior; visible row actions remain intact. Shopping's existing left-swipe delete gesture remains its single swipe action, avoiding a conflicting swipe-to-check interaction.
 
 ### Phase 10D — Empty State Illustrations (Size: XS, Priority: P2)
 - **Goal:** Add a subtle, themed SVG illustration to empty states.

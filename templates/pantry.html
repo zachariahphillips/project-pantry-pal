@@ -484,6 +484,113 @@
   {% endif %}
 </section>
 
+{# ---------------------------------------------------------------------
+   Phase 10C — swipe-to-delete on pantry rows.
+
+   Mirrors shopping's Phase 3E gesture but stays local to /pantry. The
+   visible Delete button remains for keyboard and screen-reader users; a
+   completed left swipe calls the same DELETE endpoint, preserving the
+   established pantry undo-toast and onboarding-refresh behavior.
+   --------------------------------------------------------------- #}
+<script>
+(function initPantrySwipe() {
+  var SWIPE_THRESHOLD = 100;
+  var MAX_SWIPE = 180;
+  var SCROLL_LOCK_DELTA = 8;
+  var SNAP_DURATION_MS = 180;
+  var COMMIT_SLIDE_DURATION_MS = 180;
+
+  var active = null;
+
+  document.body.addEventListener('touchstart', onStart, { passive: true });
+  document.body.addEventListener('touchmove', onMove, { passive: false });
+  document.body.addEventListener('touchend', onEnd, { passive: true });
+  document.body.addEventListener('touchcancel', onCancel, { passive: true });
+
+  function onStart(event) {
+    if (event.touches.length !== 1) return;
+    // Let every real control (+ Shop, Edit, Delete) keep its native tap
+    // behavior; swipe begins only from the non-interactive row surface.
+    if (event.target.closest('button, input, label, a, form')) return;
+    var row = event.target.closest('[data-pantry-swipe-row]');
+    if (!row) return;
+    var content = row.querySelector('[data-pantry-swipe-content]');
+    if (!content) return;
+    var touch = event.touches[0];
+    active = {
+      row: row,
+      content: content,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      direction: null,
+      currentDx: 0,
+    };
+    content.style.transition = 'none';
+  }
+
+  function onMove(event) {
+    if (!active) return;
+    var touch = event.touches[0];
+    var dx = touch.clientX - active.startX;
+    var dy = touch.clientY - active.startY;
+
+    if (active.direction === null) {
+      // Let vertical intent remain a normal page scroll.
+      if (Math.abs(dx) < SCROLL_LOCK_DELTA && Math.abs(dy) < SCROLL_LOCK_DELTA) return;
+      active.direction = Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'scroll';
+    }
+    if (active.direction === 'scroll') return;
+
+    event.preventDefault();
+    var translation = Math.min(0, dx);
+    if (translation < -MAX_SWIPE) {
+      translation = -MAX_SWIPE + (translation + MAX_SWIPE) * 0.25;
+    }
+    active.currentDx = translation;
+    active.content.style.transform = 'translateX(' + translation + 'px)';
+  }
+
+  function onEnd() {
+    if (!active) return;
+    var content = active.content;
+    var currentDx = active.currentDx;
+    var direction = active.direction;
+    active = null;
+
+    if (direction !== 'swipe') {
+      content.style.transform = '';
+      return;
+    }
+
+    if (currentDx <= -SWIPE_THRESHOLD) {
+      content.style.transition = 'transform ' + COMMIT_SLIDE_DURATION_MS + 'ms ease-out';
+      content.style.transform = 'translateX(-100%)';
+      var deleteUrl = content.getAttribute('data-pantry-delete-url');
+      window.setTimeout(function () {
+        if (!deleteUrl) return;
+        if (window.htmx && typeof window.htmx.ajax === 'function') {
+          window.htmx.ajax('DELETE', deleteUrl, {
+            target: '#pantry-list',
+            swap: 'outerHTML',
+          });
+        }
+      }, COMMIT_SLIDE_DURATION_MS);
+    } else {
+      content.style.transition = 'transform ' + SNAP_DURATION_MS + 'ms ease-out';
+      content.style.transform = 'translateX(0)';
+    }
+  }
+
+  function onCancel() {
+    if (!active) return;
+    var content = active.content;
+    active = null;
+    content.style.transition = 'transform ' + SNAP_DURATION_MS + 'ms ease-out';
+    content.style.transform = 'translateX(0)';
+  }
+})();
+</script>
+
 {# ---------- Phase 3D: meal-planner chips + cost pill ---------- #}
 <script>
   (function () {

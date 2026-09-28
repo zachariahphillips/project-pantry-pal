@@ -9,8 +9,18 @@
    targets — the only info that gets clipped in compact is long notes
    that overflow the single line (via `truncate`). #}
 <div id="pantry-item-{{ item.id }}"
-     class="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white shadow-sm {% if density == 'compact' %}p-2{% else %}p-3{% endif %}">
-  <div class="min-w-0 flex-1">
+     class="relative overflow-hidden rounded-2xl shadow-sm"
+     data-pantry-swipe-row>
+  <div class="pointer-events-none absolute inset-0 flex items-center justify-end bg-red-600 pl-6 pr-6"
+       aria-hidden="true"
+       data-pantry-swipe-affordance>
+    <span class="text-sm font-semibold uppercase tracking-wide text-white">Delete</span>
+  </div>
+
+  <div class="relative flex items-start gap-3 rounded-2xl border border-stone-200 bg-white shadow-sm {% if density == 'compact' %}p-2{% else %}p-3{% endif %}"
+       data-pantry-swipe-content
+       data-pantry-delete-url="{{ url_for('pantry_item_delete', item_id=item.id) }}">
+    <div class="min-w-0 flex-1">
     <p class="truncate text-sm font-medium text-stone-900">{{ item.name }}</p>
 
     {% if density == "compact" %}
@@ -66,11 +76,11 @@
         <time datetime="{{ item.added_at.isoformat() }}Z">{{ item.added_at | relative_time }}</time>
       </p>
     {% endif %}
-  </div>
+    </div>
   {# Phase 6M (UX plan §2.1): row actions are icon-only so longer
      item names keep more horizontal space on mobile. Accessible names
      stay explicit via aria-label or sr-only text. #}
-  <div class="flex flex-shrink-0 items-center gap-1">
+    <div class="flex flex-shrink-0 items-center gap-1">
     <button type="button"
             hx-post="{{ url_for('pantry_item_to_shopping', item_id=item.id) }}"
             hx-swap="none"
@@ -132,5 +142,6 @@
         <path d="M9 9v4M11 9v4"/>
       </svg>
     </button>
+    </div>
   </div>
 </div>
