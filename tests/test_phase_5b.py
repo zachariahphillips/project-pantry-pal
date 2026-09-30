@@ -271,16 +271,16 @@ class TestShoppingEmptyStatePolish:
     def test_shopping_empty_shows_bumper_icon(self, client):
         sign_up(client, "fresh@example.com", "Fresh")
         html = _shopping_body(client)
-        # h-10 w-10 basket glyph, stone-300 stroke — locates it uniquely
-        # (contrast with the 6x6 hero glyphs elsewhere).
+        # Phase 10D replaces the simple bumper glyph with a fuller,
+        # explicitly-labelled basket illustration. Keep this older empty-state
+        # suite focused on the visual anchor rather than its exact paths.
         assert re.search(
-            r'<svg viewBox="0 0 24 24"[^>]*class="mx-auto h-10 w-10 text-stone-300"',
+            r'<svg viewBox="0 0 64 64"[^>]*data-empty-state-illustration="shopping"'
+            r'[^>]*class="h-10 w-10 text-stone-400"',
             html, re.DOTALL,
         ), (
-            "Empty shopping state must render the bumper basket icon "
-            "(h-10 w-10 stone-300) to match meals.html's empty-state "
-            "visual bar. If missing, the empty-state polish regressed "
-            "to the pre-5B plain card."
+            "Empty shopping state must render the basket illustration. "
+            "If missing, the empty-state polish regressed to a plain card."
         )
 
     def test_shopping_empty_shows_polished_heading(self, client):

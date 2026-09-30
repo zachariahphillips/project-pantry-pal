@@ -27,9 +27,9 @@ Focus: Make the app feel indistinguishable from a native mobile application.
 - **Goal:** Add a left-swipe delete shortcut to Pantry rows.
 - **Work:** Reused the existing lightweight touch-event pattern from Shopping. The gesture calls Pantry's established DELETE route, preserving the Undo toast and onboarding-boundary reload behavior; visible row actions remain intact. Shopping's existing left-swipe delete gesture remains its single swipe action, avoiding a conflicting swipe-to-check interaction.
 
-### Phase 10D — Empty State Illustrations (Size: XS, Priority: P2)
-- **Goal:** Add a subtle, themed SVG illustration to empty states.
-- **Work:** Update `_pantry_list.html` and `_shopping_list.html` empty states to feel more delightful with an SVG hero graphic.
+### Phase 10D — Empty State Illustrations (Size: XS, Priority: P2) — DONE 2026-09-30
+- **Goal:** Add subtle, themed SVG illustrations to true empty states.
+- **Work:** Replaced the single-glyph pantry and shopping empty-state icons with richer inline pantry-shelf and grocery-basket illustrations. Both remain decorative (`aria-hidden`), while the existing headings and actionable copy stay as the semantic message.
 
 ---
 

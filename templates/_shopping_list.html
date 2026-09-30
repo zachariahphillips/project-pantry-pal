@@ -155,15 +155,20 @@
         <p class="text-sm font-semibold text-stone-900">No matches for "{{ query }}".</p>
         <p class="mt-1 text-xs text-stone-500">Try a shorter search or clear the box.</p>
       {% else %}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+        {# Phase 10D: a fuller basket scene makes the first empty
+           shopping list feel like a destination rather than an error
+           state. It stays decorative; the labelled heading and copy
+           below provide the semantic message. #}
+        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-stone-100">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5"
              stroke-linecap="round" stroke-linejoin="round"
-             class="mx-auto h-10 w-10 text-stone-300" aria-hidden="true">
-          {# Shopping-basket glyph — chosen over cart to sit better at
-             10x10 without visual noise from wheels/handle. #}
-          <path d="M5 8h14l-1.5 11a2 2 0 0 1-2 1.75h-9A2 2 0 0 1 6.5 19L5 8Z"/>
-          <path d="M9 8V6a3 3 0 1 1 6 0v2"/>
-          <path d="M9 12v4M15 12v4"/>
-        </svg>
+               data-empty-state-illustration="shopping"
+               class="h-10 w-10 text-stone-400" aria-hidden="true">
+            <path d="M13 29h38l-3 21a4 4 0 0 1-4 3H20a4 4 0 0 1-4-3l-3-21Z"/>
+            <path d="M23 29v-4a9 9 0 0 1 18 0v4M20 37h24M24 37v5M32 37v5M40 37v5"/>
+            <path d="M25 25c0-6 5-10 10-12M37 21c3-3 6-3 9-1"/>
+          </svg>
+        </div>
         <h2 id="shopping-empty-heading" class="mt-3 text-sm font-semibold text-stone-900">Nothing on your shopping list yet</h2>
         <p class="mt-1 text-xs text-stone-500">
           Use the add bar above, or tap <span class="font-medium text-stone-700">+ Shop</span> on any pantry item.
