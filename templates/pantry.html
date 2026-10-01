@@ -386,6 +386,13 @@
           <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
           {{ form.notes(class=field, **{"placeholder": "e.g. Costco brand"}) }}
         </div>
+        <div>
+          <label for="{{ form.expiry_date.id }}" class="{{ label }}">
+            {{ form.expiry_date.label.text }}
+            <span class="font-normal text-stone-400">(optional)</span>
+          </label>
+          {{ form.expiry_date(class=field) }}
+        </div>
       </div>
     </details>
   </form>

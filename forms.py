@@ -4,7 +4,10 @@ FLASK_SECRET_KEY is set in the environment.
 """
 
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, FloatField, PasswordField, StringField, SubmitField
+from wtforms import (
+    BooleanField, DateField, FloatField, PasswordField, StringField,
+    SubmitField,
+)
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
 
 # Single source of truth for the unit-dropdown options.
@@ -68,7 +71,7 @@ class LoginForm(FlaskForm):
     submit = SubmitField("Sign in")
 
 
-class PantryItemForm(FlaskForm):
+class _ItemForm(FlaskForm):
     name = StringField(
         "Item",
         validators=[
@@ -109,8 +112,25 @@ class PantryItemForm(FlaskForm):
     submit = SubmitField("Add")
 
 
-class ShoppingItemForm(PantryItemForm):
-    """Same fields as PantryItemForm today. Kept as a separate class so
-    pantry-only fields (expiry, location) or shopping-only fields (priority,
-    store) can be added in Phase 4 without coupling."""
+class PantryItemForm(_ItemForm):
+    """Pantry-specific item fields."""
+
+    # Phase 11A.1: deliberately optional. A past date remains valid because
+    # users need to record already-expired items; Phase 11A.2 will surface
+    # urgency in the list rather than preventing that state at input time.
+    expiry_date = DateField(
+        "Expires",
+        validators=[Optional()],
+        format="%Y-%m-%d",
+        render_kw={"autocomplete": "off"},
+    )
+
+
+class ShoppingItemForm(_ItemForm):
+    """Shopping-specific form kept separate from PantryItemForm.
+
+    The shared base owns name / quantity / unit / notes. Pantry-only expiry
+    data must not leak into a shopping-list form or move into pantry rows
+    before the item is actually bought.
+    """
     pass

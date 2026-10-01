@@ -27,6 +27,14 @@
       </div>
     </div>
     <div>
+      <label for="{{ form.expiry_date.id }}" class="{{ label }}">
+        {{ form.expiry_date.label.text }}
+        <span class="font-normal text-stone-400">(optional)</span>
+      </label>
+      {{ form.expiry_date(class=field_error if form.expiry_date.errors else field) }}
+      {% for err in form.expiry_date.errors %}<p class="mt-1 text-xs text-red-700">{{ err }}</p>{% endfor %}
+    </div>
+    <div>
       <label for="{{ form.notes.id }}" class="{{ label }}">{{ form.notes.label.text }}</label>
       {{ form.notes(class=field_error if form.notes.errors else field) }}
     </div>

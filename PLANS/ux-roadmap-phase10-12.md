@@ -39,11 +39,17 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 
 ### Phase 11A — Expiry Dates & "Eat Me First" (Size: L, Priority: P1)
 - **Goal:** Track expiring items and use them to drive the AI planner.
-- **Work:** 
-  1. DB: Add `expiry_date` (nullable) to `pantry_items`.
-  2. UI: Add date picker in Pantry Add/Edit forms.
-  3. UI: Highlight items expiring in <3 days in amber/red.
-  4. AI: Add a 1-tap chip: *"Plan a meal using expiring items."*
+
+#### Phase 11A.1 — Expiry-date foundation (Size: M) — DONE 2026-10-01
+- DB: Add nullable `expiry_date` to `pantry_items` through an idempotent SQLite migration.
+- UI: Add an optional date picker to Pantry Add/Edit and display the date on pantry rows.
+- Data safety: preserve expiry dates through duplicate merge (earliest date wins) and delete/Undo.
+
+#### Phase 11A.2 — Expiry urgency styling (Size: S)
+- Highlight expired items and dates within three days using clear amber/red treatment.
+
+#### Phase 11A.3 — "Eat Me First" AI prompt (Size: S)
+- Add a one-tap planner prompt: *"Plan a meal using expiring items."*
 
 ### Phase 11B — Low Stock Toggles (Size: M, Priority: P2)
 - **Goal:** 1-tap restock for staples.

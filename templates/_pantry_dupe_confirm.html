@@ -20,7 +20,7 @@
           user's typed values remain in the add form (server sends
           HX-Detour so the form's auto-reset was suppressed on the
           dupe response), so they can tweak the name and re-submit
-          without re-typing quantity/unit/notes.
+          without re-typing quantity/unit/notes/expiry.
 
   Context:
     existing       — the PantryItem we matched against (household-
@@ -129,5 +129,7 @@
            value="{% if pending_form.quantity.data is not none %}{{ pending_form.quantity.data }}{% endif %}">
     <input type="hidden" name="unit" value="{{ pending_form.unit.data or '' }}">
     <input type="hidden" name="notes" value="{{ pending_form.notes.data or '' }}">
+    <input type="hidden" name="expiry_date"
+           value="{{ pending_form.expiry_date.data.isoformat() if pending_form.expiry_date.data else '' }}">
   </div>
 </div>

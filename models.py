@@ -150,6 +150,10 @@ class PantryItem(db.Model):
     quantity = db.Column(db.Float, nullable=True)
     unit = db.Column(db.String(40), nullable=True)
     notes = db.Column(db.String(280), nullable=True)
+    # Phase 11A.1: optional household-facing "expires" date. Kept as a
+    # date (not a timestamp) because packages usually state a calendar date;
+    # a date avoids accidental UTC/local-time boundary shifts.
+    expiry_date = db.Column(db.Date, nullable=True)
     added_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def display_quantity(self) -> str:

@@ -2,6 +2,8 @@
 {% set _is_low = item | is_low_stock %}
 {% set _is_stale = item.added_at | is_stale_age %}
 {% set _other_added = item.added_by and item.added_by.id != current_user.id %}
+{% set _expiry_display = item.expiry_date.strftime("%b") ~ " " ~ item.expiry_date.day ~ ", " ~ item.expiry_date.year if item.expiry_date else "" %}
+{% set _has_meta_before_provenance = qty or _is_low or item.notes or item.expiry_date %}
 {# Phase 4D: density is a user preference stored in session. `roomy`
    is the pre-4D three-line layout; `compact` collapses everything
    below the name into a single truncated metadata line and tightens
@@ -41,8 +43,12 @@
           {%- if qty or _is_low %} · {% endif -%}
           {{ item.notes }}
         {%- endif -%}
+        {%- if item.expiry_date -%}
+          {%- if qty or _is_low or item.notes %} · {% endif -%}
+          <span>Expires <time datetime="{{ item.expiry_date.isoformat() }}">{{ _expiry_display }}</time></span>
+        {%- endif -%}
         <span class="{% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
-          {%- if qty or item.notes %} · {% endif -%}
+          {%- if _has_meta_before_provenance %} · {% endif -%}
           {% if _other_added -%}
             added by {{ item.added_by.name }} ·
           {%- else -%}
@@ -54,7 +60,7 @@
     {% else %}
       {# Roomy: the existing two-paragraph layout — qty/Low/notes on
          one line, provenance + time on the next. #}
-      {% if qty or item.notes %}
+      {% if qty or item.notes or item.expiry_date %}
         <p class="mt-0.5 text-xs text-stone-500">
           {% if qty %}<span class="font-medium text-stone-600">{{ qty }}</span>{% endif %}
           {% if _is_low -%}
@@ -62,6 +68,10 @@
           {%- endif %}
           {% if qty and item.notes %} · {% endif %}
           {% if item.notes %}{{ item.notes }}{% endif %}
+          {% if item.expiry_date %}
+            {% if qty or _is_low or item.notes %} · {% endif %}
+            <span>Expires <time datetime="{{ item.expiry_date.isoformat() }}">{{ _expiry_display }}</time></span>
+          {% endif %}
         </p>
       {% endif %}
       {# Phase 2A/4B: provenance + relative-time stamp on one line.

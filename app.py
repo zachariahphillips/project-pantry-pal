@@ -52,7 +52,7 @@ See PLAN.md for the full phased build plan.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import parse_qsl, urlsplit
 
 from dotenv import load_dotenv
@@ -249,11 +249,10 @@ def create_app() -> Flask:
         # Flask-Migrate in Phase 2 when the schema needs to evolve without
         # dropping data. For Phase 2A's additive change (households table,
         # household_id columns) create_all is enough — see
-        # _run_phase_2a_migration for the row-level backfill. Phase 3G's
-        # shopping_items.checked_at column add is also chained inside
-        # _run_phase_2a_migration so ALL schema ALTERs run before any
-        # ORM-level queries (which would otherwise SELECT columns the
-        # legacy DB doesn't yet have).
+        # _run_phase_2a_migration for the row-level backfill. Later
+        # additive columns (shopping checked_at; pantry expiry_date) are also
+        # chained there so ALL schema ALTERs run before any ORM-level queries
+        # (which would otherwise SELECT columns the legacy DB doesn't have).
         db.create_all()
         _run_phase_2a_migration()
 
@@ -533,6 +532,7 @@ def _register_routes(app: Flask) -> None:
                 quantity=form.quantity.data,
                 unit=_clean_optional(form.unit.data),
                 notes=_clean_optional(form.notes.data),
+                expiry_date=form.expiry_date.data,
             )
             db.session.add(item)
             db.session.commit()
@@ -696,6 +696,7 @@ def _register_routes(app: Flask) -> None:
             item.quantity = form.quantity.data
             item.unit = _clean_optional(form.unit.data)
             item.notes = _clean_optional(form.notes.data)
+            item.expiry_date = form.expiry_date.data
             db.session.commit()
             return render_template(
                 "_pantry_item.html", item=item,
@@ -1970,6 +1971,26 @@ def _ensure_shopping_checked_at_column() -> None:
         db.session.commit()
 
 
+def _ensure_pantry_expiry_date_column() -> None:
+    """Add the nullable Phase 11A.1 expiry date to legacy SQLite databases.
+
+    `db.create_all()` leaves existing tables unchanged, so adding the model
+    attribute alone would make every pantry query fail on an installed app.
+    Date-only storage matches labels on food packages and intentionally has no
+    default: pre-existing rows have unknown expiry rather than an invented one.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("pantry_items"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("pantry_items")}
+    if "expiry_date" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE pantry_items ADD COLUMN expiry_date DATE"
+            )
+
+
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
 # --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
@@ -2138,6 +2159,7 @@ def _snapshot_pantry_items(items) -> "list[dict]":
         "quantity": i.quantity,
         "unit": i.unit,
         "notes": i.notes,
+        "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
         "added_at": i.added_at.isoformat() if i.added_at else None,
         "added_by_user_id": i.added_by_user_id,
     } for i in items]
@@ -2183,6 +2205,11 @@ def _restore_pantry_snapshot(snapshot: dict, household_id: int) -> int:
             unit=entry.get("unit"),
             notes=entry.get("notes"),
         )
+        if entry.get("expiry_date"):
+            try:
+                item.expiry_date = date.fromisoformat(entry["expiry_date"])
+            except (ValueError, TypeError):
+                pass
         # Preserve original added_at so the restored row lands in its
         # original sort position (e.g. "Oldest" sort). If parsing
         # fails on a corrupt session, let SQLAlchemy default fire —
@@ -2253,6 +2280,11 @@ def _merge_pending_into_pantry_item(
         lose the fact that the user typed 500 ml when we merged
         into a "1 gallon" existing row.
 
+    Expiry date
+      - Keep the earlier non-empty date. A merged row represents mixed
+        stock, so the earliest date is the actionable one; preserving a
+        later date could conceal food that needs using first.
+
     Timestamps + provenance
       - `added_at` unchanged (merge augments an existing add, not a
         new event).
@@ -2263,6 +2295,7 @@ def _merge_pending_into_pantry_item(
     pending_qty = pending_form.quantity.data
     pending_unit = _clean_optional(pending_form.unit.data)
     pending_notes = _clean_optional(pending_form.notes.data)
+    pending_expiry_date = pending_form.expiry_date.data
 
     # Quantity: sum with None-aware arithmetic.
     if pending_qty is not None:
@@ -2297,6 +2330,15 @@ def _merge_pending_into_pantry_item(
         elif existing.notes.strip() != incoming_notes.strip():
             existing.notes = f"{existing.notes} \u2022 {incoming_notes}"
         # else: identical → skip duplicating
+
+    if (
+        pending_expiry_date
+        and (
+            existing.expiry_date is None
+            or pending_expiry_date < existing.expiry_date
+        )
+    ):
+        existing.expiry_date = pending_expiry_date
 
     return existing
 
@@ -2534,6 +2576,9 @@ def _run_phase_2a_migration() -> None:
     # have the column yet, and the backfill below dies on the ShoppingItem
     # query. Chained here for the same reason the 2A column add is.
     _ensure_shopping_checked_at_column()
+    # Phase 11A.1: same lazy-ALTER pattern for the optional pantry expiry
+    # date. This must also precede the PantryItem queries below.
+    _ensure_pantry_expiry_date_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:
