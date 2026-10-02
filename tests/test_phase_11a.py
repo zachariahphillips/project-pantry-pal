@@ -54,34 +54,34 @@ class TestExpiryDateFormBoundary:
 
     def test_add_renders_expiry_date_on_pantry_row(self, client):
         sign_up(client, "alice@example.com", "Alice")
-        _add_pantry(client, "Milk", expiry_date="2026-10-05")
+        _add_pantry(client, "Milk", expiry_date="2099-10-05")
 
         html = client.get("/pantry").get_data(as_text=True)
         assert 'name="expiry_date"' in html
         assert "Expires" in html
-        assert "Oct 5, 2026" in html
-        assert 'datetime="2026-10-05"' in html
+        assert "Expires Oct 5, 2099" in html
+        assert 'datetime="2099-10-05"' in html
 
     def test_edit_round_trip_updates_and_clears_expiry_date(self, client, app):
         sign_up(client, "alice@example.com", "Alice")
-        _add_pantry(client, "Milk", expiry_date="2026-10-05")
+        _add_pantry(client, "Milk", expiry_date="2099-10-05")
         item_id = _pantry_id(client.get("/pantry").get_data(as_text=True), "Milk")
 
         edit_html = client.get(
             f"/pantry/{item_id}/edit", htmx=True,
         ).get_data(as_text=True)
         assert 'type="date"' in edit_html
-        assert 'value="2026-10-05"' in edit_html
+        assert 'value="2099-10-05"' in edit_html
 
         response = client.put(f"/pantry/{item_id}", data={
             "name": "Milk",
             "quantity": "",
             "unit": "",
             "notes": "",
-            "expiry_date": "2026-10-07",
+            "expiry_date": "2099-10-07",
         })
         assert response.status_code == 200
-        assert "Oct 7, 2026" in response.get_data(as_text=True)
+        assert "Expires Oct 7, 2099" in response.get_data(as_text=True)
 
         response = client.put(f"/pantry/{item_id}", data={
             "name": "Milk",

@@ -2,7 +2,8 @@
 {% set _is_low = item | is_low_stock %}
 {% set _is_stale = item.added_at | is_stale_age %}
 {% set _other_added = item.added_by and item.added_by.id != current_user.id %}
-{% set _expiry_display = item.expiry_date.strftime("%b") ~ " " ~ item.expiry_date.day ~ ", " ~ item.expiry_date.year if item.expiry_date else "" %}
+{% set _expiry_status = item.expiry_date | pantry_expiry_status %}
+{% set _expiry_text = item.expiry_date | humanize_pantry_expiry %}
 {% set _has_meta_before_provenance = qty or _is_low or item.notes or item.expiry_date %}
 {# Phase 4D: density is a user preference stored in session. `roomy`
    is the pre-4D three-line layout; `compact` collapses everything
@@ -45,7 +46,11 @@
         {%- endif -%}
         {%- if item.expiry_date -%}
           {%- if qty or _is_low or item.notes %} · {% endif -%}
-          <span>Expires <time datetime="{{ item.expiry_date.isoformat() }}">{{ _expiry_display }}</time></span>
+          {# Phase 11A.2: expiry urgency is color + copy, not a hard
+             validation barrier. Pantry dates are often "best by"; users
+             still decide whether an expired item is safe to use. #}
+          <time datetime="{{ item.expiry_date.isoformat() }}"
+                class="{% if _expiry_status == 'expired' %}font-semibold text-red-700{% elif _expiry_status == 'soon' %}font-medium text-amber-700{% else %}text-stone-500{% endif %}">{{ _expiry_text }}</time>
         {%- endif -%}
         <span class="{% if _is_stale %}text-amber-600{% else %}text-stone-400{% endif %}">
           {%- if _has_meta_before_provenance %} · {% endif -%}
@@ -70,7 +75,8 @@
           {% if item.notes %}{{ item.notes }}{% endif %}
           {% if item.expiry_date %}
             {% if qty or _is_low or item.notes %} · {% endif %}
-            <span>Expires <time datetime="{{ item.expiry_date.isoformat() }}">{{ _expiry_display }}</time></span>
+            <time datetime="{{ item.expiry_date.isoformat() }}"
+                  class="{% if _expiry_status == 'expired' %}font-semibold text-red-700{% elif _expiry_status == 'soon' %}font-medium text-amber-700{% else %}text-stone-500{% endif %}">{{ _expiry_text }}</time>
           {% endif %}
         </p>
       {% endif %}

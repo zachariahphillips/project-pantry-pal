@@ -239,6 +239,8 @@ def create_app() -> Flask:
     app.jinja_env.filters["relative_time"] = _humanize_relative_time
     app.jinja_env.filters["is_stale_age"] = _is_pantry_item_stale
     app.jinja_env.filters["is_low_stock"] = _is_pantry_item_low
+    app.jinja_env.filters["pantry_expiry_status"] = _pantry_expiry_status
+    app.jinja_env.filters["humanize_pantry_expiry"] = _humanize_pantry_expiry
     login_manager.login_message = "Please sign in to continue."
     login_manager.login_message_category = "info"
 
@@ -3042,6 +3044,56 @@ def _is_pantry_item_stale(dt, now=None) -> bool:
         return False
     now = now or datetime.utcnow()
     return (now - dt).days >= PANTRY_STALE_AGE_DAYS
+
+
+# --- Phase 11A.2: expiry-date urgency ------------------------------------
+
+# Calendar-day threshold, inclusive: an item that expires today, tomorrow,
+# or in three days gets an amber "use soon" cue. We intentionally don't
+# declare it expired until the following date; package dates normally mean
+# the food can be used through the listed calendar day.
+PANTRY_EXPIRING_SOON_DAYS = 3
+
+
+def _pantry_expiry_status(expiry_date, today=None) -> "str | None":
+    """Classify an optional expiry date as expired, soon, or neutral.
+
+    `today` is injectable for deterministic tests. The app has no household
+    timezone setting yet, so production uses the server's local calendar date
+    rather than converting a date-only food label through UTC.
+    """
+    if expiry_date is None:
+        return None
+    today = today or date.today()
+    days_remaining = (expiry_date - today).days
+    if days_remaining < 0:
+        return "expired"
+    if days_remaining <= PANTRY_EXPIRING_SOON_DAYS:
+        return "soon"
+    return None
+
+
+def _humanize_pantry_expiry(expiry_date, today=None) -> str:
+    """Render an expiry date with the same urgency semantics as its status."""
+    if expiry_date is None:
+        return ""
+    today = today or date.today()
+    days_remaining = (expiry_date - today).days
+    status = _pantry_expiry_status(expiry_date, today=today)
+    if status == "expired":
+        if days_remaining == -1:
+            return "Expired yesterday"
+        return f"Expired {-days_remaining}d ago"
+    if status == "soon":
+        if days_remaining == 0:
+            return "Expires today"
+        if days_remaining == 1:
+            return "Expires tomorrow"
+        return f"Expires in {days_remaining}d"
+    return (
+        f"Expires {expiry_date.strftime('%b')} "
+        f"{expiry_date.day}, {expiry_date.year}"
+    )
 
 
 # --- Phase 4C: low-stock --------------------------------------------------

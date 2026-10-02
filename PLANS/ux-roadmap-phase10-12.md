@@ -45,8 +45,9 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 - UI: Add an optional date picker to Pantry Add/Edit and display the date on pantry rows.
 - Data safety: preserve expiry dates through duplicate merge (earliest date wins) and delete/Undo.
 
-#### Phase 11A.2 — Expiry urgency styling (Size: S)
+#### Phase 11A.2 — Expiry urgency styling (Size: S) — DONE 2026-10-02
 - Highlight expired items and dates within three days using clear amber/red treatment.
+- Keep expiry dates informational: PantryPal labels the calendar status but does not prevent a user from keeping or using the item.
 
 #### Phase 11A.3 — "Eat Me First" AI prompt (Size: S)
 - Add a one-tap planner prompt: *"Plan a meal using expiring items."*
