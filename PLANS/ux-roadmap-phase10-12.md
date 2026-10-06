@@ -49,8 +49,11 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 - Highlight expired items and dates within three days using clear amber/red treatment.
 - Keep expiry dates informational: PantryPal labels the calendar status but does not prevent a user from keeping or using the item.
 
-#### Phase 11A.3 — "Eat Me First" AI prompt (Size: S)
-- Add a one-tap planner prompt: *"Plan a meal using expiring items."*
+#### Phase 11A.3 — "Eat Me First" AI prompt (Size: S) — DONE 2026-10-02
+- Added an "Eat me first" one-tap planner prompt when the household has
+  non-expired items within the three-day urgency window.
+- Include expiry dates in the structured AI pantry snapshot so the planner
+  can prioritize soon-to-expire ingredients while excluding expired food.
 
 ### Phase 11B — Low Stock Toggles (Size: M, Priority: P2)
 - **Goal:** 1-tap restock for staples.

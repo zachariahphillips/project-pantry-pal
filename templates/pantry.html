@@ -100,6 +100,15 @@
         ("Comfort food", "Something comforting"),
         ("Use what we have", "Use mostly what we already have in the pantry"),
       ] %}
+      {% if has_items_expiring_soon %}
+        {# Phase 11A.3: this is a prefill-only shortcut, like the other
+           chips. It appears only when there is a non-expired item within
+           the urgency window, and the prompt explicitly keeps expired food
+           out of the resulting plan. #}
+        {% set chips = [
+          ("Eat me first", "Plan a meal that prioritizes ingredients expiring soon. Do not use expired ingredients."),
+        ] + chips %}
+      {% endif %}
       {% if meal_plans_count > 0 %}
         {# Phase 6X-A (UX plan §5.1): return visits have history below,
            so compress the live planner into a smaller "plan another"
