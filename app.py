@@ -252,9 +252,10 @@ def create_app() -> Flask:
         # dropping data. For Phase 2A's additive change (households table,
         # household_id columns) create_all is enough — see
         # _run_phase_2a_migration for the row-level backfill. Later
-        # additive columns (shopping checked_at; pantry expiry_date) are also
-        # chained there so ALL schema ALTERs run before any ORM-level queries
-        # (which would otherwise SELECT columns the legacy DB doesn't have).
+        # additive columns (shopping checked_at; pantry expiry_date and
+        # low_stock) are also chained there so ALL schema ALTERs run before
+        # any ORM-level queries (which would otherwise SELECT columns the
+        # legacy DB doesn't have).
         db.create_all()
         _run_phase_2a_migration()
 
@@ -2002,6 +2003,26 @@ def _ensure_pantry_expiry_date_column() -> None:
             )
 
 
+def _ensure_pantry_low_stock_column() -> None:
+    """Add the Phase 11B.1 manual low-stock flag to legacy SQLite databases.
+
+    Existing pantry rows start as not manually flagged. The default is part
+    of the ALTER rather than a Python-only model default so installed
+    databases receive a valid value for every pre-existing row.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("pantry_items"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("pantry_items")}
+    if "low_stock" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE pantry_items ADD COLUMN low_stock "
+                "BOOLEAN NOT NULL DEFAULT 0"
+            )
+
+
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
 # --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
@@ -2590,6 +2611,10 @@ def _run_phase_2a_migration() -> None:
     # Phase 11A.1: same lazy-ALTER pattern for the optional pantry expiry
     # date. This must also precede the PantryItem queries below.
     _ensure_pantry_expiry_date_column()
+    # Phase 11B.1: the same startup ordering is required for the manual
+    # low-stock flag because PantryItem ORM queries select every mapped
+    # column, including this one.
+    _ensure_pantry_low_stock_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:

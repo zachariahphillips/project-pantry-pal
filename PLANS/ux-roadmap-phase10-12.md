@@ -57,10 +57,17 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 
 ### Phase 11B — Low Stock Toggles (Size: M, Priority: P2)
 - **Goal:** 1-tap restock for staples.
-- **Work:**
-  1. DB: Add `low_stock` boolean to `pantry_items`.
-  2. UI: Add a quick-toggle button on pantry rows.
-  3. Flow: When toggled ON, automatically prompt to push a copy to the Shopping list.
+
+#### Phase 11B.1 — Manual low-stock foundation (Size: S) — DONE 2026-10-07
+- DB: Add `low_stock` boolean to `pantry_items` through an idempotent SQLite
+  migration. Existing items default to not manually flagged.
+
+#### Phase 11B.2 — Pantry-row restock toggle (Size: S)
+- UI: Add an accessible quick-toggle button on pantry rows.
+
+#### Phase 11B.3 — Shopping-list handoff (Size: S)
+- Flow: When toggled ON, offer an explicit prompt to copy the item to the
+  Shopping list.
 
 ### Phase 11C — Smart Categorization & Aisle Sorting (Size: L, Priority: P1)
 - **Goal:** Auto-group shopping lists by Aisle to make grocery trips faster.

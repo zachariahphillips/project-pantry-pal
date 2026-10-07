@@ -154,6 +154,10 @@ class PantryItem(db.Model):
     # date (not a timestamp) because packages usually state a calendar date;
     # a date avoids accidental UTC/local-time boundary shifts.
     expiry_date = db.Column(db.Date, nullable=True)
+    # Phase 11B.1: a manual restock marker. This deliberately remains
+    # separate from the older quantity-derived "Low" heuristic so users can
+    # flag unmeasured staples (for example, olive oil) for their next shop.
+    low_stock = db.Column(db.Boolean, nullable=False, default=False)
     added_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def display_quantity(self) -> str:
