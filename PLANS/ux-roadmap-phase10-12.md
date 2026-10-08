@@ -62,8 +62,10 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 - DB: Add `low_stock` boolean to `pantry_items` through an idempotent SQLite
   migration. Existing items default to not manually flagged.
 
-#### Phase 11B.2 — Pantry-row restock toggle (Size: S)
-- UI: Add an accessible quick-toggle button on pantry rows.
+#### Phase 11B.2 — Pantry-row restock toggle (Size: S) — DONE 2026-10-08
+- UI: Added an accessible one-tap restock toggle on pantry rows. The
+  persistent amber “Restock” state is deliberately distinct from the
+  existing quantity-derived red “Low” cue.
 
 #### Phase 11B.3 — Shopping-list handoff (Size: S)
 - Flow: When toggled ON, offer an explicit prompt to copy the item to the

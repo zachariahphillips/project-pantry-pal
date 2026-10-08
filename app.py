@@ -716,6 +716,26 @@ def _register_routes(app: Flask) -> None:
             )
         return render_template("_pantry_item_edit.html", item=item, form=form), 422
 
+    @app.route("/pantry/<int:item_id>/low-stock", methods=["POST"])
+    @login_required
+    def pantry_item_low_stock_toggle(item_id: int):
+        """Toggle an item's manual restock marker without editing its details.
+
+        This is intentionally independent of Phase 4C's quantity-derived
+        "Low" badge: users can flag an unmeasured staple for restocking, and
+        clearing the marker never overwrites the quantity they recorded.
+        """
+        item = _get_pantry_item_or_404(item_id)
+        item.low_stock = not bool(item.low_stock)
+        db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            return render_template(
+                "_pantry_item.html", item=item,
+                density=_get_pantry_density(),
+            )
+        return redirect(url_for("pantry_list"))
+
     @app.route("/pantry/<int:item_id>", methods=["DELETE"])
     @login_required
     def pantry_item_delete(item_id: int):
@@ -2181,7 +2201,8 @@ def _snapshot_pantry_items(items) -> "list[dict]":
     Preserves `added_at` so a restored row appears in its original
     sort position rather than jumping to "just now"; and preserves
     `added_by_user_id` so undo doesn't rewrite provenance to credit
-    whoever tapped Undo.
+    whoever tapped Undo. The manual `low_stock` marker is included so
+    an accidental delete cannot silently clear a restock decision.
 
     Caller MUST read attributes BEFORE calling `db.session.delete()` —
     once flushed, lazy attribute access dies.
@@ -2192,6 +2213,7 @@ def _snapshot_pantry_items(items) -> "list[dict]":
         "unit": i.unit,
         "notes": i.notes,
         "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
+        "low_stock": bool(i.low_stock),
         "added_at": i.added_at.isoformat() if i.added_at else None,
         "added_by_user_id": i.added_by_user_id,
     } for i in items]
@@ -2236,6 +2258,7 @@ def _restore_pantry_snapshot(snapshot: dict, household_id: int) -> int:
             quantity=entry.get("quantity"),
             unit=entry.get("unit"),
             notes=entry.get("notes"),
+            low_stock=bool(entry.get("low_stock", False)),
         )
         if entry.get("expiry_date"):
             try:
