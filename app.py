@@ -733,6 +733,11 @@ def _register_routes(app: Flask) -> None:
             return render_template(
                 "_pantry_item.html", item=item,
                 density=_get_pantry_density(),
+                # Phase 11B.3: only the freshly flagged row gets the
+                # copy-to-shopping handoff. Keeping it ephemeral avoids
+                # turning every manually flagged pantry row into a
+                # permanent callout on later visits.
+                show_restock_shopping_prompt=item.low_stock,
             )
         return redirect(url_for("pantry_list"))
 

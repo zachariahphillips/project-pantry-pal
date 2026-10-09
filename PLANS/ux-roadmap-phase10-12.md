@@ -67,9 +67,10 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
   persistent amber “Restock” state is deliberately distinct from the
   existing quantity-derived red “Low” cue.
 
-#### Phase 11B.3 — Shopping-list handoff (Size: S)
-- Flow: When toggled ON, offer an explicit prompt to copy the item to the
-  Shopping list.
+#### Phase 11B.3 — Shopping-list handoff (Size: S) — DONE 2026-10-09
+- Flow: When toggled ON, offer an immediate explicit prompt to copy the item
+  to the Shopping list. The handoff is ephemeral so manually flagged rows
+  remain compact on later visits.
 
 ### Phase 11C — Smart Categorization & Aisle Sorting (Size: L, Priority: P1)
 - **Goal:** Auto-group shopping lists by Aisle to make grocery trips faster.
