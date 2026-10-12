@@ -252,10 +252,10 @@ def create_app() -> Flask:
         # dropping data. For Phase 2A's additive change (households table,
         # household_id columns) create_all is enough — see
         # _run_phase_2a_migration for the row-level backfill. Later
-        # additive columns (shopping checked_at; pantry expiry_date and
-        # low_stock) are also chained there so ALL schema ALTERs run before
-        # any ORM-level queries (which would otherwise SELECT columns the
-        # legacy DB doesn't have).
+        # additive columns (shopping checked_at/category; pantry expiry_date
+        # and low_stock) are also chained there so ALL schema ALTERs run
+        # before any ORM-level queries (which would otherwise SELECT columns
+        # the legacy DB doesn't have).
         db.create_all()
         _run_phase_2a_migration()
 
@@ -2008,6 +2008,24 @@ def _ensure_shopping_checked_at_column() -> None:
         db.session.commit()
 
 
+def _ensure_shopping_category_column() -> None:
+    """Add the nullable Phase 11C.1 category to legacy SQLite databases.
+
+    We do not invent categories for existing rows: a missing label means
+    "uncategorized" until a later classification feature fills it in.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("shopping_items"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("shopping_items")}
+    if "category" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE shopping_items ADD COLUMN category VARCHAR(40)"
+            )
+
+
 def _ensure_pantry_expiry_date_column() -> None:
     """Add the nullable Phase 11A.1 expiry date to legacy SQLite databases.
 
@@ -2093,7 +2111,7 @@ def _snapshot_shopping_items(items) -> "list[dict]":
 
     Captures everything needed to recreate the row at its ORIGINAL
     position in the list (preserving `added_at`) and in its ORIGINAL
-    state (preserving `checked` + `checked_at`). Provenance
+    state (preserving `checked` + `checked_at` + `category`). Provenance
     (`added_by_user_id`) is preserved so the undo doesn't rewrite
     history to credit whoever tapped Undo.
 
@@ -2106,6 +2124,7 @@ def _snapshot_shopping_items(items) -> "list[dict]":
         "quantity": i.quantity,
         "unit": i.unit,
         "notes": i.notes,
+        "category": i.category,
         "checked": bool(i.checked),
         "checked_at": i.checked_at.isoformat() if i.checked_at else None,
         "added_at": i.added_at.isoformat() if i.added_at else None,
@@ -2176,6 +2195,7 @@ def _restore_shopping_snapshot(snapshot: dict, household_id: int) -> int:
             quantity=entry.get("quantity"),
             unit=entry.get("unit"),
             notes=entry.get("notes"),
+            category=entry.get("category"),
             checked=bool(entry.get("checked", False)),
         )
         # Honor original timestamps so the restored row appears in
@@ -2630,6 +2650,10 @@ def _run_phase_2a_migration() -> None:
     # create_all() handles new TABLES but never adds COLUMNS to existing
     # tables — the upgrade path from Phase 1C to 2A needs this explicit ALTER.
     _ensure_phase_2a_columns()
+    # Phase 11C.1: category is another ShoppingItem field selected by ORM
+    # queries, so legacy tables must receive it before the checked_at
+    # migration runs its first ShoppingItem ORM query.
+    _ensure_shopping_category_column()
     # Phase 3G's shopping_items.checked_at also has to be added BEFORE
     # any ORM queries run below — otherwise SQLAlchemy generates SELECT
     # statements with `checked_at` against a legacy DB that doesn't

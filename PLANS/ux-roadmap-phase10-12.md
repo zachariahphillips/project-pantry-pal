@@ -74,10 +74,18 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 
 ### Phase 11C — Smart Categorization & Aisle Sorting (Size: L, Priority: P1)
 - **Goal:** Auto-group shopping lists by Aisle to make grocery trips faster.
-- **Work:** 
-  1. DB: Add `category` (string) to `shopping_items` (and maybe `pantry_items`).
-  2. AI Hook: When an item is added, Ask AI to classify it (Produce, Dairy, Spices, Meat, etc.).
-  3. UI: Group the Shopping view by category headers.
+
+#### Phase 11C.1 — Shopping category foundation (Size: S) — DONE 2026-10-12
+- DB: Add nullable `category` (string) to `shopping_items` through an
+  idempotent SQLite migration. Existing entries remain uncategorized.
+
+#### Phase 11C.2 — Aisle grouping UI (Size: M)
+- UI: Group the Shopping view by category headers, with an “Other” section
+  for uncategorized items.
+
+#### Phase 11C.3 — Category defaults (Size: M)
+- Classification: use a local curated mapping for common groceries; consider
+  an optional AI fallback only for unknown names.
 
 ---
 

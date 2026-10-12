@@ -200,6 +200,10 @@ class ShoppingItem(db.Model):
     quantity = db.Column(db.Float, nullable=True)
     unit = db.Column(db.String(40), nullable=True)
     notes = db.Column(db.String(280), nullable=True)
+    # Phase 11C.1: optional aisle/category label. It starts nullable so
+    # existing shopping entries remain honestly uncategorized until the
+    # grouping and classification slices ship.
+    category = db.Column(db.String(40), nullable=True)
     checked = db.Column(db.Boolean, default=False, nullable=False, index=True)
     added_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Phase 3G: timestamp of the most recent False→True toggle. NULL
