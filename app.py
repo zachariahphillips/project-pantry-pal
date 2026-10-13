@@ -241,6 +241,7 @@ def create_app() -> Flask:
     app.jinja_env.filters["is_low_stock"] = _is_pantry_item_low
     app.jinja_env.filters["pantry_expiry_status"] = _pantry_expiry_status
     app.jinja_env.filters["humanize_pantry_expiry"] = _humanize_pantry_expiry
+    app.jinja_env.globals["group_shopping_items"] = _group_shopping_items
     login_manager.login_message = "Please sign in to continue."
     login_manager.login_message_category = "info"
 
@@ -2632,6 +2633,39 @@ def _top_shopping_suggestions(
         if len(out) >= limit:
             break
     return out
+
+
+# --- Phase 11C.2: shopping aisle groups ----------------------------------
+
+SHOPPING_OTHER_CATEGORY = "Other"
+
+
+def _group_shopping_items(items) -> "list[tuple[str, list]]":
+    """Group items by their optional category for the shopping-list UI.
+
+    The caller already supplies items in their normal list order, so items
+    within each aisle retain their expected newest-first / most-recently-
+    checked-first ordering. Category headings sort alphabetically, while the
+    catch-all "Other" section comes last. `None`, blank, and whitespace-only
+    categories are all honestly uncategorized rather than guessed.
+    """
+    grouped: dict[str, list] = {}
+    labels: dict[str, str] = {}
+    for item in items:
+        raw_category = (getattr(item, "category", None) or "").strip()
+        label = raw_category or SHOPPING_OTHER_CATEGORY
+        key = label.casefold()
+        labels.setdefault(key, label)
+        grouped.setdefault(key, []).append(item)
+
+    ordered_keys = sorted(
+        grouped,
+        key=lambda key: (
+            labels[key].casefold() == SHOPPING_OTHER_CATEGORY.casefold(),
+            labels[key].casefold(),
+        ),
+    )
+    return [(labels[key], grouped[key]) for key in ordered_keys]
 
 
 def _run_phase_2a_migration() -> None:

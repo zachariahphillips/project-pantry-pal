@@ -112,8 +112,37 @@
        intact across all 6 routes that re-render this partial. #}
     {% set _unchecked = items | rejectattr("checked") | list %}
     {% set _checked = items | selectattr("checked") | list %}
+    {% set _category_groups = group_shopping_items(_unchecked) %}
+    {# Phase 11C.2: retain the familiar flat list until at least one
+       unchecked item has a category. Category data is new and initially
+       empty, so a lone "Other" heading would add noise without helping a
+       grocery trip. Once any aisle is known, render every group — including
+       Other — so uncategorized items are still findable. Checked-off items
+       deliberately remain below the existing global divider, preserving the
+       established "bought items sink to the bottom" behavior. #}
+    {% set _has_assigned_category = (
+      _category_groups | length > 1
+      or (_category_groups and _category_groups[0][0] != "Other")
+    ) %}
 
-    {% for item in _unchecked %}{% include "_shopping_item.html" %}{% endfor %}
+    {% if _has_assigned_category %}
+      {% for category, category_items in _category_groups %}
+        <section class="space-y-2 {% if not loop.first %}pt-3{% endif %}"
+                 data-shopping-category-group="{{ category }}"
+                 aria-labelledby="shopping-category-{{ loop.index }}">
+          <div class="flex items-center gap-3 px-1 pb-1">
+            <h2 id="shopping-category-{{ loop.index }}"
+                class="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+              {{ category }}
+            </h2>
+            <span class="h-px flex-1 bg-stone-200"></span>
+          </div>
+          {% for item in category_items %}{% include "_shopping_item.html" %}{% endfor %}
+        </section>
+      {% endfor %}
+    {% else %}
+      {% for item in _unchecked %}{% include "_shopping_item.html" %}{% endfor %}
+    {% endif %}
 
     {% if _checked %}
       {# Label divider — small uppercase label on the left, hairline

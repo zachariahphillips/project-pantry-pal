@@ -79,9 +79,10 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
 - DB: Add nullable `category` (string) to `shopping_items` through an
   idempotent SQLite migration. Existing entries remain uncategorized.
 
-#### Phase 11C.2 — Aisle grouping UI (Size: M)
-- UI: Group the Shopping view by category headers, with an “Other” section
-  for uncategorized items.
+#### Phase 11C.2 — Aisle grouping UI (Size: M) — DONE 2026-10-13
+- UI: Group categorized unchecked items by alphabetical aisle headers, with
+  an “Other” section for uncategorized items. Checked-off items retain their
+  established global section at the bottom.
 
 #### Phase 11C.3 — Category defaults (Size: M)
 - Classification: use a local curated mapping for common groceries; consider
