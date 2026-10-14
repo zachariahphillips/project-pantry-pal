@@ -69,7 +69,7 @@ class TestShoppingCategoryGroups:
         milk_id = _add_shopping(client, "Milk")
         pasta_id = _add_shopping(client, "Pasta")
         apples_id = _add_shopping(client, "Apples")
-        batteries_id = _add_shopping(client, "Batteries")
+        gift_wrap_id = _add_shopping(client, "Gift wrap")
         _set_category(app, milk_id, "Dairy")
         _set_category(app, pasta_id, "Pantry")
         _set_category(app, apples_id, "Produce")
@@ -84,14 +84,14 @@ class TestShoppingCategoryGroups:
         assert dairy < html.index(f'id="shopping-item-{milk_id}"') < pantry
         assert pantry < html.index(f'id="shopping-item-{pasta_id}"') < produce
         assert produce < html.index(f'id="shopping-item-{apples_id}"') < other
-        assert other < html.index(f'id="shopping-item-{batteries_id}"')
+        assert other < html.index(f'id="shopping-item-{gift_wrap_id}"')
 
     def test_uncategorized_list_stays_flat_until_an_aisle_exists(
         self, client,
     ):
         sign_up(client, "flat@example.com", "Flat")
-        _add_shopping(client, "Milk")
-        _add_shopping(client, "Bread")
+        _add_shopping(client, "Gift wrap")
+        _add_shopping(client, "Unusual spice blend")
 
         html = client.get("/shopping").get_data(as_text=True)
 

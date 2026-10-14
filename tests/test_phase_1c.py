@@ -81,13 +81,15 @@ class TestShoppingCRUD:
 
     def test_items_render_newest_first(self, client: Client):
         sign_up(client, "alice@example.com", "Alice")
-        self._add(client, name="Tortillas", quantity="2", unit="bags")
+        # Phase 11C.3 classifies both into Dairy & Eggs, so this continues
+        # to lock down newest-first ordering *within an aisle group*.
+        self._add(client, name="Yogurt", quantity="2", unit="cups")
         self._add(client, name="Milk", quantity="1", unit="gal")
         body = client.get("/shopping").get_data(as_text=True)
         ids = re.findall(r'id="shopping-item-(\d+)"', body)
         milk = id_for(body, "Milk", "shopping-item")
-        tort = id_for(body, "Tortillas", "shopping-item")
-        assert ids == [milk, tort], "expected newest (Milk) on top"
+        yogurt = id_for(body, "Yogurt", "shopping-item")
+        assert ids == [milk, yogurt], "expected newest (Milk) on top"
 
     def test_blank_name_returns_422_with_retarget(self, client: Client):
         sign_up(client, "alice@example.com", "Alice")

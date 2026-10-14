@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import sys
 
-from app import create_app
+from app import _default_shopping_category, create_app
 from extensions import db
 from models import Household, PantryItem, ShoppingItem, User
 
@@ -111,6 +111,7 @@ def seed():
                     added_by_user_id=user.id,
                     household_id=user.household_id,
                     name=name, quantity=qty, unit=unit, notes=notes,
+                    category=_default_shopping_category(name),
                     checked=checked,
                 ))
 

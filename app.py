@@ -1030,6 +1030,7 @@ def _register_routes(app: Flask) -> None:
             quantity=item.quantity,
             unit=item.unit,
             notes=None,  # notes are pantry-context, not shopping-context
+            category=_default_shopping_category(item.name),
         )
         db.session.add(shop)
         _bump_shopping_name_frequency(current_user.household_id, item.name)
@@ -1122,6 +1123,7 @@ def _register_routes(app: Flask) -> None:
                 quantity=form.quantity.data,
                 unit=_clean_optional(form.unit.data),
                 notes=_clean_optional(form.notes.data),
+                category=_default_shopping_category(name),
             )
             db.session.add(item)
             _bump_shopping_name_frequency(current_user.household_id, name)
@@ -1776,6 +1778,7 @@ def _register_routes(app: Flask) -> None:
             unit=None,
             # Source-trace so the user remembers WHY this is on the list.
             notes=f"Suggested by AI for: {plan.meal_name}"[:280],
+            category=_default_shopping_category(item_name),
         )
         db.session.add(shop)
         _bump_shopping_name_frequency(
@@ -1844,6 +1847,7 @@ def _register_routes(app: Flask) -> None:
                 quantity=None,
                 unit=None,
                 notes=source_note,
+                category=_default_shopping_category(item_name),
             )
             for item_name in need_items
         ]
@@ -2638,6 +2642,102 @@ def _top_shopping_suggestions(
 # --- Phase 11C.2: shopping aisle groups ----------------------------------
 
 SHOPPING_OTHER_CATEGORY = "Other"
+
+# Phase 11C.3: intentionally exact-name defaults. A loose keyword matcher
+# ("milk" in "almond milk") would confidently put many edge cases in the
+# wrong aisle. Unknown names remain uncategorized and surface in Other; the
+# mapping can grow from real-world misses without adding latency, cost, or
+# external data sharing to every shopping-list add.
+SHOPPING_CATEGORY_DEFAULTS: "dict[str, str]" = {
+    # Produce
+    "apple": "Produce",
+    "apples": "Produce",
+    "avocado": "Produce",
+    "avocados": "Produce",
+    "banana": "Produce",
+    "bananas": "Produce",
+    "bell pepper": "Produce",
+    "bell peppers": "Produce",
+    "broccoli": "Produce",
+    "carrot": "Produce",
+    "carrots": "Produce",
+    "cilantro": "Produce",
+    "cucumber": "Produce",
+    "garlic": "Produce",
+    "lemon": "Produce",
+    "lemons": "Produce",
+    "lettuce": "Produce",
+    "lime": "Produce",
+    "limes": "Produce",
+    "mushrooms": "Produce",
+    "onion": "Produce",
+    "onions": "Produce",
+    "potato": "Produce",
+    "potatoes": "Produce",
+    "spinach": "Produce",
+    "tomato": "Produce",
+    "tomatoes": "Produce",
+    "yellow onion": "Produce",
+    # Dairy & eggs
+    "butter": "Dairy & Eggs",
+    "cheese": "Dairy & Eggs",
+    "cream cheese": "Dairy & Eggs",
+    "eggs": "Dairy & Eggs",
+    "milk": "Dairy & Eggs",
+    "sour cream": "Dairy & Eggs",
+    "yogurt": "Dairy & Eggs",
+    # Meat & seafood
+    "bacon": "Meat & Seafood",
+    "beef": "Meat & Seafood",
+    "chicken": "Meat & Seafood",
+    "chicken breast": "Meat & Seafood",
+    "ground beef": "Meat & Seafood",
+    "salmon": "Meat & Seafood",
+    "sausage": "Meat & Seafood",
+    "shrimp": "Meat & Seafood",
+    "turkey": "Meat & Seafood",
+    # Bakery
+    "bagels": "Bakery",
+    "bread": "Bakery",
+    "buns": "Bakery",
+    "hamburger buns": "Bakery",
+    "tortillas": "Bakery",
+    # Pantry
+    "black beans": "Pantry",
+    "chickpeas": "Pantry",
+    "diced tomatoes": "Pantry",
+    "flour": "Pantry",
+    "olive oil": "Pantry",
+    "pasta": "Pantry",
+    "peanut butter": "Pantry",
+    "rice": "Pantry",
+    "salt": "Pantry",
+    "sugar": "Pantry",
+    "tomato sauce": "Pantry",
+    # Frozen
+    "frozen berries": "Frozen",
+    "frozen peas": "Frozen",
+    "frozen pizza": "Frozen",
+    # Beverages
+    "coffee": "Beverages",
+    "orange juice": "Beverages",
+    "sparkling water": "Beverages",
+    "tea": "Beverages",
+    "water": "Beverages",
+    # Household
+    "batteries": "Household",
+    "dish soap": "Household",
+    "laundry detergent": "Household",
+    "paper towels": "Household",
+    "toilet paper": "Household",
+    "trash bags": "Household",
+}
+
+
+def _default_shopping_category(raw_name: "str | None") -> "str | None":
+    """Return an exact-match local category default for a shopping name."""
+    normalized = " ".join((raw_name or "").split()).casefold()
+    return SHOPPING_CATEGORY_DEFAULTS.get(normalized)
 
 
 def _group_shopping_items(items) -> "list[tuple[str, list]]":

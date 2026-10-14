@@ -84,9 +84,10 @@ Focus: Scaling up to larger pantries (50+ items) gracefully and taking action on
   an “Other” section for uncategorized items. Checked-off items retain their
   established global section at the bottom.
 
-#### Phase 11C.3 — Category defaults (Size: M)
-- Classification: use a local curated mapping for common groceries; consider
-  an optional AI fallback only for unknown names.
+#### Phase 11C.3 — Category defaults (Size: M) — DONE 2026-10-14
+- Classification: added exact-match local defaults for common groceries across
+  every shopping-item creation path. Unknown names remain in “Other”; no
+  synchronous AI/network call is made when adding an item.
 
 ---
 

@@ -28,17 +28,19 @@ def _add_shopping(client: Client, name: str) -> None:
 
 
 class TestShoppingCategoryFoundation:
-    def test_new_shopping_items_start_uncategorized_and_persist_labels(
+    def test_unknown_shopping_items_start_uncategorized_and_persist_labels(
         self, client, app,
     ):
         sign_up(client, "alice@example.com", "Alice")
-        _add_shopping(client, "Milk")
+        _add_shopping(client, "Specialty spice blend")
 
         with app.app_context():
             from extensions import db
             from models import ShoppingItem
 
-            item = ShoppingItem.query.filter_by(name="Milk").one()
+            item = ShoppingItem.query.filter_by(
+                name="Specialty spice blend",
+            ).one()
             assert item.category is None
 
             item.category = "Dairy"

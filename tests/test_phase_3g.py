@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 import time
 
-from tests.conftest import Client, sign_up
+from tests.conftest import Client, id_for, sign_up
 
 
 # ---------------------------------------------------------------------------
@@ -40,20 +40,15 @@ def _shopping_dom_order(body: str) -> list[int]:
 
 def _add_shopping(c: Client, name: str) -> int:
     """Add an item via the POST /shopping route and return its DB id.
-    We scrape the id out of the htmx response (a fresh _shopping_list
-    partial), looking for the row whose name matches."""
+    We locate the named row in the htmx response via the shared row-aware
+    helper, which remains correct now that different aisle groups can sit
+    between shopping rows."""
     resp = c.post("/shopping", data={"name": name}, htmx=True)
     assert resp.status_code == 200, resp.get_data(as_text=True)
     body = resp.get_data(as_text=True)
-    # Find the LAST occurrence of the name (latest row) — re-renders
-    # show oldest-to-newest within the unchecked section, but the
-    # most-recently added is the new one we want.
-    matches = list(re.finditer(
-        r'id="shopping-item-(\d+)"[^>]*>.*?' + re.escape(name),
-        body, re.DOTALL,
-    ))
-    assert matches, f"Couldn't find new shopping item {name!r} in response"
-    return int(matches[-1].group(1))
+    item_id = id_for(body, name, "shopping-item")
+    assert item_id is not None, f"Couldn't find new shopping item {name!r}"
+    return int(item_id)
 
 
 def _toggle(c: Client, item_id: int) -> str:
@@ -72,8 +67,8 @@ class TestSortOrder:
             self, client, app):
         sign_up(client, "alice@example.com", "Alice")
         a = _add_shopping(client, "Apples")
-        b = _add_shopping(client, "Bread")
-        c = _add_shopping(client, "Cheese")
+        b = _add_shopping(client, "Bananas")
+        c = _add_shopping(client, "Avocados")
 
         _toggle(client, b)  # only B is checked
 
@@ -97,9 +92,9 @@ class TestSortOrder:
         sign_up(client, "alice@example.com", "Alice")
         first = _add_shopping(client, "Apples")
         time.sleep(0.01)  # ensure distinct added_at timestamps
-        second = _add_shopping(client, "Bread")
+        second = _add_shopping(client, "Bananas")
         time.sleep(0.01)
-        third = _add_shopping(client, "Cheese")
+        third = _add_shopping(client, "Avocados")
 
         body = client.get("/shopping").get_data(as_text=True)
         order = _shopping_dom_order(body)
@@ -120,8 +115,8 @@ class TestSortOrder:
         the TOP. We verify the latter."""
         sign_up(client, "alice@example.com", "Alice")
         a = _add_shopping(client, "Apples")
-        b = _add_shopping(client, "Bread")
-        c = _add_shopping(client, "Cheese")
+        b = _add_shopping(client, "Bananas")
+        c = _add_shopping(client, "Avocados")
 
         _toggle(client, a)            # checked_at(A) = t1
         time.sleep(0.01)
@@ -148,7 +143,7 @@ class TestSortOrder:
         item's checked_at is cleared so it sorts by added_at again."""
         sign_up(client, "alice@example.com", "Alice")
         a = _add_shopping(client, "Apples")
-        b = _add_shopping(client, "Bread")
+        b = _add_shopping(client, "Bananas")
 
         _toggle(client, a)  # A checked → goes to checked section
         body = client.get("/shopping").get_data(as_text=True)
@@ -259,8 +254,8 @@ class TestDivider:
             self, client, app):
         sign_up(client, "alice@example.com", "Alice")
         a = _add_shopping(client, "Apples")
-        b = _add_shopping(client, "Bread")
-        c = _add_shopping(client, "Cheese")
+        b = _add_shopping(client, "Bananas")
+        c = _add_shopping(client, "Avocados")
         _add_shopping(client, "Dates")  # leave one unchecked
         _toggle(client, a)
         _toggle(client, b)
