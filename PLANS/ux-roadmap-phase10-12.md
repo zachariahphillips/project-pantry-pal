@@ -97,10 +97,17 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 
 ### Phase 12A — "I Cooked This" Auto-Deduct (Size: L, Priority: P1)
 - **Goal:** Deduct ingredients from the pantry when a meal is cooked.
-- **Work:**
-  1. UI: Add a "Cooked it!" button on the AI Meal Plan result card.
-  2. AI: Pass the meal plan + current pantry to OpenAI, asking it to return a JSON array of `[{id: 12, qty_to_deduct: 1.5}, ...]`.
-  3. DB: Apply the deductions to the `pantry_items` table and flash a success toast ("Deducted 4 items").
+
+#### Phase 12A.1 — Cooked-meal preview (Size: S) — DONE 2026-10-15
+- UI: Added “Cooked it” to meal-plan cards. It shows a current pantry-match
+  preview without calling AI or mutating quantities.
+
+#### Phase 12A.2 — Reviewed deduction proposal (Size: M)
+- AI: Ask for a strict JSON proposal using current pantry item IDs and
+  quantities, then show it for user review and edits.
+
+#### Phase 12A.3 — Confirmed deduction and Undo (Size: M)
+- DB: Apply confirmed deductions transactionally and provide an Undo path.
 
 ### Phase 12B — Favorite / Pin Meals (Size: S, Priority: P2)
 - **Goal:** Save home-run recipes.

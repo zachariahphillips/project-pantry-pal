@@ -1,0 +1,58 @@
+{# Phase 12A.1: a current-pantry snapshot only. This partial is loaded by
+   "Cooked it!" and deliberately contains no form that can mutate pantry
+   quantities; Phase 12A.2 will add a reviewed proposal. #}
+<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"
+     data-meal-plan-cook-preview
+     role="status"
+     aria-live="polite">
+  <div class="flex items-start gap-2">
+    <svg viewBox="0 0 20 20" class="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-800"
+         fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M10 3v8M10 15h.01"/>
+      <circle cx="10" cy="10" r="7"/>
+    </svg>
+    <div class="min-w-0 flex-1">
+      <p class="text-sm font-semibold text-amber-950">Review pantry changes</p>
+      <p class="mt-0.5 text-xs text-amber-900">
+        No pantry changes have been made. Review the current matches before
+        PantryPal suggests any deduction.
+      </p>
+
+      {% if matches %}
+        <div class="mt-2 space-y-1.5" role="list">
+          {% for match in matches %}
+            <div class="rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-xs text-stone-700" role="listitem">
+              <span class="font-medium text-stone-900">{{ match.ingredient }}</span>
+              <span class="text-stone-500">
+                · {{ match.pantry_items|length }} current pantry
+                {{ "item" if match.pantry_items|length == 1 else "items" }}
+              </span>
+              <div class="mt-1 space-y-0.5 text-stone-500" role="list">
+                {% for item in match.pantry_items %}
+                  <div role="listitem">
+                    {{ item.name }}
+                    {% if item.display_quantity() %}· {{ item.display_quantity() }}{% else %}· quantity not tracked{% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if missing %}
+        <p class="mt-2 text-xs text-amber-900">
+          Not currently in your pantry:
+          <span class="font-medium">{{ missing|join(", ") }}</span>
+        </p>
+      {% endif %}
+
+      {% if not matches and not missing %}
+        <p class="mt-2 text-xs text-amber-900">
+          This plan did not record any pantry ingredients to review.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+</div>

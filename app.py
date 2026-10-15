@@ -1750,6 +1750,32 @@ def _register_routes(app: Flask) -> None:
         return _create_meal_plan_card_response(plan.prompt)
 
     @app.route(
+        "/meal-plan/<int:plan_id>/cook-preview", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_cook_preview(plan_id: int):
+        """Preview current-pantry matches before any cooked-meal deduction.
+
+        Phase 12A.1 deliberately does not call AI or mutate a PantryItem.
+        The user sees a current snapshot first; a later phase will propose
+        specific quantities and require confirmation before applying them.
+        """
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        matches, missing = _meal_plan_current_pantry_matches(
+            plan,
+            current_user.household.pantry_items.all(),
+        )
+        return render_template(
+            "_meal_plan_cook_preview.html",
+            plan=plan,
+            matches=matches,
+            missing=missing,
+        )
+
+    @app.route(
         "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
     )
     @login_required
@@ -2917,6 +2943,42 @@ def _utc_today_start():
     `created_at` columns we set with `datetime.utcnow`)."""
     from datetime import datetime
     return datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _meal_plan_current_pantry_matches(
+    plan: MealPlan, pantry_items,
+) -> "tuple[list[dict], list[str]]":
+    """Match a plan's recorded `have` ingredients to the pantry today.
+
+    This is a read-only, name-level snapshot for Phase 12A.1. The AI's
+    original `have` strings intentionally contain no quantities or item IDs,
+    and pantry contents may have changed since the plan was created. Later
+    phases will use this preview as input to propose explicit deductions;
+    this helper must not infer or apply any amount itself.
+    """
+    pantry_by_name: dict[str, list] = {}
+    for item in pantry_items:
+        key = " ".join((item.name or "").split()).casefold()
+        if key:
+            pantry_by_name.setdefault(key, []).append(item)
+
+    matches = []
+    missing = []
+    seen_names = set()
+    for ingredient in plan.have:
+        key = " ".join(ingredient.split()).casefold()
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
+        current_items = pantry_by_name.get(key, [])
+        if current_items:
+            matches.append({
+                "ingredient": ingredient,
+                "pantry_items": current_items,
+            })
+        else:
+            missing.append(ingredient)
+    return matches, missing
 
 
 def _meal_plans_today_for_user(user_id: int) -> int:

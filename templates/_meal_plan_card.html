@@ -146,21 +146,43 @@
       </details>
     {% endif %}
 
-    {% if _context == "inline" %}
+    {% if plan.have or _context == "inline" or _context == "list" %}
       <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
-        {# "Plan another" — pure client-side: scrolls back to the prompt
-           input on /pantry and focuses it. No server round-trip. #}
-        <button type="button"
-                onclick="(function(){ const i = document.getElementById('meal-plan-prompt'); if (i) { i.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>i.focus(), 350); } })()"
-                class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800">
-          <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 4v12M4 10h12"/>
-          </svg>
-          Plan another meal
-        </button>
-      </footer>
-    {% elif _context == "list" %}
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {% if plan.have %}
+            {# Phase 12A.1: this fetches a CURRENT pantry snapshot only.
+               It never deducts anything; a later reviewed proposal will
+               determine quantities before a user can apply a change. #}
+            <button type="button"
+                    hx-post="{{ url_for('meal_plan_cook_preview', plan_id=plan.id) }}"
+                    hx-target="#meal-plan-cook-preview-{{ plan.id }}"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this"
+                    aria-label="I cooked {{ plan.meal_name }} — review pantry changes"
+                    class="inline-flex h-8 items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:cursor-progress disabled:opacity-60">
+              <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true">
+                <path d="M6 3v3M14 3v3M4 8h12M5 5h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/>
+                <path d="m7.5 12 1.5 1.5 3.5-3.5"/>
+              </svg>
+              Cooked it
+            </button>
+          {% endif %}
+
+          {% if _context == "inline" %}
+            {# "Plan another" — pure client-side: scrolls back to the prompt
+               input on /pantry and focuses it. No server round-trip. #}
+            <button type="button"
+                    onclick="(function(){ const i = document.getElementById('meal-plan-prompt'); if (i) { i.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>i.focus(), 350); } })()"
+                    class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800">
+              <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 4v12M4 10h12"/>
+              </svg>
+              Plan another meal
+            </button>
+          {% elif _context == "list" %}
       {# Phase 3F: "Cook again →" — re-runs THIS plan's prompt against
          the household's CURRENT pantry. Posts to
          /meal-plan/from/<plan_id> which creates a brand-new MealPlan
@@ -173,22 +195,26 @@
          hx-disabled-elt="this" + the button-local text swap give the
          user a "Thinking…" affordance during the 2-5s OpenAI round-
          trip without needing a global skeleton on /meals. #}
-      <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
-        <button type="button"
-                hx-post="{{ url_for('meal_plan_cook_again', plan_id=plan.id) }}"
-                hx-target="#meals-list"
-                hx-swap="afterbegin"
-                hx-disabled-elt="this"
-                hx-on::before-request="this.dataset.origText = this.innerHTML; this.innerHTML = 'Thinking\u2026';"
-                hx-on::after-request="this.innerHTML = this.dataset.origText;"
-                aria-label="Cook this meal again with the current pantry"
-                class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
-          <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 4v5h.582M19.418 11A8.001 8.001 0 0 1 5.582 9M19 16v-5h-.582M4.582 9A8.001 8.001 0 0 1 18.418 11"/>
-          </svg>
-          Cook again →
-        </button>
+            <button type="button"
+                    hx-post="{{ url_for('meal_plan_cook_again', plan_id=plan.id) }}"
+                    hx-target="#meals-list"
+                    hx-swap="afterbegin"
+                    hx-disabled-elt="this"
+                    hx-on::before-request="this.dataset.origText = this.innerHTML; this.innerHTML = 'Thinking\u2026';"
+                    hx-on::after-request="this.innerHTML = this.dataset.origText;"
+                    aria-label="Cook this meal again with the current pantry"
+                    class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
+              <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4v5h.582M19.418 11A8.001 8.001 0 0 1 5.582 9M19 16v-5h-.582M4.582 9A8.001 8.001 0 0 1 18.418 11"/>
+              </svg>
+              Cook again →
+            </button>
+          {% endif %}
+        </div>
+        {% if plan.have %}
+          <div id="meal-plan-cook-preview-{{ plan.id }}"></div>
+        {% endif %}
       </footer>
     {% endif %}
   </article>
