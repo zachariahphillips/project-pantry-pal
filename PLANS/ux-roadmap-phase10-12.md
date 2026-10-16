@@ -102,9 +102,10 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 - UI: Added “Cooked it” to meal-plan cards. It shows a current pantry-match
   preview without calling AI or mutating quantities.
 
-#### Phase 12A.2 — Reviewed deduction proposal (Size: M)
-- AI: Ask for a strict JSON proposal using current pantry item IDs and
-  quantities, then show it for user review and edits.
+#### Phase 12A.2 — Reviewed deduction proposal (Size: M) — DONE 2026-10-16
+- AI: A strict JSON proposal is restricted to current, measured pantry-item
+  IDs and quantities, server-validated, and shown as editable suggested
+  amounts. It remains non-mutating until confirmation in 12A.3.
 
 #### Phase 12A.3 — Confirmed deduction and Undo (Size: M)
 - DB: Apply confirmed deductions transactionally and provide an Undo path.
