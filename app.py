@@ -1845,6 +1845,162 @@ def _register_routes(app: Flask) -> None:
         )
 
     @app.route(
+        "/meal-plan/<int:plan_id>/deduction-apply", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_deduction_apply(plan_id: int):
+        """Apply user-confirmed deductions in one DB transaction.
+
+        User-edited amounts are validated again against the household's
+        current pantry rather than trusting the earlier AI proposal. A
+        successful write gets a single-use, household-scoped session Undo.
+        """
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        candidates = _meal_plan_deduction_candidates(
+            plan, current_user.household.pantry_items.all(),
+        )
+        deductions, error = _validated_confirmed_deductions(
+            request.form, candidates,
+        )
+        if error:
+            return render_template(
+                "_meal_plan_deduction_proposal.html",
+                plan=plan,
+                error=error,
+                proposals=[],
+            )
+
+        try:
+            undo_entries = _apply_confirmed_deductions(
+                deductions, current_user.household_id,
+            )
+            db.session.commit()
+        except ValueError:
+            # A household member can update a quantity between the form
+            # render and confirmation. Roll back the entire batch: no
+            # partial deduction is preferable to a stale one.
+            db.session.rollback()
+            return render_template(
+                "_meal_plan_deduction_proposal.html",
+                plan=plan,
+                error=(
+                    "Your pantry changed before these deductions could be "
+                    "applied. Review the current quantities and try again."
+                ),
+                proposals=[],
+            )
+        except Exception:
+            db.session.rollback()
+            log.exception("Could not apply meal-plan deductions.")
+            return render_template(
+                "_meal_plan_deduction_proposal.html",
+                plan=plan,
+                error=(
+                    "PantryPal could not apply those deductions. Your "
+                    "pantry was not changed."
+                ),
+                proposals=[],
+            )
+
+        _store_meal_plan_deduction_undo(
+            plan.id, current_user.household_id, undo_entries,
+        )
+        deducted_count = len(undo_entries)
+        removed_count = sum(
+            1 for entry in undo_entries if entry["deleted_item"] is not None
+        )
+        return render_template(
+            "_meal_plan_deduction_applied.html",
+            plan=plan,
+            deducted_count=deducted_count,
+            removed_count=removed_count,
+            error=None,
+        ), 200, {
+            "HX-Trigger": json.dumps({
+                "meal-plan:deductions-applied": {
+                    "count": deducted_count,
+                    "undoUrl": url_for(
+                        "meal_plan_deduction_undo", plan_id=plan.id,
+                    ),
+                    "target": f"#meal-plan-cook-preview-{plan.id}",
+                }
+            })
+        }
+
+    @app.route(
+        "/meal-plan/<int:plan_id>/deduction-undo", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_deduction_undo(plan_id: int):
+        """Restore the last confirmed deduction when its result is intact."""
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        snapshot = session.get(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY)
+        restored = _restore_meal_plan_deduction_undo(
+            snapshot, plan.id, current_user.household_id,
+        )
+        # Single-use Undo: successful restoration, a conflicting newer
+        # update, and a malformed/expired snapshot all consume it.
+        session.pop(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY, None)
+
+        if restored is None:
+            db.session.rollback()
+            return render_template(
+                "_meal_plan_deduction_applied.html",
+                plan=plan,
+                deducted_count=0,
+                removed_count=0,
+                error=(
+                    "Pantry quantities changed after this meal was logged, "
+                    "so PantryPal could not undo safely."
+                ),
+            )
+        if restored == 0:
+            return render_template(
+                "_meal_plan_deduction_applied.html",
+                plan=plan,
+                deducted_count=0,
+                removed_count=0,
+                error="There is no recent meal deduction to undo.",
+            )
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            log.exception("Could not undo meal-plan deductions.")
+            return render_template(
+                "_meal_plan_deduction_applied.html",
+                plan=plan,
+                deducted_count=0,
+                removed_count=0,
+                error="PantryPal could not undo those deductions.",
+            ), 500
+
+        pantry_items = current_user.household.pantry_items.all()
+        matches, missing = _meal_plan_current_pantry_matches(
+            plan, pantry_items,
+        )
+        return render_template(
+            "_meal_plan_cook_preview.html",
+            plan=plan,
+            matches=matches,
+            missing=missing,
+            has_deduction_candidates=bool(
+                _meal_plan_deduction_candidates(plan, pantry_items)
+            ),
+        ), 200, {
+            "HX-Trigger": json.dumps({
+                "meal-plan:deductions-undone": {"count": restored}
+            })
+        }
+
+    @app.route(
         "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
     )
     @login_required
@@ -2181,6 +2337,11 @@ SHOPPING_UNDO_SESSION_KEY = "shopping_undo"
 # should still work when they navigate back to the respective list.)
 PANTRY_UNDO_SESSION_KEY = "pantry_undo"
 
+# Phase 12A.3: a separate one-slot Undo for confirmed cooked-meal
+# deductions. It stores quantities (and full snapshots only for rows that
+# reach zero), so it cannot conflict with the existing pantry-delete undo.
+MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY = "meal_plan_deduction_undo"
+
 # Phase 6A: on the onboarding-zone-crossing delete path, `pantry_item_delete`
 # returns 204 + HX-Refresh (per the B-001 fix in Chunk 5B). HX-Refresh
 # forces a full-page reload, which discards any client-side toast we
@@ -2401,6 +2562,186 @@ def _restore_pantry_snapshot(snapshot: dict, household_id: int) -> int:
                 pass
         db.session.add(item)
         restored += 1
+    return restored
+
+
+# --- Phase 12A.3: transaction + safe session Undo for cooked meals --------
+
+def _validated_confirmed_deductions(
+    form, candidates,
+) -> "tuple[list[dict] | None, str | None]":
+    """Validate editable deduction fields against the current candidates.
+
+    Zero means the user opted out of one suggestion. Positive values must be
+    finite and cannot exceed the quantity the user just reviewed. The apply
+    route rechecks all rows immediately before its single commit.
+    """
+    candidate_by_id = {item.id: item for item in candidates}
+    deductions = []
+    seen_ids = set()
+    for key, values in form.lists():
+        if not key.startswith("deduction-"):
+            continue
+        raw_id = key.removeprefix("deduction-")
+        if (
+            not raw_id.isdecimal()
+            or len(values) != 1
+            or (item_id := int(raw_id)) not in candidate_by_id
+            or item_id in seen_ids
+        ):
+            return None, "Review the current pantry quantities and try again."
+        try:
+            quantity = float((values[0] or "").strip())
+        except (TypeError, ValueError):
+            return None, "Enter a valid deduction amount for every item."
+        item = candidate_by_id[item_id]
+        if not math.isfinite(quantity) or quantity < 0:
+            return None, "Deduction amounts must be zero or a positive number."
+        if quantity > item.quantity:
+            return None, (
+                f"You cannot deduct more {item.name} than is currently "
+                "in your pantry."
+            )
+        seen_ids.add(item_id)
+        if quantity > 0:
+            deductions.append({
+                "pantry_item_id": item_id,
+                "quantity_to_deduct": quantity,
+            })
+
+    if not deductions:
+        return None, "Choose at least one positive amount to deduct."
+    if len(deductions) > UNDO_SNAPSHOT_MAX_ITEMS:
+        return None, "Too many pantry items were selected for one meal."
+    return deductions, None
+
+
+def _apply_confirmed_deductions(
+    deductions, household_id: int,
+) -> list[dict]:
+    """Mutate a fully-validated batch and return its Undo snapshot.
+
+    This function never commits. Its caller commits once after every item has
+    been re-read and updated, so a stale row rolls back the complete batch
+    rather than leaving a partially logged meal.
+    """
+    undo_entries = []
+    for deduction in deductions:
+        item = db.session.get(PantryItem, deduction["pantry_item_id"])
+        quantity = deduction["quantity_to_deduct"]
+        if (
+            item is None
+            or item.household_id != household_id
+            or item.quantity is None
+            or not math.isfinite(item.quantity)
+            or item.quantity <= 0
+            or quantity <= 0
+            or quantity > item.quantity
+        ):
+            raise ValueError("Stale or invalid pantry item.")
+
+        before_quantity = item.quantity
+        remaining_quantity = before_quantity - quantity
+        entry = {
+            "item_id": item.id,
+            "before_quantity": before_quantity,
+            "after_quantity": remaining_quantity,
+            "deleted_item": None,
+        }
+        if remaining_quantity <= 0:
+            entry["deleted_item"] = _snapshot_pantry_items([item])[0]
+            db.session.delete(item)
+        else:
+            item.quantity = remaining_quantity
+        undo_entries.append(entry)
+    return undo_entries
+
+
+def _store_meal_plan_deduction_undo(
+    plan_id: int, household_id: int, entries: list[dict],
+) -> None:
+    """Store one successful cooked-meal deduction for a one-time Undo."""
+    if not entries or len(entries) > UNDO_SNAPSHOT_MAX_ITEMS:
+        session.pop(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY, None)
+        return
+    session[MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY] = {
+        "plan_id": plan_id,
+        "household_id": household_id,
+        "entries": entries,
+    }
+
+
+def _restore_meal_plan_deduction_undo(
+    snapshot, plan_id: int, household_id: int,
+) -> "int | None":
+    """Restore an Undo snapshot, or return None when a newer edit conflicts.
+
+    Every surviving row must still have the quantity written by the deduction.
+    This prevents an Undo from replacing a roommate's newer pantry update. A
+    deleted row is restored only when its original primary key is still free.
+    """
+    if (
+        not isinstance(snapshot, dict)
+        or snapshot.get("plan_id") != plan_id
+        or snapshot.get("household_id") != household_id
+    ):
+        return 0
+    entries = snapshot.get("entries")
+    if (
+        not isinstance(entries, list)
+        or not entries
+        or len(entries) > UNDO_SNAPSHOT_MAX_ITEMS
+    ):
+        return 0
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return 0
+        item_id = entry.get("item_id")
+        before = entry.get("before_quantity")
+        after = entry.get("after_quantity")
+        if (
+            isinstance(item_id, bool)
+            or not isinstance(item_id, int)
+            or isinstance(before, bool)
+            or not isinstance(before, (int, float))
+            or isinstance(after, bool)
+            or not isinstance(after, (int, float))
+            or not math.isfinite(before)
+            or not math.isfinite(after)
+        ):
+            return 0
+
+        deleted_item = entry.get("deleted_item")
+        current_item = db.session.get(PantryItem, item_id)
+        if deleted_item is not None:
+            if not isinstance(deleted_item, dict) or current_item is not None:
+                return None
+            continue
+        if (
+            current_item is None
+            or current_item.household_id != household_id
+            or current_item.quantity is None
+            or not math.isfinite(current_item.quantity)
+            or not math.isclose(
+                current_item.quantity, after, rel_tol=1e-9, abs_tol=1e-9,
+            )
+        ):
+            return None
+
+    restored = 0
+    for entry in entries:
+        deleted_item = entry["deleted_item"]
+        if deleted_item is not None:
+            restored += _restore_pantry_snapshot(
+                {"household_id": household_id, "items": [deleted_item]},
+                household_id,
+            )
+        else:
+            db.session.get(PantryItem, entry["item_id"]).quantity = (
+                entry["before_quantity"]
+            )
+            restored += 1
     return restored
 
 

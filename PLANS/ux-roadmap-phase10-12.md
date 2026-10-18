@@ -107,8 +107,10 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
   IDs and quantities, server-validated, and shown as editable suggested
   amounts. It remains non-mutating until confirmation in 12A.3.
 
-#### Phase 12A.3 — Confirmed deduction and Undo (Size: M)
-- DB: Apply confirmed deductions transactionally and provide an Undo path.
+#### Phase 12A.3 — Confirmed deduction and Undo (Size: M) — DONE 2026-10-18
+- DB: User-confirmed amounts are revalidated and applied in one transaction.
+  A one-time Undo restores unchanged quantities (including items removed at
+  zero) without overwriting a newer household update.
 
 ### Phase 12B — Favorite / Pin Meals (Size: S, Priority: P2)
 - **Goal:** Save home-run recipes.

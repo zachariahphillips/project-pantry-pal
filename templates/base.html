@@ -71,6 +71,11 @@
         // Defaults preserve the pre-6A behavior for shopping callers
         // that don't pass a target.
         toastAction.dataset.target = action.target || '#shopping-list';
+        toastAction.dataset.swap = action.swap || (
+          toastAction.dataset.target === '#shopping-list'
+            ? 'outerHTML transition:true'
+            : 'outerHTML'
+        );
         toastAction.classList.remove('hidden');
         // Pointer-events on the WHOLE toast so the button can be tapped;
         // text remains a no-op target so it doesn't intercept stray taps
@@ -81,6 +86,7 @@
         toastAction.classList.add('hidden');
         toastAction.removeAttribute('data-url');
         toastAction.removeAttribute('data-target');
+        toastAction.removeAttribute('data-swap');
         toast.classList.add('pointer-events-none');
         toast.classList.remove('pointer-events-auto');
       }
@@ -95,6 +101,7 @@
         toastAction.classList.add('hidden');
         toastAction.removeAttribute('data-url');
         toastAction.removeAttribute('data-target');
+        toastAction.removeAttribute('data-swap');
         toast.classList.add('pointer-events-none');
         toast.classList.remove('pointer-events-auto');
       }, duration);
@@ -113,12 +120,13 @@
         // pre-existing shopping callers; pantry sets '#pantry-list'
         // when it fires its own toast.
         const target = action.dataset.target || '#shopping-list';
+        const swap = action.dataset.swap || (
+          target === '#shopping-list' ? 'outerHTML transition:true' : 'outerHTML'
+        );
         if (window.htmx) {
           window.htmx.ajax('POST', url, {
             target: target,
-            swap: target === '#shopping-list'
-              ? 'outerHTML transition:true'
-              : 'outerHTML',
+            swap: swap,
           });
         }
         // Hide immediately — the success toast (`*:undone`) will
@@ -221,6 +229,25 @@
     document.addEventListener('pantry:undone', (e) => {
       const n = (e.detail && e.detail.count) || 0;
       showToast(n === 1 ? 'Restored 1 item' : `Restored ${n} items`);
+    });
+    // Phase 12A.3: a confirmed cooked meal updates pantry quantities in one
+    // transaction. Its Undo swaps only the meal card's preview back, rather
+    // than replacing either full pantry/list container.
+    document.addEventListener('meal-plan:deductions-applied', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      const undoUrl = (e.detail && e.detail.undoUrl) || null;
+      const target = (e.detail && e.detail.target) || null;
+      const text = n === 1 ? 'Deducted 1 pantry item' : `Deducted ${n} pantry items`;
+      showToast(
+        text,
+        undoUrl && target
+          ? { label: 'Undo', url: undoUrl, target: target, swap: 'innerHTML' }
+          : null,
+      );
+    });
+    document.addEventListener('meal-plan:deductions-undone', (e) => {
+      const n = (e.detail && e.detail.count) || 0;
+      showToast(n === 1 ? 'Restored 1 pantry item' : `Restored ${n} pantry items`);
     });
     // Phase 6B: pantry-merge confirmation toast. Fires when the user
     // resolves a duplicate-add prompt with "Update existing" — the
@@ -447,7 +474,7 @@
               'warning': 'bg-amber-50 border-amber-200 text-amber-900',
             }.get(category, 'bg-stone-50 border-stone-200 text-stone-800') %}
             <div class="rounded-xl border px-4 py-3 text-sm transition-opacity duration-300 ease-out {{ bg }}"
-                 role="{{ 'alert' if is_error else 'status' }}"
+                 {% if is_error %}role="alert"{% else %}role="status"{% endif %}
                  data-flash-message
                  data-flash-category="{{ category }}"
                  {% if not is_error %}data-flash-auto-dismiss="true"{% endif %}>
