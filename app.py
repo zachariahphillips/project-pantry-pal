@@ -2322,6 +2322,25 @@ def _ensure_pantry_low_stock_column() -> None:
             )
 
 
+def _ensure_meal_plan_is_favorite_column() -> None:
+    """Add the Phase 12B.1 household-shared favorite flag to old databases.
+
+    Existing plans must begin unpinned. Putting DEFAULT 0 in the ALTER (not
+    just the ORM model) makes every installed SQLite row valid immediately.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("meal_plans"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("meal_plans")}
+    if "is_favorite" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE meal_plans ADD COLUMN is_favorite "
+                "BOOLEAN NOT NULL DEFAULT 0"
+            )
+
+
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
 # --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
@@ -3237,6 +3256,9 @@ def _run_phase_2a_migration() -> None:
     # low-stock flag because PantryItem ORM queries select every mapped
     # column, including this one.
     _ensure_pantry_low_stock_column()
+    # Phase 12B.1: MealPlan now maps is_favorite, so legacy databases need
+    # this additive default before any meal-history query can run.
+    _ensure_meal_plan_is_favorite_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:

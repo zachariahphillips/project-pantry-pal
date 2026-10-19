@@ -365,6 +365,11 @@ class MealPlan(db.Model):
     # Denormalized convenience for list views — `parsed.get("meal_name")`
     # would also work but means a json.loads on every row.
     meal_name = db.Column(db.String(200), nullable=False)
+    # Phase 12B.1: household-shared pin state. It deliberately lives on the
+    # meal plan rather than a per-user join table: meal history is already
+    # shared with household members, and personal favorites would be a
+    # separate, larger feature.
+    is_favorite = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     household = db.relationship(

@@ -114,10 +114,16 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 
 ### Phase 12B — Favorite / Pin Meals (Size: S, Priority: P2)
 - **Goal:** Save home-run recipes.
-- **Work:**
-  1. DB: Add `is_favorite` to `meal_plans`.
-  2. UI: Add a star icon to meal history cards. 
-  3. UI: Add a "Favorites" filter tab in the Meals view.
+
+#### Phase 12B.1 — Favorite foundation (Size: S) — DONE 2026-10-19
+- DB: Added a household-shared `is_favorite` flag to meal plans with a safe
+  false default and an idempotent SQLite migration for installed databases.
+
+#### Phase 12B.2 — Pin/unpin cards (Size: S)
+- UI: Add an in-place star control to meal cards with household authorization.
+
+#### Phase 12B.3 — Favorites filter (Size: S)
+- UI: Add a Favorites filter to Meals, including an empty state.
 
 ### Phase 12C — Dietary & Scale Toggles (Size: M, Priority: P2)
 - **Goal:** Quick-toggles instead of typing for common AI prompts.
