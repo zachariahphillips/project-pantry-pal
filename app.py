@@ -2001,6 +2001,20 @@ def _register_routes(app: Flask) -> None:
         }
 
     @app.route(
+        "/meal-plan/<int:plan_id>/favorite", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_favorite_toggle(plan_id: int):
+        """Pin or unpin a meal for the whole household in place."""
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        plan.is_favorite = not bool(plan.is_favorite)
+        db.session.commit()
+        return render_template("_meal_plan_favorite_toggle.html", plan=plan)
+
+    @app.route(
         "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
     )
     @login_required

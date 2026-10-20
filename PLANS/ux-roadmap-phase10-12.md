@@ -119,8 +119,10 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 - DB: Added a household-shared `is_favorite` flag to meal plans with a safe
   false default and an idempotent SQLite migration for installed databases.
 
-#### Phase 12B.2 — Pin/unpin cards (Size: S)
-- UI: Add an in-place star control to meal cards with household authorization.
+#### Phase 12B.2 — Pin/unpin cards (Size: S) — DONE 2026-10-20
+- UI: Added an in-place, household-shared star control to each meal card.
+  It swaps only the control, preserves card state, and enforces household
+  authorization server-side.
 
 #### Phase 12B.3 — Favorites filter (Size: S)
 - UI: Add a Favorites filter to Meals, including an empty state.

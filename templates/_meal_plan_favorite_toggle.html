@@ -1,0 +1,20 @@
+{# Phase 12B.2: favorite state is shared by the household, like meal plans. #}
+<div id="meal-plan-favorite-{{ plan.id }}" class="flex-shrink-0">
+  <button type="button"
+          hx-post="{{ url_for('meal_plan_favorite_toggle', plan_id=plan.id) }}"
+          hx-target="#meal-plan-favorite-{{ plan.id }}"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          {% if plan.is_favorite %}aria-pressed="true"{% else %}aria-pressed="false"{% endif %}
+          aria-label="{% if plan.is_favorite %}Unpin {{ plan.meal_name }} from household favorites{% else %}Pin {{ plan.meal_name }} to household favorites{% endif %}"
+          title="{% if plan.is_favorite %}Pinned for your household — tap to unpin{% else %}Pin for your household{% endif %}"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-lg focus:outline-none focus:ring-2 disabled:cursor-progress disabled:opacity-60 {% if plan.is_favorite %}bg-amber-50 text-amber-600 hover:bg-amber-100 focus:ring-amber-300{% else %}text-stone-400 hover:bg-amber-50 hover:text-amber-600 focus:ring-amber-300{% endif %}">
+    <svg viewBox="0 0 20 20" class="h-5 w-5" stroke="currentColor"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+         {% if plan.is_favorite %}fill="currentColor"{% else %}fill="none"{% endif %}
+         aria-hidden="true">
+      <path d="m10 2.8 2.2 4.45 4.9.72-3.55 3.46.84 4.88L10 13.98 5.61 16.3l.84-4.88L2.9 7.97l4.9-.72L10 2.8Z"/>
+    </svg>
+    <span class="sr-only">{% if plan.is_favorite %}Pinned for household{% else %}Pin for household{% endif %}</span>
+  </button>
+</div>

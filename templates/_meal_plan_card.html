@@ -43,13 +43,18 @@
   <article id="meal-plan-{{ plan.id }}"
            class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
     <header class="border-b border-stone-100 px-4 py-3">
-      <h3 class="text-base font-semibold text-stone-900">{{ plan.meal_name }}</h3>
-      <p class="mt-0.5 text-xs text-stone-500">
-        From <span class="italic">"{{ plan.prompt }}"</span>
-        {% if plan.created_by and plan.created_by.id != current_user.id %}
-          · asked by {{ plan.created_by.name }}
-        {% endif %}
-      </p>
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="text-base font-semibold text-stone-900">{{ plan.meal_name }}</h3>
+          <p class="mt-0.5 text-xs text-stone-500">
+            From <span class="italic">"{{ plan.prompt }}"</span>
+            {% if plan.created_by and plan.created_by.id != current_user.id %}
+              · asked by {{ plan.created_by.name }}
+            {% endif %}
+          </p>
+        </div>
+        {% include "_meal_plan_favorite_toggle.html" %}
+      </div>
     </header>
 
     {% if plan.have %}
