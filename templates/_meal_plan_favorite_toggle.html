@@ -1,7 +1,9 @@
 {# Phase 12B.2: favorite state is shared by the household, like meal plans. #}
 <div id="meal-plan-favorite-{{ plan.id }}" class="flex-shrink-0">
+  {% set _meal_filter = meal_filter|default("all") %}
   <button type="button"
           hx-post="{{ url_for('meal_plan_favorite_toggle', plan_id=plan.id) }}"
+          hx-vals='{"meal_filter": "{{ _meal_filter }}"}'
           hx-target="#meal-plan-favorite-{{ plan.id }}"
           hx-swap="outerHTML"
           hx-disabled-elt="this"

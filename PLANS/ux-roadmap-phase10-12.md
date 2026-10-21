@@ -124,8 +124,9 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
   It swaps only the control, preserves card state, and enforces household
   authorization server-side.
 
-#### Phase 12B.3 — Favorites filter (Size: S)
-- UI: Add a Favorites filter to Meals, including an empty state.
+#### Phase 12B.3 — Favorites filter (Size: S) — DONE 2026-10-21
+- UI: Added a URL-based Pinned filter to Meals, an empty state, and a safe
+  redirect when unpinning from the filtered view so stale cards cannot linger.
 
 ### Phase 12C — Dietary & Scale Toggles (Size: M, Priority: P2)
 - **Goal:** Quick-toggles instead of typing for common AI prompts.

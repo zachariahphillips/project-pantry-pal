@@ -2010,8 +2010,18 @@ def _register_routes(app: Flask) -> None:
         if plan is None or plan.household_id != current_user.household_id:
             abort(404)
 
+        was_favorite = bool(plan.is_favorite)
         plan.is_favorite = not bool(plan.is_favorite)
         db.session.commit()
+        # An unpinned card no longer belongs in the Favorites view. Let htmx
+        # reload that small URL state instead of leaving a stale card behind.
+        if (
+            was_favorite
+            and request.form.get("meal_filter") == "favorites"
+        ):
+            return "", 200, {
+                "HX-Redirect": url_for("meals_list", filter="favorites")
+            }
         return render_template("_meal_plan_favorite_toggle.html", plan=plan)
 
     @app.route(
@@ -2066,13 +2076,23 @@ def _register_routes(app: Flask) -> None:
         No pagination yet — at ~50 plans/month this'll be fine for
         years. Phase 3C+ can add a `before=<date>` query param.
         """
-        plans = current_user.household.meal_plans.all()
+        meal_filter = request.args.get("filter", "all")
+        if meal_filter not in {"all", "favorites"}:
+            meal_filter = "all"
+
+        plans_query = current_user.household.meal_plans
+        if meal_filter == "favorites":
+            plans_query = plans_query.filter(
+                MealPlan.is_favorite.is_(True),
+            )
+        plans = plans_query.all()
         # Phase 6N: the empty-state CTA should not promise "Plan a meal"
         # while the pantry-side planner is still locked behind onboarding.
         pantry_item_count = current_user.household.pantry_items.count()
         return render_template(
             "meals.html",
             plans=plans,
+            meal_filter=meal_filter,
             pantry_item_count=pantry_item_count,
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
         )
