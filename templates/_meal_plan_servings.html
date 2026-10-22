@@ -1,0 +1,30 @@
+{# Phase 12C.1: request-scoped portions. JS keeps the hidden submission
+   value, visible count, and +/- boundaries synchronized. #}
+<fieldset class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
+          data-meal-plan-servings>
+  <legend class="sr-only">Servings</legend>
+  <span class="text-xs font-medium text-stone-700">Servings</span>
+  <div class="flex items-center gap-1.5" role="group" aria-label="Servings">
+    <button type="button"
+            data-meal-plan-servings-decrease
+            aria-label="Decrease servings"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-300 bg-white text-lg leading-none text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-40">
+      −
+    </button>
+    <output data-meal-plan-servings-value
+            aria-live="polite"
+            class="inline-flex h-8 min-w-10 items-center justify-center rounded-lg bg-white px-2 text-sm font-semibold tabular-nums text-stone-900">
+      2
+    </output>
+    <button type="button"
+            data-meal-plan-servings-increase
+            aria-label="Increase servings"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-300 bg-white text-lg leading-none text-stone-700 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-not-allowed disabled:opacity-40">
+      +
+    </button>
+    <input type="hidden"
+           name="servings"
+           value="2"
+           data-meal-plan-servings-input>
+  </div>
+</fieldset>

@@ -130,4 +130,15 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 
 ### Phase 12C — Dietary & Scale Toggles (Size: M, Priority: P2)
 - **Goal:** Quick-toggles instead of typing for common AI prompts.
-- **Work:** Add UI toggles for Portions (- 2 +) and Household Diets (Vegetarian, GF). Inject these transparently into the system prompt.
+
+#### Phase 12C.1 — Portions control (Size: S) — DONE 2026-10-22
+- UI: Added a `− / +` servings stepper to both meal-planner layouts.
+  The server bounds it to 1–12 and injects the selected count into the AI
+  system instruction without changing the user's saved prompt.
+
+#### Phase 12C.2 — Dietary request chips (Size: S)
+- UI: Add Vegetarian and Gluten-free request chips, validate their values,
+  and inject them into the AI system instruction for that meal only.
+
+#### Phase 12C.3 — Household preference defaults (Size: M)
+- Settings: Persist household diet defaults and preselect the request chips.

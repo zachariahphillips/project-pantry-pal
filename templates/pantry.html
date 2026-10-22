@@ -123,25 +123,28 @@
                 hx-swap="innerHTML"
                 hx-indicator="#meal-plan-spinner"
                 hx-on::after-request="if (event.detail.successful) this.reset();"
-                class="flex gap-2">
+                class="space-y-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <label for="meal-plan-prompt" class="sr-only">Plan another meal</label>
-            <input id="meal-plan-prompt"
-                   type="text"
-                   name="prompt"
-                   data-meal-plan-prompt
-                   maxlength="240"
-                   required
-                   autocomplete="off"
-                   placeholder="Plan another meal"
-                   class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-            <button type="submit"
-                    aria-label="Ask AI for another meal"
-                    data-meal-plan-submit
-                    hx-disabled-elt="this"
-                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
-              Ask
-            </button>
+            <div class="flex gap-2">
+              <label for="meal-plan-prompt" class="sr-only">Plan another meal</label>
+              <input id="meal-plan-prompt"
+                     type="text"
+                     name="prompt"
+                     data-meal-plan-prompt
+                     maxlength="240"
+                     required
+                     autocomplete="off"
+                     placeholder="Plan another meal"
+                     class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+              <button type="submit"
+                      aria-label="Ask AI for another meal"
+                      data-meal-plan-submit
+                      hx-disabled-elt="this"
+                      class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
+                Ask
+              </button>
+            </div>
+            {% include "_meal_plan_servings.html" %}
           </form>
           <details class="mt-2 group">
             <summary class="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-stone-500 hover:text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-300">
@@ -190,24 +193,27 @@
                 hx-swap="innerHTML"
                 hx-indicator="#meal-plan-spinner"
                 hx-on::after-request="if (event.detail.successful) this.reset();"
-                class="mt-3 flex gap-2">
+                class="mt-3 space-y-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
-            <input id="meal-plan-prompt"
-                   type="text"
-                   name="prompt"
-                   data-meal-plan-prompt
-                   maxlength="240"
-                   required
-                   autocomplete="off"
-                   placeholder='e.g. "pasta carbonara"'
-                   class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
-            <button type="submit"
-                    data-meal-plan-submit
-                    hx-disabled-elt="this"
-                    class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
-              Ask AI
-            </button>
+            <div class="flex gap-2">
+              <label for="meal-plan-prompt" class="sr-only">What do you want to make?</label>
+              <input id="meal-plan-prompt"
+                     type="text"
+                     name="prompt"
+                     data-meal-plan-prompt
+                     maxlength="240"
+                     required
+                     autocomplete="off"
+                     placeholder='e.g. "pasta carbonara"'
+                     class="block w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200" />
+              <button type="submit"
+                      data-meal-plan-submit
+                      hx-disabled-elt="this"
+                      class="inline-flex h-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98] active:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:animate-pulse disabled:opacity-70">
+                Ask AI
+              </button>
+            </div>
+            {% include "_meal_plan_servings.html" %}
           </form>
         </div>
       {% endif %}
@@ -628,6 +634,45 @@
         const len = input.value.length;
         try { input.setSelectionRange(len, len); } catch (_) { /* noop */ }
       });
+    });
+
+    // Phase 12C.1: request-scoped servings. The hidden input is what htmx
+    // submits; keeping the visible output in sync makes the compact and
+    // first-plan forms work identically without a new server round trip.
+    document.querySelectorAll('[data-meal-plan-servings]').forEach((control) => {
+      const input = control.querySelector('[data-meal-plan-servings-input]');
+      const value = control.querySelector('[data-meal-plan-servings-value]');
+      const decrease = control.querySelector('[data-meal-plan-servings-decrease]');
+      const increase = control.querySelector('[data-meal-plan-servings-increase]');
+      if (!input || !value || !decrease || !increase) return;
+
+      const min = 1;
+      const max = 12;
+      const setServings = (raw) => {
+        const parsed = Number.parseInt(raw, 10);
+        const servings = Number.isFinite(parsed)
+          ? Math.min(max, Math.max(min, parsed))
+          : 2;
+        input.value = String(servings);
+        value.textContent = String(servings);
+        value.setAttribute('aria-label', `${servings} servings`);
+        decrease.disabled = servings <= min;
+        increase.disabled = servings >= max;
+      };
+
+      decrease.addEventListener('click', () => {
+        setServings(Number.parseInt(input.value, 10) - 1);
+      });
+      increase.addEventListener('click', () => {
+        setServings(Number.parseInt(input.value, 10) + 1);
+      });
+      const form = control.closest('form');
+      if (form) {
+        form.addEventListener('reset', () => {
+          window.setTimeout(() => setServings(input.value), 0);
+        });
+      }
+      setServings(input.value);
     });
 
     // Cost pill. Fetches /cost on initial page load + after every
