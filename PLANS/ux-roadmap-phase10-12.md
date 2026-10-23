@@ -136,9 +136,10 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
   The server bounds it to 1–12 and injects the selected count into the AI
   system instruction without changing the user's saved prompt.
 
-#### Phase 12C.2 — Dietary request chips (Size: S)
-- UI: Add Vegetarian and Gluten-free request chips, validate their values,
-  and inject them into the AI system instruction for that meal only.
+#### Phase 12C.2 — Dietary request chips (Size: S) — DONE 2026-10-23
+- UI: Added request-scoped Vegetarian and Gluten-free chips. Canonical
+  selections are server-validated and injected as AI system instructions
+  without altering the saved free-text meal request.
 
 #### Phase 12C.3 — Household preference defaults (Size: M)
 - Settings: Persist household diet defaults and preselect the request chips.

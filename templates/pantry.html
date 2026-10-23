@@ -96,8 +96,8 @@
       {% set chips = [
         ("Tonight's dinner", "Tonight's dinner"),
         ("Quick (< 30 min)", "A quick meal, under 30 minutes"),
-        ("Vegetarian", "A vegetarian meal"),
         ("Comfort food", "Something comforting"),
+        ("One-pot", "A one-pot meal with minimal cleanup"),
         ("Use what we have", "Use mostly what we already have in the pantry"),
       ] %}
       {% if has_items_expiring_soon %}
@@ -145,6 +145,7 @@
               </button>
             </div>
             {% include "_meal_plan_servings.html" %}
+            {% include "_meal_plan_dietary_preferences.html" %}
           </form>
           <details class="mt-2 group">
             <summary class="inline-flex cursor-pointer select-none items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-stone-500 hover:text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-300">
@@ -214,6 +215,7 @@
               </button>
             </div>
             {% include "_meal_plan_servings.html" %}
+            {% include "_meal_plan_dietary_preferences.html" %}
           </form>
         </div>
       {% endif %}
