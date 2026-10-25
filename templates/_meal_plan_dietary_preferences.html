@@ -1,13 +1,14 @@
-{# Phase 12C.2: applies only to this request. Phase 12C.3 may later
-   preselect these choices from household settings. #}
-<fieldset class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
+{# Phase 12C.3: defaults affect the next request only. They change only when
+   the explicit save checkbox is selected, so a one-off tweak stays local. #}
+<fieldset class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
           data-meal-plan-dietary-preferences>
   <legend class="text-xs font-medium text-stone-700">Dietary</legend>
-  <div class="flex flex-wrap justify-end gap-1.5">
+  <div class="mt-1 flex flex-wrap gap-1.5">
     <label class="cursor-pointer">
       <input type="checkbox"
              name="dietary_preferences"
              value="vegetarian"
+             {% if "vegetarian" in household_dietary_preferences %}checked{% endif %}
              class="peer sr-only">
       <span class="inline-flex h-8 items-center rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-medium text-stone-600 transition hover:border-green-500 hover:text-green-800 peer-focus-visible:ring-2 peer-focus-visible:ring-green-300 peer-checked:border-green-600 peer-checked:bg-green-100 peer-checked:text-green-900">
         Vegetarian
@@ -17,10 +18,18 @@
       <input type="checkbox"
              name="dietary_preferences"
              value="gluten_free"
+             {% if "gluten_free" in household_dietary_preferences %}checked{% endif %}
              class="peer sr-only">
       <span class="inline-flex h-8 items-center rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-medium text-stone-600 transition hover:border-green-500 hover:text-green-800 peer-focus-visible:ring-2 peer-focus-visible:ring-green-300 peer-checked:border-green-600 peer-checked:bg-green-100 peer-checked:text-green-900">
         Gluten-free
       </span>
     </label>
   </div>
+  <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-stone-600">
+    <input type="checkbox"
+           name="save_dietary_preferences"
+           value="1"
+           class="rounded border-stone-300 text-green-600 focus:ring-green-500">
+    Save these as household defaults
+  </label>
 </fieldset>

@@ -37,6 +37,12 @@ class Household(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
+    # Phase 12C.3: canonical request-chip values stored as a compact JSON
+    # array (for example, ["vegetarian", "gluten_free"]). These are shared
+    # household defaults, not a user-profile preference.
+    dietary_preferences_json = db.Column(
+        db.Text, nullable=False, default="[]",
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     # Items the household owns (the new ownership concept in Phase 2A).

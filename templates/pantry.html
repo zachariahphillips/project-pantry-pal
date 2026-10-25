@@ -122,7 +122,17 @@
                 hx-target="#meal-plan-result"
                 hx-swap="innerHTML"
                 hx-indicator="#meal-plan-spinner"
-                hx-on::after-request="if (event.detail.successful) this.reset();"
+                hx-on::after-request="
+                  if (event.detail.successful) {
+                    const saveDefaults = this.querySelector('[name=save_dietary_preferences]').checked;
+                    if (saveDefaults) {
+                      this.querySelectorAll('[name=dietary_preferences]').forEach(
+                        input => { input.defaultChecked = input.checked; }
+                      );
+                    }
+                    this.reset();
+                  }
+                "
                 class="space-y-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <div class="flex gap-2">
@@ -193,7 +203,17 @@
                 hx-target="#meal-plan-result"
                 hx-swap="innerHTML"
                 hx-indicator="#meal-plan-spinner"
-                hx-on::after-request="if (event.detail.successful) this.reset();"
+                hx-on::after-request="
+                  if (event.detail.successful) {
+                    const saveDefaults = this.querySelector('[name=save_dietary_preferences]').checked;
+                    if (saveDefaults) {
+                      this.querySelectorAll('[name=dietary_preferences]').forEach(
+                        input => { input.defaultChecked = input.checked; }
+                      );
+                    }
+                    this.reset();
+                  }
+                "
                 class="mt-3 space-y-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <div class="flex gap-2">

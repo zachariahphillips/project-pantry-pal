@@ -141,5 +141,11 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
   selections are server-validated and injected as AI system instructions
   without altering the saved free-text meal request.
 
-#### Phase 12C.3 — Household preference defaults (Size: M)
-- Settings: Persist household diet defaults and preselect the request chips.
+#### Phase 12C.3 — Household preference defaults (Size: M) — DONE 2026-10-24
+- Settings: Added explicit, household-shared Vegetarian and Gluten-free
+  defaults. Saved defaults preselect the next planner request, while a
+  one-off dietary change stays request-scoped unless “Save these as household
+  defaults” is selected. Selecting no diets and saving clears the defaults.
+- Data safety: Added an idempotent SQLite migration that gives installed
+  households a safe empty default and defensively ignores malformed stored
+  values.

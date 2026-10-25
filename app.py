@@ -444,6 +444,11 @@ def _register_routes(app: Flask) -> None:
         # /pantry see their last AI suggestion. None on a fresh household
         # — the template handles that with an empty-state CTA.
         latest_meal_plan = current_user.household.meal_plans.first()
+        # Phase 12C.3: defaults are validated on read too, so a malformed
+        # legacy/manual JSON value cannot preselect arbitrary request values.
+        household_dietary_preferences = (
+            _household_meal_plan_dietary_preferences(current_user.household)
+        )
         # Phase 5A: household-scoped total item count, unfiltered — used
         # to decide (a) whether to show the empty-pantry onboarding hero
         # and (b) whether to gate the AI meal planner behind the
@@ -489,6 +494,7 @@ def _register_routes(app: Flask) -> None:
             low_count=low_count, density=density,
             pantry_sort_options=PANTRY_SORT_OPTIONS,
             household=current_user.household,
+            household_dietary_preferences=household_dietary_preferences,
             invites=_active_invites_for(current_user.household),
             members=current_user.household.members.all(),
             latest_meal_plan=latest_meal_plan,
@@ -1720,6 +1726,9 @@ def _register_routes(app: Flask) -> None:
         dietary_preferences = _parse_meal_plan_dietary_preferences(
             request.form.getlist("dietary_preferences"),
         )
+        save_household_dietary_preferences = (
+            request.form.get("save_dietary_preferences") == "1"
+        )
         # Cap at 240 chars — long-tail prompts blow tokens for no benefit
         # and make the response noisier.
         if not prompt or len(prompt) > 240:
@@ -1753,6 +1762,7 @@ def _register_routes(app: Flask) -> None:
             prompt,
             servings=servings,
             dietary_preferences=dietary_preferences,
+            save_household_dietary_preferences=save_household_dietary_preferences,
         )
 
     @app.route("/meal-plan/from/<int:plan_id>", methods=["POST"])
@@ -2272,6 +2282,26 @@ def _ensure_phase_2a_columns() -> None:
         with db.engine.begin() as conn:
             for sql in statements:
                 conn.exec_driver_sql(sql)
+
+
+def _ensure_household_dietary_preferences_column() -> None:
+    """Add Phase 12C.3's JSON default list to existing households.
+
+    Existing homes receive an honest empty list. The database default matters
+    because SQLAlchemy's Python-side default cannot fill legacy rows that
+    predate the mapped column.
+    """
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("households"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("households")}
+    if "dietary_preferences_json" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE households ADD COLUMN dietary_preferences_json "
+                "TEXT NOT NULL DEFAULT '[]'"
+            )
 
 
 def _ensure_shopping_checked_at_column() -> None:
@@ -3299,6 +3329,9 @@ def _run_phase_2a_migration() -> None:
     # create_all() handles new TABLES but never adds COLUMNS to existing
     # tables — the upgrade path from Phase 1C to 2A needs this explicit ALTER.
     _ensure_phase_2a_columns()
+    # Phase 12C.3: Household is queried below and now maps this JSON field,
+    # so legacy household tables must be upgraded before any ORM queries.
+    _ensure_household_dietary_preferences_column()
     # Phase 11C.1: category is another ShoppingItem field selected by ORM
     # queries, so legacy tables must receive it before the checked_at
     # migration runs its first ShoppingItem ORM query.
@@ -3466,6 +3499,19 @@ def _parse_meal_plan_dietary_preferences(
         for preference in MEAL_PLAN_DIETARY_PREFERENCES
         if preference in selected
     )
+
+
+def _household_meal_plan_dietary_preferences(
+    household: Household,
+) -> "tuple[str, ...]":
+    """Read valid canonical dietary defaults from one household safely."""
+    try:
+        raw_values = json.loads(household.dietary_preferences_json or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return ()
+    if not isinstance(raw_values, list):
+        return ()
+    return _parse_meal_plan_dietary_preferences(raw_values) or ()
 
 
 def _utc_today_start():
@@ -3914,6 +3960,7 @@ def _create_meal_plan_card_response(
     prompt: str, *,
     servings: int = MEAL_PLAN_DEFAULT_SERVINGS,
     dietary_preferences: "tuple[str, ...]" = (),
+    save_household_dietary_preferences: bool = False,
 ):
     """Phase 3F: shared steady-state of `POST /meal-plan` (free-text
     ask) and `POST /meal-plan/from/<plan_id>` ("Cook again" — replay a
@@ -3991,6 +4038,13 @@ def _create_meal_plan_card_response(
         meal_name=meal_name[:200],  # match column length
     )
     db.session.add(plan)
+    # Defaults change only when the user explicitly opts in and the AI
+    # generated a valid plan. Keeping this inside the plan transaction avoids
+    # saving an unexpected setting after a failed request.
+    if save_household_dietary_preferences:
+        current_user.household.dietary_preferences_json = json.dumps(
+            list(dietary_preferences),
+        )
     db.session.commit()
 
     if request.headers.get("HX-Request"):
