@@ -151,9 +151,9 @@
       </details>
     {% endif %}
 
-    {% if plan.have or _context == "inline" or _context == "list" %}
-      <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <footer class="border-t border-stone-100 bg-stone-50 px-4 py-2.5">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {% include "_meal_plan_schedule.html" %}
           {% if plan.have %}
             {# Phase 12A.1: this fetches a CURRENT pantry snapshot only.
                It never deducts anything; a later reviewed proposal will
@@ -216,11 +216,10 @@
               Cook again →
             </button>
           {% endif %}
-        </div>
-        {% if plan.have %}
-          <div id="meal-plan-cook-preview-{{ plan.id }}"></div>
-        {% endif %}
-      </footer>
-    {% endif %}
+      </div>
+      {% if plan.have %}
+        <div id="meal-plan-cook-preview-{{ plan.id }}"></div>
+      {% endif %}
+    </footer>
   </article>
 {% endif %}

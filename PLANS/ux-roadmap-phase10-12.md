@@ -1,4 +1,4 @@
-# UX & Roadmap Plan (Phases 10–12)
+# UX & Roadmap Plan (Phases 10–13)
 
 Working document born from the UX Audit on **2026-09-23**.
 PantryPal is currently at Phase 9A. This plan covers three major themes to take the app to the next level: Mobile Polish, Smarter Inventory, and AI Loop Completion.
@@ -149,3 +149,27 @@ Focus: Closing the loop so cooking a meal updates the database, and saving great
 - Data safety: Added an idempotent SQLite migration that gives installed
   households a safe empty default and defensively ignores malformed stored
   values.
+
+---
+
+## Phase 13: Plan the Week
+
+Focus: Turn saved meal ideas into a lightweight household cooking plan without
+introducing a full calendar all at once.
+
+### Phase 13A — Schedule saved meals (Size: M, Priority: P2)
+
+#### Phase 13A.1 — Schedule a meal (Size: S) — DONE 2026-10-25
+- Scheduling: Added an optional `planned_for` date to every household meal
+  plan. A compact in-card date control can schedule, update, or clear a
+  date without collapsing the rest of the card.
+- Data safety: Dates are household-authorized, today-or-later only, and use
+  an idempotent SQLite migration. Existing meal plans remain unscheduled.
+
+#### Phase 13A.2 — Today’s meal shortcut (Size: S)
+- Pantry: Surface the household’s scheduled meal for today near the planner,
+  without changing the existing meal-history page.
+
+#### Phase 13A.3 — Upcoming week view (Size: M)
+- Meals: Add a simple ordered upcoming section before the historical list;
+  do not build drag-and-drop or a full calendar yet.

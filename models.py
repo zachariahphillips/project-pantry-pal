@@ -376,6 +376,10 @@ class MealPlan(db.Model):
     # shared with household members, and personal favorites would be a
     # separate, larger feature.
     is_favorite = db.Column(db.Boolean, nullable=False, default=False)
+    # Phase 13A.1: optional household-visible date for when this saved plan
+    # is intended to be cooked. It is intentionally nullable: historical
+    # plans remain unscheduled unless someone chooses a day for them.
+    planned_for = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     household = db.relationship(

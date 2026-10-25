@@ -2061,6 +2061,52 @@ def _register_routes(app: Flask) -> None:
         return render_template("_meal_plan_favorite_toggle.html", plan=plan)
 
     @app.route(
+        "/meal-plan/<int:plan_id>/schedule", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_schedule(plan_id: int):
+        """Set or clear the intended cook date for a household meal plan."""
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+
+        if request.form.get("clear") == "1":
+            planned_for = None
+        else:
+            raw_date = (request.form.get("planned_for") or "").strip()
+            try:
+                planned_for = date.fromisoformat(raw_date)
+            except ValueError:
+                error = "Choose a valid date to schedule this meal."
+            else:
+                if planned_for < date.today():
+                    error = "Choose today or a future date for this meal."
+                else:
+                    error = None
+
+            if error:
+                if request.headers.get("HX-Request"):
+                    return render_template(
+                        "_meal_plan_schedule.html", plan=plan, error=error,
+                    ), 422
+                flash(error, "error")
+                return redirect(url_for("meals_list"))
+
+        plan.planned_for = planned_for
+        db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            return render_template("_meal_plan_schedule.html", plan=plan)
+        flash(
+            (
+                f"{plan.meal_name} is scheduled for "
+                f"{planned_for.strftime('%b %-d')}."
+            ) if planned_for else f"Cleared the schedule for {plan.meal_name}.",
+            "success",
+        )
+        return redirect(url_for("meals_list"))
+
+    @app.route(
         "/meal-plan/<int:plan_id>/need-to-shopping", methods=["POST"]
     )
     @login_required
@@ -2428,6 +2474,20 @@ def _ensure_meal_plan_is_favorite_column() -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE meal_plans ADD COLUMN is_favorite "
                 "BOOLEAN NOT NULL DEFAULT 0"
+            )
+
+
+def _ensure_meal_plan_planned_for_column() -> None:
+    """Add Phase 13A.1's optional scheduled-cook date to legacy databases."""
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("meal_plans"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("meal_plans")}
+    if "planned_for" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE meal_plans ADD COLUMN planned_for DATE"
             )
 
 
@@ -3352,6 +3412,9 @@ def _run_phase_2a_migration() -> None:
     # Phase 12B.1: MealPlan now maps is_favorite, so legacy databases need
     # this additive default before any meal-history query can run.
     _ensure_meal_plan_is_favorite_column()
+    # Phase 13A.1: old meal plans are deliberately unscheduled, but the
+    # mapped nullable date column must exist before the first MealPlan query.
+    _ensure_meal_plan_planned_for_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:

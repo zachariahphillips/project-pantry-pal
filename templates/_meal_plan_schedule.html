@@ -1,0 +1,36 @@
+{# Phase 13A.1: an optional household-visible cook date. This stays a
+   card-local swap so changing one meal never collapses the rest of its card. #}
+<div id="meal-plan-schedule-{{ plan.id }}" class="flex flex-wrap items-center gap-1.5">
+  <form hx-post="{{ url_for('meal_plan_schedule', plan_id=plan.id) }}"
+        hx-target="#meal-plan-schedule-{{ plan.id }}"
+        hx-swap="outerHTML"
+        hx-disabled-elt="button"
+        class="flex flex-wrap items-center gap-1.5">
+    <label for="meal-plan-planned-for-{{ plan.id }}"
+           class="text-xs font-medium text-stone-600">
+      Plan for
+    </label>
+    <input id="meal-plan-planned-for-{{ plan.id }}"
+           type="date"
+           name="planned_for"
+           {% if plan.planned_for %}value="{{ plan.planned_for.isoformat() }}"{% endif %}
+           aria-label="Schedule {{ plan.meal_name }} for a day"
+           class="h-8 rounded-md border border-stone-300 bg-white px-2 text-xs text-stone-800 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200">
+    <button type="submit"
+            class="inline-flex h-8 items-center justify-center rounded-md px-1.5 text-xs font-medium text-green-700 hover:bg-green-100 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-300 disabled:cursor-progress disabled:opacity-60">
+      {% if plan.planned_for %}Update{% else %}Schedule{% endif %}
+    </button>
+    {% if plan.planned_for %}
+      <button type="submit"
+              name="clear"
+              value="1"
+              aria-label="Clear the scheduled date for {{ plan.meal_name }}"
+              class="inline-flex h-8 items-center justify-center rounded-md px-1.5 text-xs font-medium text-stone-500 hover:bg-stone-200 hover:text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-300 disabled:cursor-progress disabled:opacity-60">
+        Clear
+      </button>
+    {% endif %}
+  </form>
+  {% if error %}
+    <p class="basis-full text-xs text-red-700" role="status">{{ error }}</p>
+  {% endif %}
+</div>
