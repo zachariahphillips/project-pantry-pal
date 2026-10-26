@@ -444,6 +444,13 @@ def _register_routes(app: Flask) -> None:
         # /pantry see their last AI suggestion. None on a fresh household
         # — the template handles that with an empty-state CTA.
         latest_meal_plan = current_user.household.meal_plans.first()
+        # Phase 13A.2: scheduling permits more than one plan on a day, so
+        # surface every plan scheduled for today rather than silently hiding
+        # a roommate's choice. The relationship's established newest-first
+        # order applies to this compact shortcut as well.
+        todays_meal_plans = current_user.household.meal_plans.filter(
+            MealPlan.planned_for == date.today(),
+        ).all()
         # Phase 12C.3: defaults are validated on read too, so a malformed
         # legacy/manual JSON value cannot preselect arbitrary request values.
         household_dietary_preferences = (
@@ -498,6 +505,7 @@ def _register_routes(app: Flask) -> None:
             invites=_active_invites_for(current_user.household),
             members=current_user.household.members.all(),
             latest_meal_plan=latest_meal_plan,
+            todays_meal_plans=todays_meal_plans,
             pantry_item_count=pantry_item_count,
             has_items_expiring_soon=has_items_expiring_soon,
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
@@ -2161,6 +2169,11 @@ def _register_routes(app: Flask) -> None:
         meal_filter = request.args.get("filter", "all")
         if meal_filter not in {"all", "favorites"}:
             meal_filter = "all"
+        raw_open_plan_id = request.args.get("open", "")
+        try:
+            open_plan_id = int(raw_open_plan_id)
+        except (TypeError, ValueError):
+            open_plan_id = None
 
         plans_query = current_user.household.meal_plans
         if meal_filter == "favorites":
@@ -2175,6 +2188,7 @@ def _register_routes(app: Flask) -> None:
             "meals.html",
             plans=plans,
             meal_filter=meal_filter,
+            open_plan_id=open_plan_id,
             pantry_item_count=pantry_item_count,
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
         )

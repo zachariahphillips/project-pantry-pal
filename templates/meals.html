@@ -34,7 +34,7 @@
            is a wall of expanded cards) AND the footer is a "Cook again
            →" button (Phase 3F) instead of /pantry's "Plan another"
            scroll-back. #}
-        {% with context="list", meal_filter=meal_filter %}
+        {% with context="list", meal_filter=meal_filter, expand_plan=(plan.id == open_plan_id) %}
           {% include "_meal_plan_card.html" %}
         {% endwith %}
       {% endfor %}

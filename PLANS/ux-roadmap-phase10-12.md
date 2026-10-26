@@ -166,9 +166,10 @@ introducing a full calendar all at once.
 - Data safety: Dates are household-authorized, today-or-later only, and use
   an idempotent SQLite migration. Existing meal plans remain unscheduled.
 
-#### Phase 13A.2 — Today’s meal shortcut (Size: S)
-- Pantry: Surface the household’s scheduled meal for today near the planner,
-  without changing the existing meal-history page.
+#### Phase 13A.2 — Today’s meal shortcut (Size: S) — DONE 2026-10-26
+- Pantry: Surface every household meal scheduled for today near the planner.
+  Each compact shortcut opens that existing card in the Meals view, so there
+  is no duplicate recipe or cooking workflow on Pantry.
 
 #### Phase 13A.3 — Upcoming week view (Size: M)
 - Meals: Add a simple ordered upcoming section before the historical list;

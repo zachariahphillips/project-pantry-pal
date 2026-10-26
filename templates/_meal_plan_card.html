@@ -32,7 +32,7 @@
     plan = None + no error      — empty (caller wants the slot blank).
 #}
 {% set _context = context|default("inline") %}
-{% set _details_open = "open" if _context == "inline" else "" %}
+{% set _details_open = "open" if _context == "inline" or expand_plan|default(false) else "" %}
 
 {% if error %}
   <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
