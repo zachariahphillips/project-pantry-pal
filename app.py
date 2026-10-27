@@ -2157,11 +2157,13 @@ def _register_routes(app: Flask) -> None:
     @app.route("/meals", methods=["GET"])
     @login_required
     def meals_list():
-        """List every meal plan ever made for the household, newest
-        first. Each plan renders as a collapsed-by-default card (so
-        scrolling through 20 expanded cards isn't a chore). Each card
-        still has all the per-need-item +Shop buttons plus the new
-        +Shop All Missing button at the top of the need section.
+        """List household meals, with the next seven scheduled days first.
+
+        Scheduled plans in the rolling week window are moved into an ordered
+        upcoming section. Every other plan stays in the existing newest-first
+        history section. Each card renders collapsed by default (so scrolling
+        through 20 expanded cards isn't a chore) and still has its per-need
+        +Shop buttons plus the bulk +Shop All action.
 
         No pagination yet — at ~50 plans/month this'll be fine for
         years. Phase 3C+ can add a `before=<date>` query param.
@@ -2181,12 +2183,34 @@ def _register_routes(app: Flask) -> None:
                 MealPlan.is_favorite.is_(True),
             )
         plans = plans_query.all()
+        # Phase 13A.3: this is intentionally a rolling seven-day list, not
+        # a calendar grid. It keeps the scope small while still making a
+        # meal scheduled next Sunday visible today. Python's stable sort
+        # preserves the relationship's newest-first order for plans on the
+        # same date.
+        today = date.today()
+        upcoming_week_end = today + timedelta(days=6)
+        upcoming_week_plans = [
+            plan for plan in plans
+            if (
+                plan.planned_for is not None
+                and today <= plan.planned_for <= upcoming_week_end
+            )
+        ]
+        upcoming_week_plans.sort(key=lambda plan: plan.planned_for)
+        upcoming_week_ids = {plan.id for plan in upcoming_week_plans}
+        historical_plans = [
+            plan for plan in plans if plan.id not in upcoming_week_ids
+        ]
         # Phase 6N: the empty-state CTA should not promise "Plan a meal"
         # while the pantry-side planner is still locked behind onboarding.
         pantry_item_count = current_user.household.pantry_items.count()
         return render_template(
             "meals.html",
-            plans=plans,
+            upcoming_week_plans=upcoming_week_plans,
+            historical_plans=historical_plans,
+            today=today,
+            upcoming_week_end=upcoming_week_end,
             meal_filter=meal_filter,
             open_plan_id=open_plan_id,
             pantry_item_count=pantry_item_count,

@@ -171,6 +171,8 @@ introducing a full calendar all at once.
   Each compact shortcut opens that existing card in the Meals view, so there
   is no duplicate recipe or cooking workflow on Pantry.
 
-#### Phase 13A.3 — Upcoming week view (Size: M)
-- Meals: Add a simple ordered upcoming section before the historical list;
-  do not build drag-and-drop or a full calendar yet.
+#### Phase 13A.3 — Upcoming week view (Size: M) — DONE 2026-10-27
+- Meals: Added a simple ordered rolling seven-day section before meal
+  history. Scheduled cards move into that section without duplication and
+  retain their existing controls; the Pinned filter still applies.
+- Scope: This remains a list, not a drag-and-drop planner or calendar grid.
