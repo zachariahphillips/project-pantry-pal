@@ -1921,6 +1921,8 @@ def _register_routes(app: Flask) -> None:
             undo_entries = _apply_confirmed_deductions(
                 deductions, current_user.household_id,
             )
+            previous_cooked_at = plan.cooked_at
+            plan.cooked_at = datetime.utcnow()
             db.session.commit()
         except ValueError:
             # A household member can update a quantity between the form
@@ -1950,7 +1952,11 @@ def _register_routes(app: Flask) -> None:
             )
 
         _store_meal_plan_deduction_undo(
-            plan.id, current_user.household_id, undo_entries,
+            plan.id,
+            current_user.household_id,
+            undo_entries,
+            cooked_at_before=previous_cooked_at,
+            cooked_at_after=plan.cooked_at,
         )
         deducted_count = len(undo_entries)
         removed_count = sum(
@@ -1986,7 +1992,7 @@ def _register_routes(app: Flask) -> None:
 
         snapshot = session.get(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY)
         restored = _restore_meal_plan_deduction_undo(
-            snapshot, plan.id, current_user.household_id,
+            snapshot, plan, current_user.household_id,
         )
         # Single-use Undo: successful restoration, a conflicting newer
         # update, and a malformed/expired snapshot all consume it.
@@ -2038,6 +2044,7 @@ def _register_routes(app: Flask) -> None:
             has_deduction_candidates=bool(
                 _meal_plan_deduction_candidates(plan, pantry_items)
             ),
+            swap_cooked_status=True,
         ), 200, {
             "HX-Trigger": json.dumps({
                 "meal-plan:deductions-undone": {"count": restored}
@@ -2529,6 +2536,20 @@ def _ensure_meal_plan_planned_for_column() -> None:
             )
 
 
+def _ensure_meal_plan_cooked_at_column() -> None:
+    """Add Phase 14A.1's nullable actual-cook timestamp to legacy plans."""
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("meal_plans"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("meal_plans")}
+    if "cooked_at" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE meal_plans ADD COLUMN cooked_at DATETIME"
+            )
+
+
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
 # --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
@@ -2865,9 +2886,19 @@ def _apply_confirmed_deductions(
 
 
 def _store_meal_plan_deduction_undo(
-    plan_id: int, household_id: int, entries: list[dict],
+    plan_id: int,
+    household_id: int,
+    entries: list[dict],
+    *,
+    cooked_at_before: "datetime | None",
+    cooked_at_after: datetime,
 ) -> None:
-    """Store one successful cooked-meal deduction for a one-time Undo."""
+    """Store one successful cooked-meal deduction for a one-time Undo.
+
+    The plan timestamp belongs to the same confirmed-cooking event as the
+    quantity changes, so its before/after values travel with the single-use
+    snapshot. ISO strings keep Flask's cookie-backed session JSON-safe.
+    """
     if not entries or len(entries) > UNDO_SNAPSHOT_MAX_ITEMS:
         session.pop(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY, None)
         return
@@ -2875,11 +2906,15 @@ def _store_meal_plan_deduction_undo(
         "plan_id": plan_id,
         "household_id": household_id,
         "entries": entries,
+        "cooked_at_before": (
+            cooked_at_before.isoformat() if cooked_at_before is not None else None
+        ),
+        "cooked_at_after": cooked_at_after.isoformat(),
     }
 
 
 def _restore_meal_plan_deduction_undo(
-    snapshot, plan_id: int, household_id: int,
+    snapshot, plan: MealPlan, household_id: int,
 ) -> "int | None":
     """Restore an Undo snapshot, or return None when a newer edit conflicts.
 
@@ -2889,7 +2924,7 @@ def _restore_meal_plan_deduction_undo(
     """
     if (
         not isinstance(snapshot, dict)
-        or snapshot.get("plan_id") != plan_id
+        or snapshot.get("plan_id") != plan.id
         or snapshot.get("household_id") != household_id
     ):
         return 0
@@ -2900,6 +2935,33 @@ def _restore_meal_plan_deduction_undo(
         or len(entries) > UNDO_SNAPSHOT_MAX_ITEMS
     ):
         return 0
+
+    # Snapshots created before Phase 14A.1 have no cooking timestamps. They
+    # can still safely restore the pantry; there was no status to rewind.
+    has_cooked_timestamp = (
+        "cooked_at_before" in snapshot or "cooked_at_after" in snapshot
+    )
+    cooked_at_before = None
+    if has_cooked_timestamp:
+        raw_before = snapshot.get("cooked_at_before")
+        raw_after = snapshot.get("cooked_at_after")
+        if raw_before is not None and not isinstance(raw_before, str):
+            return 0
+        if not isinstance(raw_after, str):
+            return 0
+        try:
+            cooked_at_before = (
+                datetime.fromisoformat(raw_before)
+                if raw_before is not None else None
+            )
+            cooked_at_after = datetime.fromisoformat(raw_after)
+        except ValueError:
+            return 0
+        if (
+            plan.cooked_at is None
+            or plan.cooked_at.isoformat() != cooked_at_after.isoformat()
+        ):
+            return None
 
     for entry in entries:
         if not isinstance(entry, dict):
@@ -2949,6 +3011,8 @@ def _restore_meal_plan_deduction_undo(
                 entry["before_quantity"]
             )
             restored += 1
+    if has_cooked_timestamp:
+        plan.cooked_at = cooked_at_before
     return restored
 
 
@@ -3453,6 +3517,9 @@ def _run_phase_2a_migration() -> None:
     # Phase 13A.1: old meal plans are deliberately unscheduled, but the
     # mapped nullable date column must exist before the first MealPlan query.
     _ensure_meal_plan_planned_for_column()
+    # Phase 14A.1: existing plans were never explicitly logged as cooked,
+    # so the additive timestamp begins NULL for all installed households.
+    _ensure_meal_plan_cooked_at_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:

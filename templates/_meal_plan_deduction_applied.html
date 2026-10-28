@@ -35,3 +35,8 @@
     </button>
   {% endif %}
 </div>
+{% if not error %}
+  {% with swap_oob=true %}
+    {% include "_meal_plan_cooked_status.html" %}
+  {% endwith %}
+{% endif %}

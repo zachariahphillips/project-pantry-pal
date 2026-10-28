@@ -380,6 +380,10 @@ class MealPlan(db.Model):
     # is intended to be cooked. It is intentionally nullable: historical
     # plans remain unscheduled unless someone chooses a day for them.
     planned_for = db.Column(db.Date, nullable=True)
+    # Phase 14A.1: confirmation of a pantry deduction is the durable
+    # household signal that this plan was actually cooked. Nullable keeps
+    # existing plans, previews, and unconfirmed proposals unchanged.
+    cooked_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     household = db.relationship(
@@ -390,6 +394,15 @@ class MealPlan(db.Model):
         ),
     )
     created_by = db.relationship("User", foreign_keys=[created_by_user_id])
+
+    @property
+    def cooked_status_label(self) -> "str | None":
+        """Return compact household-facing copy for an actual cook event."""
+        if self.cooked_at is None:
+            return None
+        if self.cooked_at.date() == datetime.utcnow().date():
+            return "Cooked today"
+        return f"Cooked {self.cooked_at.strftime('%b %-d')}"
 
     @property
     def parsed(self) -> dict:

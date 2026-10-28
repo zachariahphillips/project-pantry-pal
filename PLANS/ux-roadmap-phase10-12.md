@@ -1,4 +1,4 @@
-# UX & Roadmap Plan (Phases 10–13)
+# UX & Roadmap Plan (Phases 10–14)
 
 Working document born from the UX Audit on **2026-09-23**.
 PantryPal is currently at Phase 9A. This plan covers three major themes to take the app to the next level: Mobile Polish, Smarter Inventory, and AI Loop Completion.
@@ -176,3 +176,22 @@ introducing a full calendar all at once.
   history. Scheduled cards move into that section without duplication and
   retain their existing controls; the Pinned filter still applies.
 - Scope: This remains a list, not a drag-and-drop planner or calendar grid.
+
+---
+
+## Phase 14: Cooked-Meal History
+
+Focus: Preserve the outcome of cooking a planned meal, rather than only the
+pantry deduction that resulted from it.
+
+### Phase 14A — Completion state (Size: M, Priority: P2)
+
+#### Phase 14A.1 — Cooked-meal history (Size: S) — DONE 2026-10-28
+- History: Confirming a pantry deduction records a household-shared cook
+  timestamp and renders a compact status on the meal card.
+- Data safety: Existing plans remain uncooked. The same one-time Undo that
+  restores pantry quantities also restores the meal’s previous cooked state.
+
+#### Phase 14A.2 — Cooked history filter (Size: S)
+- Meals: Add a shareable Cooked filter so households can revisit meals they
+  actually made without mixing them into the full planning history.
