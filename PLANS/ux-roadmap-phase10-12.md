@@ -192,6 +192,7 @@ pantry deduction that resulted from it.
 - Data safety: Existing plans remain uncooked. The same one-time Undo that
   restores pantry quantities also restores the meal’s previous cooked state.
 
-#### Phase 14A.2 — Cooked history filter (Size: S)
-- Meals: Add a shareable Cooked filter so households can revisit meals they
-  actually made without mixing them into the full planning history.
+#### Phase 14A.2 — Cooked history filter (Size: S) — DONE 2026-10-29
+- Meals: Added a shareable Cooked filter that orders confirmed cook events
+  newest first. It deliberately omits the forward-looking week section so
+  completed and planned meals are not mixed.

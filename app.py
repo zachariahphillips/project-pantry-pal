@@ -2168,15 +2168,17 @@ def _register_routes(app: Flask) -> None:
 
         Scheduled plans in the rolling week window are moved into an ordered
         upcoming section. Every other plan stays in the existing newest-first
-        history section. Each card renders collapsed by default (so scrolling
-        through 20 expanded cards isn't a chore) and still has its per-need
-        +Shop buttons plus the bulk +Shop All action.
+        history section. The Cooked filter instead orders actual cook events
+        newest first and omits the planning section. Each card renders
+        collapsed by default (so scrolling through 20 expanded cards isn't a
+        chore) and still has its per-need +Shop buttons plus the bulk +Shop
+        All action.
 
         No pagination yet — at ~50 plans/month this'll be fine for
         years. Phase 3C+ can add a `before=<date>` query param.
         """
         meal_filter = request.args.get("filter", "all")
-        if meal_filter not in {"all", "favorites"}:
+        if meal_filter not in {"all", "favorites", "cooked"}:
             meal_filter = "all"
         raw_open_plan_id = request.args.get("open", "")
         try:
@@ -2189,6 +2191,10 @@ def _register_routes(app: Flask) -> None:
             plans_query = plans_query.filter(
                 MealPlan.is_favorite.is_(True),
             )
+        elif meal_filter == "cooked":
+            plans_query = plans_query.filter(
+                MealPlan.cooked_at.is_not(None),
+            ).order_by(None).order_by(MealPlan.cooked_at.desc())
         plans = plans_query.all()
         # Phase 13A.3: this is intentionally a rolling seven-day list, not
         # a calendar grid. It keeps the scope small while still making a
@@ -2197,18 +2203,25 @@ def _register_routes(app: Flask) -> None:
         # same date.
         today = date.today()
         upcoming_week_end = today + timedelta(days=6)
-        upcoming_week_plans = [
-            plan for plan in plans
-            if (
-                plan.planned_for is not None
-                and today <= plan.planned_for <= upcoming_week_end
-            )
-        ]
-        upcoming_week_plans.sort(key=lambda plan: plan.planned_for)
-        upcoming_week_ids = {plan.id for plan in upcoming_week_plans}
-        historical_plans = [
-            plan for plan in plans if plan.id not in upcoming_week_ids
-        ]
+        if meal_filter == "cooked":
+            # Cooking history is retrospective by definition. A lingering
+            # planned_for date should not put a cooked plan back into the
+            # forward-looking week view.
+            upcoming_week_plans = []
+            historical_plans = plans
+        else:
+            upcoming_week_plans = [
+                plan for plan in plans
+                if (
+                    plan.planned_for is not None
+                    and today <= plan.planned_for <= upcoming_week_end
+                )
+            ]
+            upcoming_week_plans.sort(key=lambda plan: plan.planned_for)
+            upcoming_week_ids = {plan.id for plan in upcoming_week_plans}
+            historical_plans = [
+                plan for plan in plans if plan.id not in upcoming_week_ids
+            ]
         # Phase 6N: the empty-state CTA should not promise "Plan a meal"
         # while the pantry-side planner is still locked behind onboarding.
         pantry_item_count = current_user.household.pantry_items.count()
