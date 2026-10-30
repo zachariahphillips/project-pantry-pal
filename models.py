@@ -384,6 +384,10 @@ class MealPlan(db.Model):
     # household signal that this plan was actually cooked. Nullable keeps
     # existing plans, previews, and unconfirmed proposals unchanged.
     cooked_at = db.Column(db.DateTime, nullable=True)
+    # Phase 15A.1: optional shared reflection on the most recent confirmed
+    # cook event (for example, "Use less salt next time"). It is deliberately
+    # not used as AI input in this first slice.
+    cooked_note = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     household = db.relationship(

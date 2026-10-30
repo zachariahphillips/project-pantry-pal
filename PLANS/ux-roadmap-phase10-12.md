@@ -1,4 +1,4 @@
-# UX & Roadmap Plan (Phases 10–14)
+# UX & Roadmap Plan (Phases 10–15)
 
 Working document born from the UX Audit on **2026-09-23**.
 PantryPal is currently at Phase 9A. This plan covers three major themes to take the app to the next level: Mobile Polish, Smarter Inventory, and AI Loop Completion.
@@ -196,3 +196,24 @@ pantry deduction that resulted from it.
 - Meals: Added a shareable Cooked filter that orders confirmed cook events
   newest first. It deliberately omits the forward-looking week section so
   completed and planned meals are not mixed.
+
+---
+
+## Phase 15: Meal Learning
+
+Focus: Preserve practical household feedback on meals without prematurely
+turning it into automated AI personalization.
+
+### Phase 15A — Cooked-meal notes (Size: M, Priority: P2)
+
+#### Phase 15A.1 — Cooked-meal notes (Size: S) — DONE 2026-10-30
+- Notes: Added an optional, household-shared cook note to completed meal
+  cards, with inline add, edit, and clear controls. Notes are visible in the
+  Cooked filter and are not passed to AI.
+- Data safety: A new confirmed cook clears its previous reflection; the
+  existing one-time Undo restores the prior note only when no member changed
+  the cook record meanwhile.
+
+#### Phase 15A.2 — Cook-again note context (Size: S)
+- AI: Offer an explicit opt-in to include a cooked meal’s note when making a
+  fresh variation, with clear copy that the note is household-shared.

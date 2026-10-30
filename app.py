@@ -1922,7 +1922,9 @@ def _register_routes(app: Flask) -> None:
                 deductions, current_user.household_id,
             )
             previous_cooked_at = plan.cooked_at
+            previous_cooked_note = plan.cooked_note
             plan.cooked_at = datetime.utcnow()
+            plan.cooked_note = None
             db.session.commit()
         except ValueError:
             # A household member can update a quantity between the form
@@ -1957,6 +1959,8 @@ def _register_routes(app: Flask) -> None:
             undo_entries,
             cooked_at_before=previous_cooked_at,
             cooked_at_after=plan.cooked_at,
+            cooked_note_before=previous_cooked_note,
+            cooked_note_after=plan.cooked_note,
         )
         deducted_count = len(undo_entries)
         removed_count = sum(
@@ -2074,6 +2078,45 @@ def _register_routes(app: Flask) -> None:
                 "HX-Redirect": url_for("meals_list", filter="favorites")
             }
         return render_template("_meal_plan_favorite_toggle.html", plan=plan)
+
+    @app.route(
+        "/meal-plan/<int:plan_id>/cooked-note", methods=["POST"],
+    )
+    @login_required
+    def meal_plan_cooked_note_update(plan_id: int):
+        """Create, edit, or clear a shared reflection on a cooked meal."""
+        plan = db.session.get(MealPlan, plan_id)
+        if plan is None or plan.household_id != current_user.household_id:
+            abort(404)
+        if plan.cooked_at is None:
+            abort(409)
+
+        if request.form.get("clear") == "1":
+            note = None
+        else:
+            note = (request.form.get("cooked_note") or "").strip()
+            if len(note) > MEAL_PLAN_COOKED_NOTE_MAX_LENGTH:
+                error = (
+                    "Keep your cooking note to "
+                    f"{MEAL_PLAN_COOKED_NOTE_MAX_LENGTH} characters or fewer."
+                )
+                if request.headers.get("HX-Request"):
+                    return render_template(
+                        "_meal_plan_cooked_note.html",
+                        plan=plan,
+                        error=error,
+                    ), 422
+                flash(error, "error")
+                return redirect(url_for("meals_list"))
+            # A deliberately blank save has the same clear semantics as the
+            # explicit Clear action, without persisting meaningless blanks.
+            note = note or None
+
+        plan.cooked_note = note
+        db.session.commit()
+        if request.headers.get("HX-Request"):
+            return render_template("_meal_plan_cooked_note.html", plan=plan)
+        return redirect(url_for("meals_list"))
 
     @app.route(
         "/meal-plan/<int:plan_id>/schedule", methods=["POST"],
@@ -2563,6 +2606,20 @@ def _ensure_meal_plan_cooked_at_column() -> None:
             )
 
 
+def _ensure_meal_plan_cooked_note_column() -> None:
+    """Add Phase 15A.1's optional shared cook reflection to old plans."""
+    inspector = db.inspect(db.engine)
+    if not inspector.has_table("meal_plans"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("meal_plans")}
+    if "cooked_note" not in columns:
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE meal_plans ADD COLUMN cooked_note TEXT"
+            )
+
+
 # --- Phase 3J: undo for destructive shopping-list actions -----------------
 # --- Phase 6A: same pattern, extended to pantry deletes -------------------
 
@@ -2905,12 +2962,15 @@ def _store_meal_plan_deduction_undo(
     *,
     cooked_at_before: "datetime | None",
     cooked_at_after: datetime,
+    cooked_note_before: "str | None",
+    cooked_note_after: "str | None",
 ) -> None:
     """Store one successful cooked-meal deduction for a one-time Undo.
 
-    The plan timestamp belongs to the same confirmed-cooking event as the
-    quantity changes, so its before/after values travel with the single-use
-    snapshot. ISO strings keep Flask's cookie-backed session JSON-safe.
+    The plan's timestamp and reflection belong to the same confirmed-cooking
+    event as the quantity changes, so their before/after values travel with
+    the single-use snapshot. ISO strings keep Flask's cookie-backed session
+    JSON-safe.
     """
     if not entries or len(entries) > UNDO_SNAPSHOT_MAX_ITEMS:
         session.pop(MEAL_PLAN_DEDUCTION_UNDO_SESSION_KEY, None)
@@ -2923,6 +2983,8 @@ def _store_meal_plan_deduction_undo(
             cooked_at_before.isoformat() if cooked_at_before is not None else None
         ),
         "cooked_at_after": cooked_at_after.isoformat(),
+        "cooked_note_before": cooked_note_before,
+        "cooked_note_after": cooked_note_after,
     }
 
 
@@ -2954,6 +3016,9 @@ def _restore_meal_plan_deduction_undo(
     has_cooked_timestamp = (
         "cooked_at_before" in snapshot or "cooked_at_after" in snapshot
     )
+    has_cooked_note = (
+        "cooked_note_before" in snapshot or "cooked_note_after" in snapshot
+    )
     cooked_at_before = None
     if has_cooked_timestamp:
         raw_before = snapshot.get("cooked_at_before")
@@ -2974,6 +3039,17 @@ def _restore_meal_plan_deduction_undo(
             plan.cooked_at is None
             or plan.cooked_at.isoformat() != cooked_at_after.isoformat()
         ):
+            return None
+    cooked_note_before = None
+    if has_cooked_note:
+        raw_note_before = snapshot.get("cooked_note_before")
+        raw_note_after = snapshot.get("cooked_note_after")
+        if raw_note_before is not None and not isinstance(raw_note_before, str):
+            return 0
+        if raw_note_after is not None and not isinstance(raw_note_after, str):
+            return 0
+        cooked_note_before = raw_note_before
+        if plan.cooked_note != raw_note_after:
             return None
 
     for entry in entries:
@@ -3026,6 +3102,8 @@ def _restore_meal_plan_deduction_undo(
             restored += 1
     if has_cooked_timestamp:
         plan.cooked_at = cooked_at_before
+    if has_cooked_note:
+        plan.cooked_note = cooked_note_before
     return restored
 
 
@@ -3533,6 +3611,9 @@ def _run_phase_2a_migration() -> None:
     # Phase 14A.1: existing plans were never explicitly logged as cooked,
     # so the additive timestamp begins NULL for all installed households.
     _ensure_meal_plan_cooked_at_column()
+    # Phase 15A.1: notes are optional, so installed plans begin with no
+    # reflection rather than an invented or blank string value.
+    _ensure_meal_plan_cooked_note_column()
 
     needs_household = User.query.filter(User.household_id.is_(None)).all()
     if needs_household:
@@ -3569,6 +3650,7 @@ _OPENAI_TIMEOUT_SECONDS = 30           # generous; gunicorn timeout is 60
 MEAL_PLAN_DEFAULT_SERVINGS = 2
 MEAL_PLAN_MIN_SERVINGS = 1
 MEAL_PLAN_MAX_SERVINGS = 12
+MEAL_PLAN_COOKED_NOTE_MAX_LENGTH = 280
 MEAL_PLAN_DIETARY_PREFERENCES = {
     "vegetarian": "Vegetarian",
     "gluten_free": "Gluten-free",
