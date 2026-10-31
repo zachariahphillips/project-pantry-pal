@@ -96,12 +96,14 @@ class TestWeeklyShoppingGapPreview:
 
         assert "You may need" in preview
         assert "for 2 upcoming meals" in preview_text
-        assert "Based on the saved meal plans." in preview
-        assert "Review before adding anything to your shopping list." in preview_text
+        assert (
+            "Select the items you want to add from your saved meal plans."
+            in preview_text
+        )
         assert "Dairy &amp; Eggs" in preview
         assert "Produce" in preview
         assert "Meat &amp; Seafood" in preview
-        assert preview.count("Milk") == 1
+        assert preview.count('value="Milk"') == 1
         assert "2 meals" in preview_text
         assert "Spinach" in preview
         assert "Chicken" in preview

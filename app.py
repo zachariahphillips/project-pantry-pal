@@ -2283,10 +2283,11 @@ def _register_routes(app: Flask) -> None:
         # considers every not-yet-cooked scheduled plan, not only a filtered
         # (for example, Pinned) subset. It is hidden outside the All-meals
         # view so the tab filters remain honest about what their cards show.
-        weekly_shopping_gap_plans = [
-            plan for plan in upcoming_week_plans
-            if plan.cooked_at is None and plan.need
-        ]
+        weekly_shopping_gap_plans = (
+            _weekly_meal_shopping_gap_plans(current_user.household)
+            if meal_filter == "all"
+            else []
+        )
         weekly_shopping_gaps = (
             _weekly_meal_shopping_gaps(weekly_shopping_gap_plans)
             if meal_filter == "all"
@@ -2308,6 +2309,85 @@ def _register_routes(app: Flask) -> None:
             pantry_item_count=pantry_item_count,
             onboarding_threshold=PANTRY_ONBOARDING_THRESHOLD,
         )
+
+    @app.route("/meals/weekly-shopping-gaps/add", methods=["POST"])
+    @login_required
+    def weekly_shopping_gaps_to_shopping():
+        """Copy reviewed current-week meal gaps into the shopping list.
+
+        The browser submits only display names, so recompute the household's
+        uncooked scheduled gaps here and accept exact normalized matches only.
+        This preserves Phase 16A.1's boundary: no client can turn this route
+        into a generic add-to-shopping backdoor.
+        """
+        gaps = _weekly_meal_shopping_gaps(
+            _weekly_meal_shopping_gap_plans(current_user.household),
+        )
+        allowed_by_key = {
+            gap["name"].casefold(): gap
+            for group in gaps
+            for gap in group["items"]
+        }
+        selected_keys = []
+        seen_keys = set()
+        for raw_name in request.form.getlist("weekly_gap"):
+            key = " ".join(raw_name.split()).casefold()
+            if key and key not in seen_keys:
+                seen_keys.add(key)
+                selected_keys.append(key)
+
+        if not selected_keys:
+            message = "Select at least one weekly item to add."
+            if request.headers.get("HX-Request"):
+                return message, 422
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
+        if any(key not in allowed_by_key for key in selected_keys):
+            message = (
+                "Those weekly gaps changed. Refresh the meal list and "
+                "review the current items."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
+        source_note = "Suggested for upcoming meals"
+        new_rows = [
+            ShoppingItem(
+                added_by_user_id=current_user.id,
+                household_id=current_user.household_id,
+                name=allowed_by_key[key]["name"][:120],
+                quantity=None,
+                unit=None,
+                notes=source_note,
+                category=allowed_by_key[key]["category"],
+            )
+            for key in selected_keys
+        ]
+        db.session.add_all(new_rows)
+        for row in new_rows:
+            _bump_shopping_name_frequency(
+                current_user.household_id, row.name,
+            )
+        db.session.commit()
+
+        if request.headers.get("HX-Request"):
+            return "", 200, {
+                "HX-Trigger": json.dumps({
+                    "shopping:added-bulk": {"count": len(new_rows)},
+                }),
+            }
+        flash(
+            (
+                "Added 1 item to shopping."
+                if len(new_rows) == 1
+                else f"Added {len(new_rows)} items to shopping."
+            ),
+            "success",
+        )
+        return redirect(url_for("shopping_list"))
 
     @app.route(
         "/meal-plan/<int:plan_id>/need-all-to-shopping", methods=["POST"]
@@ -3593,6 +3673,25 @@ def _group_shopping_items(items) -> "list[tuple[str, list]]":
         ),
     )
     return [(labels[key], grouped[key]) for key in ordered_keys]
+
+
+def _weekly_meal_shopping_gap_plans(household) -> list[MealPlan]:
+    """Return uncooked, scheduled meal plans that can contribute a gap.
+
+    This is a rolling seven-day window starting today, deliberately matching
+    the upcoming-week view. A cooked plan and a plan with no saved `need`
+    values have nothing actionable for this preview or its reviewed handoff.
+    """
+    today = date.today()
+    week_end = today + timedelta(days=6)
+    plans = household.meal_plans.filter(
+        MealPlan.planned_for >= today,
+        MealPlan.planned_for <= week_end,
+        MealPlan.cooked_at.is_(None),
+    ).order_by(None).order_by(
+        MealPlan.planned_for, MealPlan.id,
+    ).all()
+    return [plan for plan in plans if plan.need]
 
 
 def _weekly_meal_shopping_gaps(plans) -> list[dict]:

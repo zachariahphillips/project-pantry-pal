@@ -237,9 +237,13 @@ changing its shopping list or guessing quantities.
   many planned meals need them. The preview states that it is informational;
   it does not infer quantities or add items to Shopping.
 
-#### Phase 16A.2 — Reviewed shopping-list handoff (Size: S)
-- Shopping: Let a household explicitly add selected preview items to its
-  shopping list, retaining category defaults and clear source context.
+#### Phase 16A.2 — Reviewed shopping-list handoff (Size: S) — DONE 2026-10-31
+- Shopping: Each weekly gap is unchecked by default. A household explicitly
+  selects the items to add, retaining category defaults and a “Suggested for
+  upcoming meals” source note.
+- Data safety: The server re-derives the current household’s weekly gaps and
+  rejects missing or stale selections. This slice does not silently merge
+  items; overlap review remains Phase 16A.3.
 
 #### Phase 16A.3 — Quantity and duplicate review (Size: M)
 - Review: Offer a transparent confirmation for overlapping weekly needs and
