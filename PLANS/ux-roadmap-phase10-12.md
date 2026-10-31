@@ -1,4 +1,4 @@
-# UX & Roadmap Plan (Phases 10–15)
+# UX & Roadmap Plan (Phases 10–16)
 
 Working document born from the UX Audit on **2026-09-23**.
 PantryPal is currently at Phase 9A. This plan covers three major themes to take the app to the next level: Mobile Polish, Smarter Inventory, and AI Loop Completion.
@@ -220,3 +220,27 @@ turning it into automated AI personalization.
 - Data safety: Only the stored note can be selected; it is JSON-encoded as
   untrusted system context, never treated as instructions. New variations
   keep the original prompt and do not inherit cooked status or notes.
+
+---
+
+## Phase 16: Plan-to-Shop Bridge
+
+Focus: Help a household prepare for its scheduled meals without silently
+changing its shopping list or guessing quantities.
+
+### Phase 16A — Weekly shopping gaps (Size: M, Priority: P1)
+
+#### Phase 16A.1 — Weekly shopping-gap preview (Size: S) — DONE 2026-10-31
+- Meals: The All meals view shows a read-only, aisle-grouped union of the
+  saved “You need” items for uncooked meals scheduled in the next seven days.
+- Clarity: Exact duplicate ingredient names are consolidated and disclose how
+  many planned meals need them. The preview states that it is informational;
+  it does not infer quantities or add items to Shopping.
+
+#### Phase 16A.2 — Reviewed shopping-list handoff (Size: S)
+- Shopping: Let a household explicitly add selected preview items to its
+  shopping list, retaining category defaults and clear source context.
+
+#### Phase 16A.3 — Quantity and duplicate review (Size: M)
+- Review: Offer a transparent confirmation for overlapping weekly needs and
+  existing shopping rows before considering any quantity consolidation.

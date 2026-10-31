@@ -2279,12 +2279,27 @@ def _register_routes(app: Flask) -> None:
             historical_plans = [
                 plan for plan in plans if plan.id not in upcoming_week_ids
             ]
+        # Phase 16A.1: the read-only weekly shopping preview deliberately
+        # considers every not-yet-cooked scheduled plan, not only a filtered
+        # (for example, Pinned) subset. It is hidden outside the All-meals
+        # view so the tab filters remain honest about what their cards show.
+        weekly_shopping_gap_plans = [
+            plan for plan in upcoming_week_plans
+            if plan.cooked_at is None and plan.need
+        ]
+        weekly_shopping_gaps = (
+            _weekly_meal_shopping_gaps(weekly_shopping_gap_plans)
+            if meal_filter == "all"
+            else []
+        )
         # Phase 6N: the empty-state CTA should not promise "Plan a meal"
         # while the pantry-side planner is still locked behind onboarding.
         pantry_item_count = current_user.household.pantry_items.count()
         return render_template(
             "meals.html",
             upcoming_week_plans=upcoming_week_plans,
+            weekly_shopping_gaps=weekly_shopping_gaps,
+            weekly_shopping_gap_meal_count=len(weekly_shopping_gap_plans),
             historical_plans=historical_plans,
             today=today,
             upcoming_week_end=upcoming_week_end,
@@ -3578,6 +3593,60 @@ def _group_shopping_items(items) -> "list[tuple[str, list]]":
         ),
     )
     return [(labels[key], grouped[key]) for key in ordered_keys]
+
+
+def _weekly_meal_shopping_gaps(plans) -> list[dict]:
+    """Build a read-only, aisle-grouped union of scheduled plans' needs.
+
+    MealPlan.need is the AI's saved, name-only shopping gap—not a live stock
+    calculation. This intentionally performs no quantity inference, pantry
+    mutation, or ShoppingItem creation. Exact normalized names are merged so
+    the preview can disclose that, for example, "Milk" is needed by two
+    upcoming meals without pretending to know how much to buy.
+    """
+    gaps_by_name: dict[str, dict] = {}
+    for plan in plans:
+        seen_for_plan = set()
+        for raw_name in plan.need:
+            name = " ".join(raw_name.split())
+            key = name.casefold()
+            if not key or key in seen_for_plan:
+                continue
+            seen_for_plan.add(key)
+            existing = gaps_by_name.get(key)
+            if existing is None:
+                gaps_by_name[key] = {
+                    "name": name,
+                    "meal_count": 1,
+                    "category": _default_shopping_category(name),
+                }
+            else:
+                existing["meal_count"] += 1
+
+    grouped: dict[str, list[dict]] = {}
+    labels: dict[str, str] = {}
+    for gap in gaps_by_name.values():
+        label = gap["category"] or SHOPPING_OTHER_CATEGORY
+        category_key = label.casefold()
+        labels.setdefault(category_key, label)
+        grouped.setdefault(category_key, []).append(gap)
+
+    ordered_keys = sorted(
+        grouped,
+        key=lambda key: (
+            labels[key].casefold() == SHOPPING_OTHER_CATEGORY.casefold(),
+            labels[key].casefold(),
+        ),
+    )
+    return [
+        {
+            "category": labels[key],
+            "items": sorted(
+                grouped[key], key=lambda gap: gap["name"].casefold(),
+            ),
+        }
+        for key in ordered_keys
+    ]
 
 
 def _run_phase_2a_migration() -> None:
