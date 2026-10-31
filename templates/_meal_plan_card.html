@@ -199,24 +199,42 @@
          button. Same daily rate limit as a fresh ask — the OpenAI
          call costs the same.
 
-         hx-disabled-elt="this" + the button-local text swap give the
-         user a "Thinking…" affordance during the 2-5s OpenAI round-
-         trip without needing a global skeleton on /meals. #}
-            <button type="button"
-                    hx-post="{{ url_for('meal_plan_cook_again', plan_id=plan.id) }}"
-                    hx-target="#meals-list"
-                    hx-swap="afterbegin"
-                    hx-disabled-elt="this"
-                    hx-on::before-request="this.dataset.origText = this.innerHTML; this.innerHTML = 'Thinking\u2026';"
-                    hx-on::after-request="this.innerHTML = this.dataset.origText;"
-                    aria-label="Cook this meal again with the current pantry"
-                    class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
-              <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4v5h.582M19.418 11A8.001 8.001 0 0 1 5.582 9M19 16v-5h-.582M4.582 9A8.001 8.001 0 0 1 18.418 11"/>
-              </svg>
-              Cook again →
-            </button>
+         The form disables its controls and swaps the submit text to
+         "Thinking…" during the 2-5s OpenAI round-trip without needing
+         a global skeleton on /meals. Phase 15A.2's optional checkbox
+         uses only the stored household cook note. #}
+            <form hx-post="{{ url_for('meal_plan_cook_again', plan_id=plan.id) }}"
+                  hx-target="#meals-list"
+                  hx-swap="afterbegin"
+                  hx-disabled-elt="find button"
+                  hx-on::before-request="const b = this.querySelector('[data-cook-again-submit]'); b.dataset.origText = b.innerHTML; b.innerHTML = 'Thinking\u2026';"
+                  hx-on::after-request="const b = this.querySelector('[data-cook-again-submit]'); b.innerHTML = b.dataset.origText;"
+                  class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {% if plan.cooked_note %}
+                <div class="basis-full">
+                  <label class="inline-flex cursor-pointer items-center gap-1.5 text-xs text-stone-700">
+                    <input type="checkbox"
+                           name="include_cooked_note"
+                           value="1"
+                           class="rounded border-stone-300 text-green-600 focus:ring-green-500">
+                    Use shared cook note for this variation
+                  </label>
+                  <p class="mt-0.5 text-[11px] text-stone-500">
+                    Shared with your household and sent to AI only for this request.
+                  </p>
+                </div>
+              {% endif %}
+              <button type="submit"
+                      data-cook-again-submit
+                      aria-label="Cook this meal again with the current pantry"
+                      class="inline-flex h-8 items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                <svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4v5h.582M19.418 11A8.001 8.001 0 0 1 5.582 9M19 16v-5h-.582M4.582 9A8.001 8.001 0 0 1 18.418 11"/>
+                </svg>
+                Cook again →
+              </button>
+            </form>
           {% endif %}
       </div>
       {% if plan.have %}

@@ -214,6 +214,9 @@ turning it into automated AI personalization.
   existing one-time Undo restores the prior note only when no member changed
   the cook record meanwhile.
 
-#### Phase 15A.2 — Cook-again note context (Size: S)
-- AI: Offer an explicit opt-in to include a cooked meal’s note when making a
-  fresh variation, with clear copy that the note is household-shared.
+#### Phase 15A.2 — Cook-again note context (Size: S) — DONE 2026-10-31
+- AI: A completed meal with a saved note now offers an unchecked, explicit
+  opt-in to use that household-shared feedback for one fresh variation.
+- Data safety: Only the stored note can be selected; it is JSON-encoded as
+  untrusted system context, never treated as instructions. New variations
+  keep the original prompt and do not inherit cooked status or notes.
