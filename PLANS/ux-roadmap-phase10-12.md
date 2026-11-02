@@ -245,6 +245,20 @@ changing its shopping list or guessing quantities.
   rejects missing or stale selections. This slice does not silently merge
   items; overlap review remains Phase 16A.3.
 
-#### Phase 16A.3 — Quantity and duplicate review (Size: M)
-- Review: Offer a transparent confirmation for overlapping weekly needs and
-  existing shopping rows before considering any quantity consolidation.
+#### Phase 16A.3 — Duplicate review (Size: M)
+- Constraint: Meal plans currently store ingredient names only, so numeric
+  consolidation would be invented data. It remains out of scope until a
+  future ingredient-quantity foundation exists.
+
+##### Phase 16A.3.1 — Overlap warnings (Size: S) — DONE 2026-11-02
+- Review: Weekly gaps already present as active Shopping items now carry a
+  display-only “On shopping list” warning. Completed (checked) items do not
+  warn, and users retain full control over whether to add a separate row.
+
+##### Phase 16A.3.2 — Duplicate add/skip decision (Size: S)
+- Review: Before adding reviewed gaps, let a household explicitly skip items
+  already on Shopping or intentionally add them as separate rows.
+
+##### Phase 16A.3.3 — Ingredient quantity foundation (Size: L)
+- Data: Evaluate a verified quantity/unit model for meal-plan ingredients
+  before proposing any aggregate quantity behavior.

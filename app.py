@@ -2289,7 +2289,14 @@ def _register_routes(app: Flask) -> None:
             else []
         )
         weekly_shopping_gaps = (
-            _weekly_meal_shopping_gaps(weekly_shopping_gap_plans)
+            _weekly_meal_shopping_gaps(
+                weekly_shopping_gap_plans,
+                existing_shopping_items=(
+                    current_user.household.shopping_items.filter(
+                        ShoppingItem.checked.is_(False),
+                    ).all()
+                ),
+            )
             if meal_filter == "all"
             else []
         )
@@ -3694,15 +3701,27 @@ def _weekly_meal_shopping_gap_plans(household) -> list[MealPlan]:
     return [plan for plan in plans if plan.need]
 
 
-def _weekly_meal_shopping_gaps(plans) -> list[dict]:
+def _weekly_meal_shopping_gaps(
+    plans,
+    *,
+    existing_shopping_items=(),
+) -> list[dict]:
     """Build a read-only, aisle-grouped union of scheduled plans' needs.
 
     MealPlan.need is the AI's saved, name-only shopping gap—not a live stock
     calculation. This intentionally performs no quantity inference, pantry
     mutation, or ShoppingItem creation. Exact normalized names are merged so
     the preview can disclose that, for example, "Milk" is needed by two
-    upcoming meals without pretending to know how much to buy.
+    upcoming meals without pretending to know how much to buy. Active
+    (unchecked) ShoppingItem names optionally add a display-only overlap
+    warning; checked rows represent completed shopping and are excluded by
+    the caller.
     """
+    existing_shopping_names = {
+        " ".join((item.name or "").split()).casefold()
+        for item in existing_shopping_items
+        if (item.name or "").strip()
+    }
     gaps_by_name: dict[str, dict] = {}
     for plan in plans:
         seen_for_plan = set()
@@ -3718,6 +3737,7 @@ def _weekly_meal_shopping_gaps(plans) -> list[dict]:
                     "name": name,
                     "meal_count": 1,
                     "category": _default_shopping_category(name),
+                    "already_on_shopping": key in existing_shopping_names,
                 }
             else:
                 existing["meal_count"] += 1

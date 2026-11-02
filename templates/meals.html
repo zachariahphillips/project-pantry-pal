@@ -134,6 +134,11 @@
                                     · {{ gap.meal_count }} meals
                                   </span>
                                 {% endif %}
+                                {% if gap.already_on_shopping %}
+                                  <span class="ml-1 font-medium text-amber-800">
+                                    · On shopping list
+                                  </span>
+                                {% endif %}
                               </span>
                             </label>
                           </li>
