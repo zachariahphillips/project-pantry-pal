@@ -84,7 +84,7 @@
                   hx-swap="none"
                   hx-disabled-elt="find button"
                   hx-on::before-request="
-                    const selected = this.querySelectorAll('input[name=weekly_gap]:checked');
+                    const selected = this.querySelectorAll('input[name=weekly_gap]:checked, input[name=weekly_gap_overlap_add]:checked');
                     const error = this.querySelector('[data-weekly-gap-selection-error]');
                     if (!selected.length) {
                       event.preventDefault();
@@ -95,7 +95,7 @@
                   "
                   hx-on::after-request="
                     if (event.detail.successful) {
-                      const selected = this.querySelectorAll('input[name=weekly_gap]:checked');
+                      const selected = this.querySelectorAll('input[name=weekly_gap]:checked, input[name=weekly_gap_overlap_add]:checked');
                       selected.forEach((input) => { input.checked = false; });
                       const button = this.querySelector('[data-weekly-gap-submit]');
                       button.dataset.original = button.innerHTML;
@@ -121,27 +121,48 @@
                       </h4>
                       <ul class="mt-1 flex flex-wrap gap-1.5">
                         {% for gap in group["items"] %}
-                          <li>
-                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs text-stone-800 ring-1 ring-amber-200 hover:bg-amber-100">
-                              <input type="checkbox"
-                                     name="weekly_gap"
-                                     value="{{ gap.name }}"
-                                     class="h-3.5 w-3.5 rounded border-amber-400 text-amber-700 focus:ring-amber-500">
-                              <span>
-                                {{ gap.name }}
+                          {% if gap.already_on_shopping %}
+                            <li class="rounded-xl bg-white px-2.5 py-2 text-xs text-stone-800 ring-1 ring-amber-300">
+                              <p>
+                                <span class="font-medium">{{ gap.name }}</span>
                                 {% if gap.meal_count > 1 %}
                                   <span class="text-stone-500">
                                     · {{ gap.meal_count }} meals
                                   </span>
                                 {% endif %}
-                                {% if gap.already_on_shopping %}
-                                  <span class="ml-1 font-medium text-amber-800">
-                                    · On shopping list
-                                  </span>
-                                {% endif %}
-                              </span>
-                            </label>
-                          </li>
+                                <span class="ml-1 font-medium text-amber-800">
+                                  · On shopping list
+                                </span>
+                              </p>
+                              <label class="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 font-medium text-amber-950">
+                                <input type="checkbox"
+                                       name="weekly_gap_overlap_add"
+                                       value="{{ gap.name }}"
+                                       class="h-3.5 w-3.5 rounded border-amber-500 text-amber-700 focus:ring-amber-500">
+                                Add a separate shopping entry
+                              </label>
+                              <p class="mt-0.5 text-[11px] text-stone-500">
+                                Leave unchecked to skip this existing item.
+                              </p>
+                            </li>
+                          {% else %}
+                            <li>
+                              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs text-stone-800 ring-1 ring-amber-200 hover:bg-amber-100">
+                                <input type="checkbox"
+                                       name="weekly_gap"
+                                       value="{{ gap.name }}"
+                                       class="h-3.5 w-3.5 rounded border-amber-400 text-amber-700 focus:ring-amber-500">
+                                <span>
+                                  {{ gap.name }}
+                                  {% if gap.meal_count > 1 %}
+                                    <span class="text-stone-500">
+                                      · {{ gap.meal_count }} meals
+                                    </span>
+                                  {% endif %}
+                                </span>
+                              </label>
+                            </li>
+                          {% endif %}
                         {% endfor %}
                       </ul>
                     </section>

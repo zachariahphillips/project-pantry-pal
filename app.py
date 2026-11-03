@@ -2324,33 +2324,53 @@ def _register_routes(app: Flask) -> None:
 
         The browser submits only display names, so recompute the household's
         uncooked scheduled gaps here and accept exact normalized matches only.
-        This preserves Phase 16A.1's boundary: no client can turn this route
-        into a generic add-to-shopping backdoor.
+        Active Shopping overlaps require a distinct explicit form field before
+        they can become a separate row. This preserves Phase 16A.1's boundary:
+        no client can turn this route into a generic add-to-shopping backdoor.
         """
+        active_shopping_items = (
+            current_user.household.shopping_items.filter(
+                ShoppingItem.checked.is_(False),
+            ).all()
+        )
         gaps = _weekly_meal_shopping_gaps(
             _weekly_meal_shopping_gap_plans(current_user.household),
+            existing_shopping_items=active_shopping_items,
         )
         allowed_by_key = {
             gap["name"].casefold(): gap
             for group in gaps
             for gap in group["items"]
         }
-        selected_keys = []
-        seen_keys = set()
-        for raw_name in request.form.getlist("weekly_gap"):
-            key = " ".join(raw_name.split()).casefold()
-            if key and key not in seen_keys:
-                seen_keys.add(key)
-                selected_keys.append(key)
+        overlap_keys = {
+            key for key, gap in allowed_by_key.items()
+            if gap["already_on_shopping"]
+        }
 
-        if not selected_keys:
+        def submitted_keys(field_name: str) -> list[str]:
+            keys = []
+            seen_keys = set()
+            for raw_name in request.form.getlist(field_name):
+                key = " ".join(raw_name.split()).casefold()
+                if key and key not in seen_keys:
+                    seen_keys.add(key)
+                    keys.append(key)
+            return keys
+
+        selected_keys = submitted_keys("weekly_gap")
+        explicit_overlap_add_keys = submitted_keys(
+            "weekly_gap_overlap_add",
+        )
+
+        if not selected_keys and not explicit_overlap_add_keys:
             message = "Select at least one weekly item to add."
             if request.headers.get("HX-Request"):
                 return message, 422
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
-        if any(key not in allowed_by_key for key in selected_keys):
+        submitted = selected_keys + explicit_overlap_add_keys
+        if any(key not in allowed_by_key for key in submitted):
             message = (
                 "Those weekly gaps changed. Refresh the meal list and "
                 "review the current items."
@@ -2360,6 +2380,27 @@ def _register_routes(app: Flask) -> None:
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
+        if any(key in overlap_keys for key in selected_keys):
+            message = (
+                "Confirm “Add a separate entry” for items already on "
+                "your shopping list."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
+        if any(key not in overlap_keys for key in explicit_overlap_add_keys):
+            message = (
+                "Those shopping overlaps changed. Refresh the meal list "
+                "and review the current items."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
+        selected_keys += explicit_overlap_add_keys
         source_note = "Suggested for upcoming meals"
         new_rows = [
             ShoppingItem(

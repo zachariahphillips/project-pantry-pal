@@ -255,9 +255,10 @@ changing its shopping list or guessing quantities.
   display-only “On shopping list” warning. Completed (checked) items do not
   warn, and users retain full control over whether to add a separate row.
 
-##### Phase 16A.3.2 — Duplicate add/skip decision (Size: S)
-- Review: Before adding reviewed gaps, let a household explicitly skip items
-  already on Shopping or intentionally add them as separate rows.
+##### Phase 16A.3.2 — Duplicate add/skip decision (Size: S) — DONE 2026-11-03
+- Review: An active overlap now defaults to Skip. Adding it requires an
+  explicit “Add a separate shopping entry” choice; the server independently
+  verifies that choice against the current household’s active Shopping rows.
 
 ##### Phase 16A.3.3 — Ingredient quantity foundation (Size: L)
 - Data: Evaluate a verified quantity/unit model for meal-plan ingredients

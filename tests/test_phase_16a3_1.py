@@ -57,9 +57,10 @@ def _add_shopping(
         db.session.commit()
 
 
-def _gap_label(html: str, name: str) -> str:
-    start = html.index(f'value="{name}"')
-    return html[start:html.index("</label>", start)]
+def _gap_item(html: str, name: str) -> str:
+    value_index = html.index(f'value="{name}"')
+    start = html.rfind("<li", 0, value_index)
+    return html[start:html.index("</li>", value_index)]
 
 
 class TestWeeklyShoppingGapOverlapWarnings:
@@ -73,9 +74,10 @@ class TestWeeklyShoppingGapOverlapWarnings:
 
         html = client.get("/meals").get_data(as_text=True)
 
-        milk = _gap_label(html, "Milk")
-        chicken = _gap_label(html, "Chicken")
+        milk = _gap_item(html, "Milk")
+        chicken = _gap_item(html, "Chicken")
         assert "On shopping list" in milk
+        assert "Add a separate shopping entry" in milk
         assert "On shopping list" not in chicken
         # The preview is display-only. Its GET cannot create another row.
         with app.app_context():
@@ -92,4 +94,4 @@ class TestWeeklyShoppingGapOverlapWarnings:
 
         html = bob.get("/meals").get_data(as_text=True)
 
-        assert "On shopping list" not in _gap_label(html, "Milk")
+        assert "On shopping list" not in _gap_item(html, "Milk")
