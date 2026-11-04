@@ -23,6 +23,7 @@ Pure new-table migration.
 """
 
 import json
+import math
 import secrets
 from datetime import datetime, timedelta
 
@@ -30,6 +31,7 @@ from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
+from forms import UNIT_SUGGESTIONS
 
 
 class Household(db.Model):
@@ -334,6 +336,16 @@ class Invite(db.Model):
 MEAL_PLAN_MAX_HAVE = 15
 MEAL_PLAN_MAX_NEED = 15
 MEAL_PLAN_MAX_STEPS = 12
+# Phase 16A.3.3.1: quantity-bearing missing ingredients use the same
+# canonical units suggested by the pantry and Shopping forms. The AI may
+# describe a missing item only with a positive finite amount and one of these
+# units; free-form units stay name-only until a user-facing unit strategy is
+# explicitly designed.
+MEAL_PLAN_NEED_QUANTITY_UNITS = frozenset(UNIT_SUGGESTIONS)
+MEAL_PLAN_MAX_NEED_QUANTITY = 10_000
+_MEAL_PLAN_NEED_QUANTITY_UNIT_BY_KEY = {
+    unit.casefold(): unit for unit in MEAL_PLAN_NEED_QUANTITY_UNITS
+}
 
 
 class MealPlan(db.Model):
@@ -435,6 +447,61 @@ class MealPlan(db.Model):
     @property
     def need(self) -> list:
         return self._list_field("need", MEAL_PLAN_MAX_NEED)
+
+    @property
+    def need_details(self) -> list[dict]:
+        """Return safe structured amounts for this plan's missing items.
+
+        Legacy plans contain only the `need` string list and therefore return
+        an empty list. Details are accepted only when their normalized name
+        maps to a current `need` item and their amount/unit are usable for a
+        future reviewed aggregate. Invalid or duplicate AI fields are ignored
+        rather than changing the established name-only meal-card behavior.
+        """
+        raw_details = self.parsed.get("need_details")
+        if not isinstance(raw_details, list):
+            return []
+
+        need_by_key = {}
+        for ingredient in self.need:
+            key = " ".join(ingredient.split()).casefold()
+            if key:
+                need_by_key.setdefault(key, ingredient)
+
+        details_by_key = {}
+        for raw_detail in raw_details[:MEAL_PLAN_MAX_NEED]:
+            if not isinstance(raw_detail, dict):
+                continue
+            raw_name = raw_detail.get("name")
+            raw_unit = raw_detail.get("unit")
+            raw_quantity = raw_detail.get("quantity")
+            if not isinstance(raw_name, str) or not isinstance(raw_unit, str):
+                continue
+            key = " ".join(raw_name.split()).casefold()
+            unit = _MEAL_PLAN_NEED_QUANTITY_UNIT_BY_KEY.get(
+                raw_unit.strip().casefold(),
+            )
+            if key not in need_by_key or key in details_by_key or unit is None:
+                continue
+            if (
+                isinstance(raw_quantity, bool)
+                or not isinstance(raw_quantity, (int, float))
+                or raw_quantity <= 0
+                or raw_quantity > MEAL_PLAN_MAX_NEED_QUANTITY
+                or not math.isfinite(raw_quantity)
+            ):
+                continue
+            details_by_key[key] = {
+                "name": need_by_key[key],
+                "quantity": float(raw_quantity),
+                "unit": unit,
+            }
+
+        return [
+            details_by_key[key]
+            for key in need_by_key
+            if key in details_by_key
+        ]
 
     @property
     def steps(self) -> list:

@@ -4277,6 +4277,8 @@ def _ask_openai_for_meal(
         '  "meal_name": "<short title, e.g. \\"Spaghetti carbonara\\">",\n'
         '  "have": ["<pantry items used, exact names from the array>"],\n'
         '  "need": ["<missing ingredients>"],\n'
+        '  "need_details": [{"name": "<exact matching need item>", '
+        '"quantity": <positive number>, "unit": "<standard unit>"}],\n'
         '  "steps": ["<short numbered steps>"]\n'
         "}\n\n"
         "Rules:\n"
@@ -4284,6 +4286,10 @@ def _ask_openai_for_meal(
         "  using the same `name` strings. If the pantry is empty,\n"
         "  'have' is [].\n"
         "- 'need' items are things they don't have but need to buy.\n"
+        "- 'need_details' MUST have one entry for every 'need' item. Its "
+        "  `name` must exactly match the corresponding 'need' string; "
+        "  `quantity` must be a positive JSON number (not text); and `unit` "
+        f"  must be one of: {', '.join(UNIT_SUGGESTIONS)}.\n"
         f"- Scale ingredient amounts and steps for exactly {servings} "
         "servings.\n"
         "- Honor every selected dietary restriction in the meal name, "

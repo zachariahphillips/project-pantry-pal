@@ -261,5 +261,17 @@ changing its shopping list or guessing quantities.
   verifies that choice against the current household’s active Shopping rows.
 
 ##### Phase 16A.3.3 — Ingredient quantity foundation (Size: L)
-- Data: Evaluate a verified quantity/unit model for meal-plan ingredients
-  before proposing any aggregate quantity behavior.
+- Constraint: Existing meal plans and Shopping entries remain name-only.
+  Quantity features must preserve those records and never invent amounts.
+
+###### Phase 16A.3.3.1 — Structured need contract (Size: S) — DONE 2026-11-04
+- AI/Data: New plans request a quantity/unit detail beside each
+  missing ingredient. The model layer accepts only positive finite values,
+  canonical units, and names that match the saved `need` list; legacy plans
+  safely remain detail-free.
+- Scope: Current meal and Shopping displays stay unchanged while this data
+  foundation proves backwards compatibility.
+
+###### Phase 16A.3.3.2 — Reviewed quantity totals (Size: M)
+- Review: Show compatible structured amounts across scheduled meals only after
+  users can inspect the source meals and choose what to add to Shopping.
