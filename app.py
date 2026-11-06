@@ -2308,6 +2308,11 @@ def _register_routes(app: Flask) -> None:
             upcoming_week_plans=upcoming_week_plans,
             weekly_shopping_gaps=weekly_shopping_gaps,
             weekly_shopping_gap_meal_count=len(weekly_shopping_gap_plans),
+            weekly_has_quantity_totals=any(
+                gap["quantity_totals"]
+                for group in weekly_shopping_gaps
+                for gap in group["items"]
+            ),
             historical_plans=historical_plans,
             today=today,
             upcoming_week_end=upcoming_week_end,
@@ -3753,10 +3758,11 @@ def _weekly_meal_shopping_gaps(
     calculation. This intentionally performs no quantity inference, pantry
     mutation, or ShoppingItem creation. Exact normalized names are merged so
     the preview can disclose that, for example, "Milk" is needed by two
-    upcoming meals without pretending to know how much to buy. Active
-    (unchecked) ShoppingItem names optionally add a display-only overlap
-    warning; checked rows represent completed shopping and are excluded by
-    the caller.
+    upcoming meals. Safe structured details add per-unit subtotals, never
+    unit conversion; an incomplete detail coverage stays explicitly labeled.
+    Active (unchecked) ShoppingItem names optionally add a display-only
+    overlap warning; checked rows represent completed shopping and are
+    excluded by the caller.
     """
     existing_shopping_names = {
         " ".join((item.name or "").split()).casefold()
@@ -3765,6 +3771,10 @@ def _weekly_meal_shopping_gaps(
     }
     gaps_by_name: dict[str, dict] = {}
     for plan in plans:
+        details_by_name = {
+            " ".join(detail["name"].split()).casefold(): detail
+            for detail in plan.need_details
+        }
         seen_for_plan = set()
         for raw_name in plan.need:
             name = " ".join(raw_name.split())
@@ -3779,13 +3789,35 @@ def _weekly_meal_shopping_gaps(
                     "meal_count": 1,
                     "category": _default_shopping_category(name),
                     "already_on_shopping": key in existing_shopping_names,
+                    "quantity_meal_count": 0,
+                    "quantity_totals_by_unit": {},
                 }
             else:
                 existing["meal_count"] += 1
+            detail = details_by_name.get(key)
+            if detail is not None:
+                unit = detail["unit"]
+                unit_total = gaps_by_name[key]["quantity_totals_by_unit"].setdefault(
+                    unit,
+                    {"quantity": 0.0, "unit": unit, "meal_count": 0},
+                )
+                unit_total["quantity"] += detail["quantity"]
+                unit_total["meal_count"] += 1
+                gaps_by_name[key]["quantity_meal_count"] += 1
 
     grouped: dict[str, list[dict]] = {}
     labels: dict[str, str] = {}
     for gap in gaps_by_name.values():
+        gap["quantity_totals"] = [
+            {
+                **total,
+                "display": f"{total['quantity']:g} {total['unit']}",
+            }
+            for total in sorted(
+                gap.pop("quantity_totals_by_unit").values(),
+                key=lambda total: total["unit"].casefold(),
+            )
+        ]
         label = gap["category"] or SHOPPING_OTHER_CATEGORY
         category_key = label.casefold()
         labels.setdefault(category_key, label)

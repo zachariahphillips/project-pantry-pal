@@ -76,6 +76,12 @@
                 <p class="mt-0.5 text-xs leading-relaxed text-amber-900">
                   Select the items you want to add from your saved meal plans.
                 </p>
+                {% if weekly_has_quantity_totals %}
+                  <p class="mt-1 text-[11px] leading-relaxed text-amber-800">
+                    Known totals stay grouped by unit; PantryPal does not
+                    convert amounts.
+                  </p>
+                {% endif %}
               </div>
             </div>
             <form method="post"
@@ -134,6 +140,15 @@
                                   · On shopping list
                                 </span>
                               </p>
+                              {% if gap.quantity_totals %}
+                                <p class="mt-1 text-[11px] leading-relaxed text-stone-600">
+                                  Known totals{% if gap.quantity_meal_count < gap.meal_count %} (recorded for {{ gap.quantity_meal_count }} of {{ gap.meal_count }} meals){% endif %}:
+                                  {% for total in gap.quantity_totals %}
+                                    {{ total.display }} for {{ total.meal_count }}
+                                    {{ "meal" if total.meal_count == 1 else "meals" }}{% if not loop.last %} ·{% endif %}
+                                  {% endfor %}
+                                </p>
+                              {% endif %}
                               <label class="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 font-medium text-amber-950">
                                 <input type="checkbox"
                                        name="weekly_gap_overlap_add"
@@ -157,6 +172,15 @@
                                   {% if gap.meal_count > 1 %}
                                     <span class="text-stone-500">
                                       · {{ gap.meal_count }} meals
+                                    </span>
+                                  {% endif %}
+                                  {% if gap.quantity_totals %}
+                                    <span class="block text-[11px] leading-relaxed text-stone-500">
+                                      Known totals{% if gap.quantity_meal_count < gap.meal_count %} (recorded for {{ gap.quantity_meal_count }} of {{ gap.meal_count }} meals){% endif %}:
+                                      {% for total in gap.quantity_totals %}
+                                        {{ total.display }} for {{ total.meal_count }}
+                                        {{ "meal" if total.meal_count == 1 else "meals" }}{% if not loop.last %} ·{% endif %}
+                                      {% endfor %}
                                     </span>
                                   {% endif %}
                                 </span>

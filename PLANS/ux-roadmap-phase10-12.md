@@ -273,5 +273,12 @@ changing its shopping list or guessing quantities.
   foundation proves backwards compatibility.
 
 ###### Phase 16A.3.3.2 — Reviewed quantity totals (Size: M)
-- Review: Show compatible structured amounts across scheduled meals only after
-  users can inspect the source meals and choose what to add to Shopping.
+
+####### Phase 16A.3.3.2a — Read-only unit totals (Size: S) — DONE 2026-11-06
+- Review: Weekly gaps now show known quantity subtotals separately for each
+  canonical unit. Partial coverage identifies how many scheduled meals
+  supplied a structured amount; incompatible units are never converted.
+
+####### Phase 16A.3.3.2b — Source-meal review (Size: S)
+- Review: Let a household inspect the specific scheduled meals contributing
+  to each known subtotal before any quantity reaches Shopping.
