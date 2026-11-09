@@ -3799,10 +3799,21 @@ def _weekly_meal_shopping_gaps(
                 unit = detail["unit"]
                 unit_total = gaps_by_name[key]["quantity_totals_by_unit"].setdefault(
                     unit,
-                    {"quantity": 0.0, "unit": unit, "meal_count": 0},
+                    {
+                        "quantity": 0.0,
+                        "unit": unit,
+                        "meal_count": 0,
+                        "sources": [],
+                    },
                 )
                 unit_total["quantity"] += detail["quantity"]
                 unit_total["meal_count"] += 1
+                unit_total["sources"].append({
+                    "plan_id": plan.id,
+                    "meal_name": plan.meal_name,
+                    "planned_for": plan.planned_for,
+                    "display": f"{detail['quantity']:g} {unit}",
+                })
                 gaps_by_name[key]["quantity_meal_count"] += 1
 
     grouped: dict[str, list[dict]] = {}

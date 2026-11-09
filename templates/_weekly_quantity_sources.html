@@ -1,0 +1,42 @@
+{# Phase 16A.3.3.2b: a read-only audit trail for displayed weekly subtotals.
+   Each source is a saved scheduled meal detail; unit groups remain separate
+   and every link opens the existing meal card rather than mutating Shopping. #}
+{% if gap.quantity_totals %}
+  <details data-weekly-quantity-sources
+           class="mt-1.5 border-t border-stone-200 pt-1.5">
+    <summary class="cursor-pointer text-[11px] font-medium text-amber-800 hover:text-amber-950">
+      See {{ gap.quantity_meal_count }} contributing
+      {{ "meal" if gap.quantity_meal_count == 1 else "meals" }}
+    </summary>
+    <div class="mt-1.5 space-y-1.5 text-[11px] leading-relaxed text-stone-600">
+      {% for total in gap.quantity_totals %}
+        <section>
+          <p class="font-medium text-stone-700">
+            {{ total.display }} subtotal · {{ total.meal_count }}
+            {{ "meal" if total.meal_count == 1 else "meals" }}
+          </p>
+          <ul class="mt-0.5 space-y-1">
+            {% for source in total.sources %}
+              <li class="flex items-baseline justify-between gap-2">
+                <a href="{{ url_for('meals_list', open=source.plan_id) }}#meal-plan-{{ source.plan_id }}"
+                   class="min-w-0 truncate text-stone-700 underline decoration-stone-300 underline-offset-2 hover:text-green-800">
+                  <time datetime="{{ source.planned_for.isoformat() }}">
+                    {% if source.planned_for == today %}
+                      Today
+                    {% else %}
+                      {{ source.planned_for.strftime("%b %-d") }}
+                    {% endif %}
+                  </time>
+                  · {{ source.meal_name }}
+                </a>
+                <span class="flex-shrink-0 font-medium text-stone-800">
+                  {{ source.display }}
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}

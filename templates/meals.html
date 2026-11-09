@@ -149,6 +149,7 @@
                                   {% endfor %}
                                 </p>
                               {% endif %}
+                              {% include "_weekly_quantity_sources.html" %}
                               <label class="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 font-medium text-amber-950">
                                 <input type="checkbox"
                                        name="weekly_gap_overlap_add"
@@ -161,8 +162,8 @@
                               </p>
                             </li>
                           {% else %}
-                            <li>
-                              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs text-stone-800 ring-1 ring-amber-200 hover:bg-amber-100">
+                            <li{% if gap.quantity_totals %} class="rounded-xl bg-white px-2.5 py-2 text-xs text-stone-800 ring-1 ring-amber-200"{% endif %}>
+                              <label class="inline-flex cursor-pointer items-center gap-1.5 {% if gap.quantity_totals %}hover:text-green-800{% else %}rounded-full bg-white px-2.5 py-1 text-xs text-stone-800 ring-1 ring-amber-200 hover:bg-amber-100{% endif %}">
                                 <input type="checkbox"
                                        name="weekly_gap"
                                        value="{{ gap.name }}"
@@ -185,6 +186,7 @@
                                   {% endif %}
                                 </span>
                               </label>
+                              {% include "_weekly_quantity_sources.html" %}
                             </li>
                           {% endif %}
                         {% endfor %}

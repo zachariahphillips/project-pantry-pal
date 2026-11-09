@@ -279,6 +279,7 @@ changing its shopping list or guessing quantities.
   canonical unit. Partial coverage identifies how many scheduled meals
   supplied a structured amount; incompatible units are never converted.
 
-####### Phase 16A.3.3.2b — Source-meal review (Size: S)
-- Review: Let a household inspect the specific scheduled meals contributing
-  to each known subtotal before any quantity reaches Shopping.
+####### Phase 16A.3.3.2b — Source-meal review (Size: S) — DONE 2026-11-09
+- Review: Each known subtotal can expand to list its scheduled meal sources,
+  dates, and individual amounts. Links open the existing meal card; this
+  remains read-only and unit-safe.
