@@ -283,3 +283,18 @@ changing its shopping list or guessing quantities.
 - Review: Each known subtotal can expand to list its scheduled meal sources,
   dates, and individual amounts. Links open the existing meal card; this
   remains read-only and unit-safe.
+
+###### Phase 16A.3.3.3 — Reviewed quantity handoff (Size: M)
+
+####### Phase 16A.3.3.3a — Shopping quantity foundation (Size: S) — DONE 2026-11-11
+- Data/UI: Shopping items already support optional quantity and unit values,
+  with validation and create/edit/list flows. Existing name-only entries
+  safely remain quantity-free, and free-form units remain available for
+  household-entered items.
+- Scope: This foundation deliberately does not copy meal-plan totals into
+  Shopping or convert units.
+
+####### Phase 16A.3.3.3b — Reviewed quantity handoff (Size: S)
+- Review: Let a household explicitly choose a compatible, fully sourced
+  meal-plan subtotal before creating a separate Shopping entry with that
+  quantity.
