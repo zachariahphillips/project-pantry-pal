@@ -2327,11 +2327,12 @@ def _register_routes(app: Flask) -> None:
     def weekly_shopping_gaps_to_shopping():
         """Copy reviewed current-week meal gaps into the shopping list.
 
-        The browser submits only display names, so recompute the household's
-        uncooked scheduled gaps here and accept exact normalized matches only.
-        Active Shopping overlaps require a distinct explicit form field before
-        they can become a separate row. This preserves Phase 16A.1's boundary:
-        no client can turn this route into a generic add-to-shopping backdoor.
+        Name-only choices submit display names. Quantity choices also submit
+        the reviewed amount and unit, which must exactly match a freshly
+        derived, fully-sourced subtotal before it can be copied. Active
+        Shopping overlaps require a distinct explicit form field before they
+        can become a separate row. This preserves Phase 16A.1's boundary: no
+        client can turn this route into a generic add-to-shopping backdoor.
         """
         active_shopping_items = (
             current_user.household.shopping_items.filter(
@@ -2362,20 +2363,96 @@ def _register_routes(app: Flask) -> None:
                     keys.append(key)
             return keys
 
-        selected_keys = submitted_keys("weekly_gap")
-        explicit_overlap_add_keys = submitted_keys(
-            "weekly_gap_overlap_add",
-        )
+        selections_by_key: dict[str, dict] = {}
 
-        if not selected_keys and not explicit_overlap_add_keys:
+        def add_name_selections(
+            field_name: str,
+            *,
+            explicit_overlap: bool,
+        ) -> bool:
+            """Collect one name-only reviewed choice per weekly ingredient."""
+            for key in submitted_keys(field_name):
+                if key in selections_by_key:
+                    return False
+                selections_by_key[key] = {
+                    "quantity_total": False,
+                    "explicit_overlap": explicit_overlap,
+                }
+            return True
+
+        def add_quantity_selections(
+            field_name: str,
+            *,
+            explicit_overlap: bool,
+        ) -> bool:
+            """Collect exact amount/unit choices for a reviewed subtotal."""
+            for raw_selection in request.form.getlist(field_name):
+                try:
+                    selection = json.loads(raw_selection)
+                    raw_name = selection["name"]
+                    expected_quantity = selection["quantity"]
+                    expected_unit = selection["unit"]
+                except (
+                    TypeError, ValueError, KeyError, json.JSONDecodeError,
+                ):
+                    return False
+                if (
+                    not isinstance(raw_name, str)
+                    or isinstance(expected_quantity, bool)
+                    or not isinstance(expected_quantity, (int, float))
+                    or not math.isfinite(expected_quantity)
+                    or expected_quantity <= 0
+                    or not isinstance(expected_unit, str)
+                ):
+                    return False
+                key = " ".join(raw_name.split()).casefold()
+                if not key or key in selections_by_key:
+                    return False
+                selections_by_key[key] = {
+                    "quantity_total": True,
+                    "explicit_overlap": explicit_overlap,
+                    "expected_quantity": float(expected_quantity),
+                    "expected_unit": expected_unit,
+                }
+            return True
+
+        valid_selection_shape = all((
+            add_name_selections(
+                "weekly_gap",
+                explicit_overlap=False,
+            ),
+            add_quantity_selections(
+                "weekly_gap_quantity",
+                explicit_overlap=False,
+            ),
+            add_name_selections(
+                "weekly_gap_overlap_add",
+                explicit_overlap=True,
+            ),
+            add_quantity_selections(
+                "weekly_gap_overlap_quantity",
+                explicit_overlap=True,
+            ),
+        ))
+
+        if not valid_selection_shape:
+            message = (
+                "That reviewed selection changed. Refresh the meal list and "
+                "choose a current item."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
+        if not selections_by_key:
             message = "Select at least one weekly item to add."
             if request.headers.get("HX-Request"):
                 return message, 422
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
-        submitted = selected_keys + explicit_overlap_add_keys
-        if any(key not in allowed_by_key for key in submitted):
+        if any(key not in allowed_by_key for key in selections_by_key):
             message = (
                 "Those weekly gaps changed. Refresh the meal list and "
                 "review the current items."
@@ -2385,7 +2462,10 @@ def _register_routes(app: Flask) -> None:
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
-        if any(key in overlap_keys for key in selected_keys):
+        if any(
+            key in overlap_keys and not selection["explicit_overlap"]
+            for key, selection in selections_by_key.items()
+        ):
             message = (
                 "Confirm “Add a separate entry” for items already on "
                 "your shopping list."
@@ -2395,7 +2475,10 @@ def _register_routes(app: Flask) -> None:
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
-        if any(key not in overlap_keys for key in explicit_overlap_add_keys):
+        if any(
+            key not in overlap_keys and selection["explicit_overlap"]
+            for key, selection in selections_by_key.items()
+        ):
             message = (
                 "Those shopping overlaps changed. Refresh the meal list "
                 "and review the current items."
@@ -2405,19 +2488,47 @@ def _register_routes(app: Flask) -> None:
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
-        selected_keys += explicit_overlap_add_keys
+        if any(
+            selection["quantity_total"] and (
+                allowed_by_key[key]["reviewed_quantity_total"] is None
+                or not math.isclose(
+                    allowed_by_key[key]["reviewed_quantity_total"]["quantity"],
+                    selection["expected_quantity"],
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                )
+                or allowed_by_key[key]["reviewed_quantity_total"]["unit"]
+                != selection["expected_unit"]
+            )
+            for key, selection in selections_by_key.items()
+        ):
+            message = (
+                "That reviewed quantity changed. Refresh the meal list and "
+                "choose a current total."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
         source_note = "Suggested for upcoming meals"
         new_rows = [
             ShoppingItem(
                 added_by_user_id=current_user.id,
                 household_id=current_user.household_id,
                 name=allowed_by_key[key]["name"][:120],
-                quantity=None,
-                unit=None,
+                quantity=(
+                    allowed_by_key[key]["reviewed_quantity_total"]["quantity"]
+                    if selection["quantity_total"] else None
+                ),
+                unit=(
+                    allowed_by_key[key]["reviewed_quantity_total"]["unit"]
+                    if selection["quantity_total"] else None
+                ),
                 notes=source_note,
                 category=allowed_by_key[key]["category"],
             )
-            for key in selected_keys
+            for key, selection in selections_by_key.items()
         ]
         db.session.add_all(new_rows)
         for row in new_rows:
@@ -3747,6 +3858,27 @@ def _weekly_meal_shopping_gap_plans(household) -> list[MealPlan]:
     return [plan for plan in plans if plan.need]
 
 
+def _reviewed_weekly_quantity_total(gap: dict) -> "dict | None":
+    """Return the only safe subtotal a household can copy to Shopping.
+
+    A subtotal becomes actionable only when every scheduled meal supplying an
+    ingredient recorded a validated amount *and* they all use the same
+    canonical unit. A gap with partial detail coverage or separate-unit
+    subtotals remains review-only: choosing a number would otherwise imply a
+    conversion or an amount we do not know.
+    """
+    totals = gap["quantity_totals"]
+    if (
+        len(totals) != 1
+        or gap["quantity_meal_count"] != gap["meal_count"]
+    ):
+        return None
+    total = totals[0]
+    if total["meal_count"] != gap["meal_count"]:
+        return None
+    return total
+
+
 def _weekly_meal_shopping_gaps(
     plans,
     *,
@@ -3829,6 +3961,19 @@ def _weekly_meal_shopping_gaps(
                 key=lambda total: total["unit"].casefold(),
             )
         ]
+        gap["reviewed_quantity_total"] = _reviewed_weekly_quantity_total(gap)
+        if gap["reviewed_quantity_total"] is not None:
+            total = gap["reviewed_quantity_total"]
+            gap["reviewed_quantity_selection"] = json.dumps(
+                {
+                    "name": gap["name"],
+                    "quantity": total["quantity"],
+                    "unit": total["unit"],
+                },
+                separators=(",", ":"),
+            )
+        else:
+            gap["reviewed_quantity_selection"] = None
         label = gap["category"] or SHOPPING_OTHER_CATEGORY
         category_key = label.casefold()
         labels.setdefault(category_key, label)

@@ -294,7 +294,9 @@ changing its shopping list or guessing quantities.
 - Scope: This foundation deliberately does not copy meal-plan totals into
   Shopping or convert units.
 
-####### Phase 16A.3.3.3b — Reviewed quantity handoff (Size: S)
-- Review: Let a household explicitly choose a compatible, fully sourced
-  meal-plan subtotal before creating a separate Shopping entry with that
-  quantity.
+####### Phase 16A.3.3.3b — Reviewed quantity handoff (Size: S) — DONE 2026-11-12
+- Review: A household can explicitly choose one complete, single-unit meal
+  subtotal to create a separate Shopping entry with that exact amount.
+- Safety: The server re-derives and matches the reviewed total before saving;
+  partial, mixed-unit, stale, and unconfirmed-overlap choices remain
+  name-only or are rejected.
