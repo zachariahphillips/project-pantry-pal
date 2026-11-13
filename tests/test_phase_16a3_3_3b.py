@@ -104,7 +104,7 @@ class TestReviewedWeeklyQuantityHandoff:
         with app.app_context():
             row = ShoppingItem.query.one()
             assert (row.name, row.quantity, row.unit, row.notes) == (
-                "Milk", 1.5, "cup", "Suggested for upcoming meals",
+                "Milk", 1.5, "cup", "Suggested for 2 upcoming meals",
             )
 
     def test_partial_or_mixed_unit_total_cannot_be_copied_as_a_quantity(
@@ -142,6 +142,7 @@ class TestReviewedWeeklyQuantityHandoff:
             row = ShoppingItem.query.one()
             assert row.quantity is None
             assert row.unit is None
+            assert row.notes == "Suggested for upcoming meals"
 
     def test_mixed_units_remain_review_only(self, client, app):
         sign_up(client, "alice@example.com", "Alice")
@@ -233,3 +234,4 @@ class TestReviewedWeeklyQuantityHandoff:
                 ("milk", None, None),
                 ("Milk", 2, "cup"),
             ]
+            assert rows[1].notes == "Suggested for 1 upcoming meal"

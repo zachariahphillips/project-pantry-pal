@@ -300,3 +300,8 @@ changing its shopping list or guessing quantities.
 - Safety: The server re-derives and matches the reviewed total before saving;
   partial, mixed-unit, stale, and unconfirmed-overlap choices remain
   name-only or are rejected.
+
+####### Phase 16A.3.3.4 — Quantity handoff provenance (Size: S) — DONE 2026-11-13
+- Context: Quantity-created Shopping entries state how many upcoming meals
+  supplied the reviewed total. Name-only handoffs and existing entries remain
+  unchanged.

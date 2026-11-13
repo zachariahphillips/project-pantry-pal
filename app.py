@@ -2512,6 +2512,15 @@ def _register_routes(app: Flask) -> None:
             return redirect(url_for("meals_list"))
 
         source_note = "Suggested for upcoming meals"
+
+        def source_note_for_selection(gap: dict, selection: dict) -> str:
+            """Keep the copied-total's meal context visible in Shopping."""
+            if not selection["quantity_total"]:
+                return source_note
+            meal_count = gap["meal_count"]
+            meal_label = "meal" if meal_count == 1 else "meals"
+            return f"Suggested for {meal_count} upcoming {meal_label}"
+
         new_rows = [
             ShoppingItem(
                 added_by_user_id=current_user.id,
@@ -2525,7 +2534,10 @@ def _register_routes(app: Flask) -> None:
                     allowed_by_key[key]["reviewed_quantity_total"]["unit"]
                     if selection["quantity_total"] else None
                 ),
-                notes=source_note,
+                notes=source_note_for_selection(
+                    allowed_by_key[key],
+                    selection,
+                ),
                 category=allowed_by_key[key]["category"],
             )
             for key, selection in selections_by_key.items()
