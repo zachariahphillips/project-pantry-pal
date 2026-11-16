@@ -91,8 +91,9 @@
                   hx-disabled-elt="find button"
                   hx-on::before-request="
                     const selected = this.querySelectorAll('input[name=weekly_gap]:checked, input[name=weekly_gap_quantity]:checked, input[name=weekly_gap_overlap_add]:checked, input[name=weekly_gap_overlap_quantity]:checked');
+                    const manualEntry = Array.from(this.querySelectorAll('[data-weekly-gap-manual-quantity], [data-weekly-gap-manual-unit]')).some((input) => input.value.trim());
                     const error = this.querySelector('[data-weekly-gap-selection-error]');
-                    if (!selected.length) {
+                    if (!selected.length && !manualEntry) {
                       event.preventDefault();
                       error.classList.remove('hidden');
                       return;
@@ -103,6 +104,8 @@
                     if (event.detail.successful) {
                       const selected = this.querySelectorAll('input[name=weekly_gap]:checked, input[name=weekly_gap_quantity]:checked, input[name=weekly_gap_overlap_add]:checked, input[name=weekly_gap_overlap_quantity]:checked');
                       selected.forEach((input) => { input.checked = false; });
+                      this.querySelectorAll('[data-weekly-gap-manual-quantity], [data-weekly-gap-manual-unit]').forEach((input) => { input.value = ''; });
+                      this.querySelectorAll('[data-weekly-gap-manual-review]').forEach((review) => { review.open = false; });
                       const button = this.querySelector('[data-weekly-gap-submit]');
                       button.dataset.original = button.innerHTML;
                       button.innerHTML = 'Added to shopping';
@@ -135,6 +138,7 @@
                       <ul class="mt-1 flex flex-wrap gap-1.5">
                         {% for gap in group["items"] %}
                           {% set reviewed_total = gap.reviewed_quantity_total %}
+                          {% set manual_review = gap.manual_quantity_review %}
                           {% if gap.already_on_shopping %}
                             <li class="rounded-xl bg-white px-2.5 py-2 text-xs text-stone-800 ring-1 ring-amber-300">
                               <p>
@@ -170,8 +174,49 @@
                                 {% endif %}
                               </label>
                               <p class="mt-0.5 text-[11px] text-stone-500">
-                                Leave unchecked to skip this existing item.
+                                {% if manual_review %}
+                                  Leave both options blank to skip this existing item.
+                                {% else %}
+                                  Leave unchecked to skip this existing item.
+                                {% endif %}
                               </p>
+                              {% if manual_review %}
+                                <details data-weekly-gap-manual-review
+                                         class="mt-1.5 border-t border-stone-200 pt-1.5">
+                                  <summary class="cursor-pointer text-[11px] font-medium text-amber-800 hover:text-amber-950">
+                                    Add a separate amount yourself
+                                  </summary>
+                                  <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                                    <div>
+                                      <label for="weekly-gap-overlap-manual-quantity-{{ gap.manual_quantity_field_key }}"
+                                             class="sr-only">Amount for {{ gap.name }}</label>
+                                      <input id="weekly-gap-overlap-manual-quantity-{{ gap.manual_quantity_field_key }}"
+                                             name="weekly_gap_overlap_manual_quantity__{{ gap.manual_quantity_field_key }}"
+                                             type="number"
+                                             min="0"
+                                             step="any"
+                                             inputmode="decimal"
+                                             placeholder="Amount"
+                                             data-weekly-gap-manual-quantity
+                                             class="block w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-200">
+                                    </div>
+                                    <div>
+                                      <label for="weekly-gap-overlap-manual-unit-{{ gap.manual_quantity_field_key }}"
+                                             class="sr-only">Unit for {{ gap.name }}</label>
+                                      <input id="weekly-gap-overlap-manual-unit-{{ gap.manual_quantity_field_key }}"
+                                             name="weekly_gap_overlap_manual_unit__{{ gap.manual_quantity_field_key }}"
+                                             type="text"
+                                             maxlength="40"
+                                             placeholder="Unit"
+                                             data-weekly-gap-manual-unit
+                                             class="block w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-200">
+                                    </div>
+                                  </div>
+                                  <p class="mt-1 text-[11px] leading-relaxed text-stone-500">
+                                    This creates a separate entry; PantryPal does not convert the known totals.
+                                  </p>
+                                </details>
+                              {% endif %}
                             </li>
                           {% else %}
                             <li{% if gap.quantity_totals %} class="rounded-xl bg-white px-2.5 py-2 text-xs text-stone-800 ring-1 ring-amber-200"{% endif %}>
@@ -204,6 +249,43 @@
                                 </span>
                               </label>
                               {% include "_weekly_quantity_sources.html" %}
+                              {% if manual_review %}
+                                <details data-weekly-gap-manual-review
+                                         class="mt-1.5 border-t border-stone-200 pt-1.5">
+                                  <summary class="cursor-pointer text-[11px] font-medium text-amber-800 hover:text-amber-950">
+                                    Set an amount yourself
+                                  </summary>
+                                  <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                                    <div>
+                                      <label for="weekly-gap-manual-quantity-{{ gap.manual_quantity_field_key }}"
+                                             class="sr-only">Amount for {{ gap.name }}</label>
+                                      <input id="weekly-gap-manual-quantity-{{ gap.manual_quantity_field_key }}"
+                                             name="weekly_gap_manual_quantity__{{ gap.manual_quantity_field_key }}"
+                                             type="number"
+                                             min="0"
+                                             step="any"
+                                             inputmode="decimal"
+                                             placeholder="Amount"
+                                             data-weekly-gap-manual-quantity
+                                             class="block w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-200">
+                                    </div>
+                                    <div>
+                                      <label for="weekly-gap-manual-unit-{{ gap.manual_quantity_field_key }}"
+                                             class="sr-only">Unit for {{ gap.name }}</label>
+                                      <input id="weekly-gap-manual-unit-{{ gap.manual_quantity_field_key }}"
+                                             name="weekly_gap_manual_unit__{{ gap.manual_quantity_field_key }}"
+                                             type="text"
+                                             maxlength="40"
+                                             placeholder="Unit"
+                                             data-weekly-gap-manual-unit
+                                             class="block w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-900 placeholder:text-stone-400 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-200">
+                                    </div>
+                                  </div>
+                                  <p class="mt-1 text-[11px] leading-relaxed text-stone-500">
+                                    Choose an amount and unit yourself; PantryPal does not convert the known totals.
+                                  </p>
+                                </details>
+                              {% endif %}
                             </li>
                           {% endif %}
                         {% endfor %}

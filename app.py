@@ -2348,6 +2348,11 @@ def _register_routes(app: Flask) -> None:
             for group in gaps
             for gap in group["items"]
         }
+        manual_gap_key_by_field_key = {
+            gap["manual_quantity_field_key"]: key
+            for key, gap in allowed_by_key.items()
+            if gap["manual_quantity_review"]
+        }
         overlap_keys = {
             key for key, gap in allowed_by_key.items()
             if gap["already_on_shopping"]
@@ -2377,6 +2382,51 @@ def _register_routes(app: Flask) -> None:
                 selections_by_key[key] = {
                     "quantity_total": False,
                     "explicit_overlap": explicit_overlap,
+                }
+            return True
+
+        def add_manual_quantity_selections(
+            quantity_prefix: str,
+            unit_prefix: str,
+            *,
+            explicit_overlap: bool,
+        ) -> bool:
+            """Collect user-entered amounts only for unresolved weekly gaps."""
+            quantities = {
+                field_name.removeprefix(quantity_prefix): value
+                for field_name, value in request.form.items()
+                if field_name.startswith(quantity_prefix)
+            }
+            units = {
+                field_name.removeprefix(unit_prefix): value
+                for field_name, value in request.form.items()
+                if field_name.startswith(unit_prefix)
+            }
+            for field_key in quantities.keys() | units.keys():
+                raw_quantity = (quantities.get(field_key) or "").strip()
+                unit = (units.get(field_key) or "").strip()
+                if not raw_quantity and not unit:
+                    continue
+                key = manual_gap_key_by_field_key.get(field_key)
+                if key is None or key in selections_by_key:
+                    return False
+                try:
+                    quantity = float(raw_quantity)
+                except (TypeError, ValueError):
+                    return False
+                if (
+                    not math.isfinite(quantity)
+                    or quantity <= 0
+                    or not unit
+                    or len(unit) > 40
+                ):
+                    return False
+                selections_by_key[key] = {
+                    "quantity_total": False,
+                    "manual_quantity": True,
+                    "explicit_overlap": explicit_overlap,
+                    "quantity": quantity,
+                    "unit": unit,
                 }
             return True
 
@@ -2410,6 +2460,7 @@ def _register_routes(app: Flask) -> None:
                     return False
                 selections_by_key[key] = {
                     "quantity_total": True,
+                    "manual_quantity": False,
                     "explicit_overlap": explicit_overlap,
                     "expected_quantity": float(expected_quantity),
                     "expected_unit": expected_unit,
@@ -2421,12 +2472,22 @@ def _register_routes(app: Flask) -> None:
                 "weekly_gap",
                 explicit_overlap=False,
             ),
+            add_manual_quantity_selections(
+                "weekly_gap_manual_quantity__",
+                "weekly_gap_manual_unit__",
+                explicit_overlap=False,
+            ),
             add_quantity_selections(
                 "weekly_gap_quantity",
                 explicit_overlap=False,
             ),
             add_name_selections(
                 "weekly_gap_overlap_add",
+                explicit_overlap=True,
+            ),
+            add_manual_quantity_selections(
+                "weekly_gap_overlap_manual_quantity__",
+                "weekly_gap_overlap_manual_unit__",
                 explicit_overlap=True,
             ),
             add_quantity_selections(
@@ -2511,10 +2572,31 @@ def _register_routes(app: Flask) -> None:
             flash(message, "error")
             return redirect(url_for("meals_list"))
 
+        if any(
+            selection.get("manual_quantity")
+            and not allowed_by_key[key]["manual_quantity_review"]
+            for key, selection in selections_by_key.items()
+        ):
+            message = (
+                "That manual amount is no longer needed. Refresh the meal "
+                "list and review the current totals."
+            )
+            if request.headers.get("HX-Request"):
+                return message, 409
+            flash(message, "error")
+            return redirect(url_for("meals_list"))
+
         source_note = "Suggested for upcoming meals"
 
         def source_note_for_selection(gap: dict, selection: dict) -> str:
             """Keep the copied-total's meal context visible in Shopping."""
+            if selection.get("manual_quantity"):
+                meal_count = gap["meal_count"]
+                meal_label = "meal" if meal_count == 1 else "meals"
+                return (
+                    f"Suggested for {meal_count} upcoming {meal_label}"
+                    " · amount entered manually"
+                )
             if not selection["quantity_total"]:
                 return source_note
             meal_count = gap["meal_count"]
@@ -2528,11 +2610,15 @@ def _register_routes(app: Flask) -> None:
                 name=allowed_by_key[key]["name"][:120],
                 quantity=(
                     allowed_by_key[key]["reviewed_quantity_total"]["quantity"]
-                    if selection["quantity_total"] else None
+                    if selection["quantity_total"]
+                    else selection["quantity"]
+                    if selection.get("manual_quantity") else None
                 ),
                 unit=(
                     allowed_by_key[key]["reviewed_quantity_total"]["unit"]
-                    if selection["quantity_total"] else None
+                    if selection["quantity_total"]
+                    else selection["unit"]
+                    if selection.get("manual_quantity") else None
                 ),
                 notes=source_note_for_selection(
                     allowed_by_key[key],
@@ -3986,6 +4072,17 @@ def _weekly_meal_shopping_gaps(
             )
         else:
             gap["reviewed_quantity_selection"] = None
+        # A manual amount is offered only when the scheduled meals contain
+        # some structured quantity information but cannot produce one
+        # trustworthy total. Its hex key is stable for the current normalized
+        # ingredient name and safe to embed in form field names.
+        gap["manual_quantity_review"] = bool(
+            gap["quantity_totals"]
+            and gap["reviewed_quantity_total"] is None
+        )
+        gap["manual_quantity_field_key"] = gap["name"].casefold().encode(
+            "utf-8",
+        ).hex()
         label = gap["category"] or SHOPPING_OTHER_CATEGORY
         category_key = label.casefold()
         labels.setdefault(category_key, label)

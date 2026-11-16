@@ -305,3 +305,20 @@ changing its shopping list or guessing quantities.
 - Context: Quantity-created Shopping entries state how many upcoming meals
   supplied the reviewed total. Name-only handoffs and existing entries remain
   unchanged.
+
+---
+
+## Phase 17: Unresolved Quantity Review
+
+Focus: Give a household control over incomplete meal-plan amounts without
+turning uncertain data into an automatic calculation.
+
+### Phase 17A — Manual amount review (Size: S, Priority: P2)
+
+#### Phase 17A.1 — Manual quantity review for unresolved totals (Size: S) — DONE 2026-11-16
+- Review: Gaps with partial structured coverage or multiple units offer an
+  optional manual amount and unit. PantryPal copies exactly what the household
+  enters into a separate Shopping row; it never converts the displayed totals.
+- Safety: Legacy-only gaps cannot receive a manual amount, user entries need
+  a positive finite value and a unit, and active Shopping overlaps remain an
+  explicit separate-entry action.
