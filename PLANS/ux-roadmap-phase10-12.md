@@ -322,3 +322,8 @@ turning uncertain data into an automatic calculation.
 - Safety: Legacy-only gaps cannot receive a manual amount, user entries need
   a positive finite value and a unit, and active Shopping overlaps remain an
   explicit separate-entry action.
+
+#### Phase 17A.2 — Manual unit helper (Size: S) — DONE 2026-11-17
+- Review: Manual amount fields offer tappable suggestions from the units
+  already recorded for that gap. The unit field remains editable and no
+  quantity is prefilled or converted.

@@ -215,6 +215,19 @@
                                   <p class="mt-1 text-[11px] leading-relaxed text-stone-500">
                                     This creates a separate entry; PantryPal does not convert the known totals.
                                   </p>
+                                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                                    <span class="text-[11px] text-stone-500">Use a shown unit:</span>
+                                    {% for total in gap.quantity_totals %}
+                                      <button type="button"
+                                              data-weekly-gap-manual-unit-suggestion
+                                              data-unit="{{ total.unit }}"
+                                              aria-label="Use {{ total.unit }} for {{ gap.name }}"
+                                              hx-on:click="document.getElementById('weekly-gap-overlap-manual-unit-{{ gap.manual_quantity_field_key }}').value = this.dataset.unit"
+                                              class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                                        {{ total.unit }}
+                                      </button>
+                                    {% endfor %}
+                                  </div>
                                 </details>
                               {% endif %}
                             </li>
@@ -284,6 +297,19 @@
                                   <p class="mt-1 text-[11px] leading-relaxed text-stone-500">
                                     Choose an amount and unit yourself; PantryPal does not convert the known totals.
                                   </p>
+                                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                                    <span class="text-[11px] text-stone-500">Use a shown unit:</span>
+                                    {% for total in gap.quantity_totals %}
+                                      <button type="button"
+                                              data-weekly-gap-manual-unit-suggestion
+                                              data-unit="{{ total.unit }}"
+                                              aria-label="Use {{ total.unit }} for {{ gap.name }}"
+                                              hx-on:click="document.getElementById('weekly-gap-manual-unit-{{ gap.manual_quantity_field_key }}').value = this.dataset.unit"
+                                              class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                                        {{ total.unit }}
+                                      </button>
+                                    {% endfor %}
+                                  </div>
                                 </details>
                               {% endif %}
                             </li>
