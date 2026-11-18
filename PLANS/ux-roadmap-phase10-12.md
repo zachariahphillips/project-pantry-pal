@@ -327,3 +327,8 @@ turning uncertain data into an automatic calculation.
 - Review: Manual amount fields offer tappable suggestions from the units
   already recorded for that gap. The unit field remains editable and no
   quantity is prefilled or converted.
+
+#### Phase 17A.3 — Manual subtotal shortcuts (Size: S) — DONE 2026-11-18
+- Review: Each displayed unresolved subtotal can fill the manual amount and
+  unit together. The fields remain editable and tapping a shortcut neither
+  converts values nor adds an item until the household submits the review.
